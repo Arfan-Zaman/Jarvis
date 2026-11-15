@@ -323,6 +323,7 @@ Ollama. Each test uses its own temporary database and never touches `data/`.
 
 ## Next recommended milestone
 
-**Phase 2.4: contextual memory.** Full-text search over memories and lessons,
-and a context builder that gives the model the most relevant facts with their
-sources. No installs needed. See `NEXT_SESSION.md`.
+**Phase 3.1: one conversation that thinks and acts.** Chat decides for itself
+whether to answer or to carry out an action, and replies truthfully about what
+happened. The priority is a genuinely intelligent general JARVIS; business
+specialisation comes later. See `JARVIS_ROADMAP.md` and `NEXT_SESSION.md`.
