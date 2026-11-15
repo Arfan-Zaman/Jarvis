@@ -4,7 +4,7 @@
    All content is inserted as text nodes, never as HTML. */
 
 const $ = (selector) => document.querySelector(selector);
-const state = { projects: [], conversationId: null, timer: null, navigation: 0, cleanup: [], presenceConversation: null };
+const state = { projects: [], conversationId: null, timer: null, navigation: 0, cleanup: [] };
 
 // --- helpers ---------------------------------------------------------------
 // Pictures JARVIS made: a workspace image path in a reply is shown as the picture itself.
@@ -297,11 +297,37 @@ function eventTable(events) {
       h('td', { class: 'wrap' }, event.message)))));
 }
 
+// One continuing conversation shared by the JARVIS page and the Chat page (and kept across
+// reloads), so switching pages never loses the thread. A new one starts after 3 quiet hours.
+const CONVO_KEY = 'jarvis.conversation', CONVO_IDLE_MS = 3 * 60 * 60 * 1000;
+function currentConversation() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(CONVO_KEY) || 'null');
+    return saved && Date.now() - saved.at < CONVO_IDLE_MS ? saved.id : null;
+  } catch (e) { return null; }
+}
+function rememberConversation(id) {
+  try { if (id) localStorage.setItem(CONVO_KEY, JSON.stringify({ id, at: Date.now() })); else localStorage.removeItem(CONVO_KEY); } catch (e) { /* private window */ }
+}
+/** Upload files for JARVIS; returns [{path, name}] for the ones that were accepted. */
+async function uploadFiles(files) {
+  const done = [];
+  for (const file of files) {
+    const response = await fetch(`/api/files?name=${encodeURIComponent(file.name)}`, {
+      method: 'POST', headers: { 'Content-Type': file.type || 'application/octet-stream' }, body: file });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) { toast(data.error || `Could not attach ${file.name}`, true); continue; }
+    done.push(data);
+  }
+  return done;
+}
+
 views.chat = {
   title: 'Chat',
   subtitle: 'Conversations are stored locally',
   async render(root) {
     const status = await api('GET', '/api/status');
+    state.conversationId = currentConversation() || state.conversationId;   // follow the JARVIS page's thread
     const threads = h('div', { class: 'glass threads' });
     const messages = h('div', { class: 'messages' });
     const input = h('textarea', { placeholder: 'Message JARVIS…', title: 'Enter to send, Shift+Enter for a new line', 'aria-label': 'Message' });
@@ -345,10 +371,10 @@ views.chat = {
     const loadThreads = async () => {
       const { items } = await api('GET', '/api/conversations');
       threads.replaceChildren(
-        h('button', { class: 'btn sm', onclick: () => { state.conversationId = null; showMessages([]); loadThreads(); input.focus(); } }, '+ New conversation'),
+        h('button', { class: 'btn sm', onclick: () => { state.conversationId = null; rememberConversation(null); showMessages([]); loadThreads(); input.focus(); } }, '+ New conversation'),
         ...items.map((item) => h('button', {
           class: 'thread' + (item.id === state.conversationId ? ' active' : ''), title: item.title,
-          onclick: act(async () => { state.conversationId = item.id; await openThread(); }),
+          onclick: act(async () => { state.conversationId = item.id; rememberConversation(item.id); await openThread(); }),
         }, item.title)));
     };
 
@@ -434,24 +460,42 @@ views.chat = {
       try { localStorage.setItem('jarvis.speak', voice.speakReplies ? 'on' : 'off'); } catch (e) { /* private mode */ }
     });
 
-    const composer = h('form', { class: 'composer' }, mic, input, speaker, send);
+    const picker = h('input', { type: 'file', multiple: true, hidden: true, 'aria-hidden': 'true' });
+    const clip = h('button', { class: 'btn icon-btn', type: 'button', title: 'Attach files or photos', 'aria-label': 'Attach files or photos' }, '📎');
+    const attached = h('div', { class: 'meta attach-row' });
+    let pendingFiles = [];
+    const showAttached = () => attached.replaceChildren(...pendingFiles.map((f, i) => {
+      const x = h('button', { class: 'btn sm', type: 'button', 'aria-label': `Remove ${f.name}` }, '×');
+      x.addEventListener('click', () => { pendingFiles.splice(i, 1); showAttached(); });
+      return h('span', { class: 'chip' }, f.name.replace(/^\d{8}-\d{6}-/, ''), ' ', x);
+    }));
+    const addFiles = async (files) => { pendingFiles.push(...await uploadFiles(files)); showAttached(); input.focus(); };
+    clip.addEventListener('click', () => picker.click());
+    picker.addEventListener('change', () => { addFiles([...picker.files]); picker.value = ''; });
+    messages.addEventListener('dragover', (e) => e.preventDefault());
+    messages.addEventListener('drop', (e) => { e.preventDefault(); addFiles([...e.dataTransfer.files]); });
+
+    const composer = h('form', { class: 'composer' }, picker, clip, mic, input, speaker, send);
     composer.addEventListener('submit', act(async (event) => {
       event.preventDefault();
       const text = input.value.trim();
-      if (!text) return;
+      const files = pendingFiles.map((f) => f.path);
+      if (!text && !files.length) return;
+      pendingFiles = []; showAttached();
       send.disabled = true;
       // Show the message and a thinking indicator at once; the first reply after a restart
       // can take ~20 seconds while the model loads.
       messages.querySelector('.empty')?.remove();
-      messages.append(bubble({ role: 'user', content: text }),
+      messages.append(bubble({ role: 'user', content: text + (files.length ? `\n📎 ${files.length} file${files.length > 1 ? 's' : ''}` : '') }),
         h('div', { class: 'msg assistant thinking' }, h('div', { class: 'who' }, 'JARVIS'),
           h('div', null, 'Thinking…'),
           h('div', { class: 'muted small' }, 'The first reply after JARVIS starts can take up to 30 seconds.')));
       messages.scrollTop = messages.scrollHeight;
       input.value = '';
       try {
-        const result = await api('POST', '/api/chat', { message: text, conversation_id: state.conversationId });
+        const result = await api('POST', '/api/chat', { message: text, attachments: files, conversation_id: state.conversationId });
         state.conversationId = result.conversation.id;
+        rememberConversation(state.conversationId);
         await openThread();
         if ((voice.speakNext || voice.speakReplies) && result.reply && result.reply.content) speak(result.reply.content);
       } catch (error) {
@@ -470,7 +514,7 @@ views.chat = {
 
     root.append(h('div', { class: 'stack' },
       status.ai.configured && status.ai.available ? null : aiBanner(status.ai),
-      h('div', { class: 'chat' }, threads, h('div', { class: 'glass conversation' }, messages, voiceLine, composer))));
+      h('div', { class: 'chat' }, threads, h('div', { class: 'glass conversation' }, messages, voiceLine, attached, composer))));
     await loadThreads();
     await openThread();
   },
@@ -1063,8 +1107,8 @@ views.presence = {
         } catch (e) { /* the next poll will try again */ }
       }, 450);
       try {
-        const result = await api('POST', '/api/chat', { message: text, attachments: files, conversation_id: state.presenceConversation || null });
-        state.presenceConversation = result.conversation.id;
+        const result = await api('POST', '/api/chat', { message: text, attachments: files, conversation_id: currentConversation() });
+        rememberConversation(result.conversation.id);
         if (result.reply.run_id) offerApproval(result.reply.run_id);
         clearInterval(poll);
         reply.textContent = result.reply.content.replace(/ Approve or deny it on the System page, then press Continue\./, ' Approve or deny it below.');

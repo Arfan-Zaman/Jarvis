@@ -2,6 +2,18 @@
 
 Newest entries first. Record what changed, why, and what was verified.
 
+## 2026-11-16 — Chat and the JARVIS page share one conversation
+
+- Owner reported Chat "not working": it worked, but the Chat page and the JARVIS
+  page kept separate conversations (and a reload started a new one), so JARVIS
+  lost the thread when the owner switched pages (conversation 20 vs 22).
+- Now one continuing conversation is stored in the browser and used by both
+  pages; it resets after 3 quiet hours or with "+ New conversation".
+- Chat page: paperclip attach button and drop-onto-messages, same uploads as the
+  JARVIS page.
+- Checked in Chrome: a codeword told on the JARVIS page was recalled on the Chat
+  page in the same conversation; paperclip present; no console errors.
+
 ## 2026-11-16 — Merged image generation and weekly self-review
 
 - Merged `claude/self-review-0dbf57` and `claude/image-generation-4646c9`
