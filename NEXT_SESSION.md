@@ -33,7 +33,7 @@ turn any repeatable process into a skill in `.claude/skills/`.
    messaging, deleting or publishing without approval, never claims a result
    it didn't verify.
 
-Status: see DEVLOG for which pieces are done.
+Status: see DEVLOG. Done: 1 (wake word), 2 (emotion), 4, 5 (continuous learning; self-review not yet), 6. Open: 3 (images), 5b (self-review).
 
 ## Latest (2026-11-16): nanobot swarm face is live
 

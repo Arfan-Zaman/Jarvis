@@ -173,6 +173,20 @@ def _tool_execute(app: Jarvis, req: Request):
     return (202 if result["status"] == "approval_required" else 200), result
 
 
+@route("GET", "/api/learn")
+def _learn_status(app: Jarvis, req: Request):
+    """Continuous learning: on or off, how often, the last pass and recent topics."""
+    return app.learner.status()
+
+
+@route("POST", "/api/learn/run")
+def _learn_now(app: Jarvis, req: Request):
+    """Start one learning pass now, in the background; poll GET /api/learn for the result."""
+    import threading
+    threading.Thread(target=app.learner.once, name="jarvis-learn-now", daemon=True).start()
+    return {"started": True}
+
+
 @route("GET", "/api/live")
 def _live(app: Jarvis, req: Request):
     """JARVIS's current state for the face and core, derived from real runs."""

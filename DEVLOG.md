@@ -2,6 +2,21 @@
 
 Newest entries first. Record what changed, why, and what was verified.
 
+## 2026-11-16 — Continuous learning
+
+- `jarvis/learner.py`: while the server runs, every 30 minutes when idle
+  (`JARVIS_LEARN_MINUTES`, off with `JARVIS_LEARN=0`), JARVIS picks one new
+  search query from the owner's projects, stated facts and recent chats,
+  searches, reads up to two pages and saves up to three durable facts per page
+  as unverified "learned" memories with the source URL. All through
+  `tools.execute` (actor `jarvis:learn`), logged as a `learning` event.
+- `GET /api/learn`, `POST /api/learn/run`; a Learning panel on the Memory page
+  with "Learn now" and recent topics.
+- Real passes: throwaway data (16 s, 3 facts) and the owner's server (19 s,
+  6 facts, topic taken from a recent chat). Search reaches only Wikipedia and
+  DuckDuckGo instant answers until a Brave Search key is set.
+- 2 new tests (scripted model, faked web).
+
 ## 2026-11-16 — Claude Code signed in; its answers reach the owner
 
 - Owner confirmed the wake word works with a real voice, and signed in the

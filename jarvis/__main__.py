@@ -57,6 +57,7 @@ def cmd_serve(config, args) -> int:
     logger.info("JARVIS %s listening on http://%s:%s", __version__, config.host, config.port)
     logger.info("AI provider: %s", status.detail if not status.available else f"{status.name} ({status.model})")
     logger.info("Press Ctrl+C to stop.")
+    app.learner.start()                       # continuous learning while the server runs
     try:
         server.serve_forever()
     except KeyboardInterrupt:

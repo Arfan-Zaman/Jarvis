@@ -533,12 +533,40 @@ views.memory = {
       h('div', { class: 'item' + (memory.is_active ? '' : ' archived') },
         h('div', { class: 'grow' }, h('div', { class: 'wrap' }, memory.content), metaChips(memory)),
         recordActions('memories', memory, again)));
+    // continuous learning: what JARVIS has been reading about on its own
+    const learnBody = h('div', { class: 'stack' });
+    const learnBtn = h('button', { class: 'btn sm', type: 'button' }, 'Learn now');
+    const showLearn = async () => {
+      const s = await api('GET', '/api/learn');
+      const last = s.last || {};
+      learnBody.replaceChildren(
+        h('div', { class: 'muted small' }, s.enabled
+          ? `Learning on its own every ${s.interval_minutes} minutes while idle. Facts are saved as unverified, with their source.`
+          : 'Continuous learning is off (JARVIS_LEARN=0).'),
+        last.at ? h('div', null, last.ok
+          ? `Last read about “${last.query}”: ${last.saved} new fact${last.saved === 1 ? '' : 's'} from ${last.read.length} page${last.read.length === 1 ? '' : 's'}.`
+          : `Last pass found nothing new (${last.error}).`, h('span', { class: 'muted small' }, ` ${new Date(last.at).toLocaleString()}`)) : h('div', { class: 'muted small' }, 'No learning pass yet.'),
+        ...(s.recent.length ? [h('div', { class: 'meta' }, ...s.recent.slice().reverse().map((q) => chip(q)))] : []));
+    };
+    learnBtn.addEventListener('click', act(async () => {
+      learnBtn.disabled = true; learnBtn.textContent = 'Reading…';
+      const before = ((await api('GET', '/api/learn')).last || {}).at;
+      await api('POST', '/api/learn/run');
+      for (let i = 0; i < 90; i++) {                    // a pass takes about a minute on the local model
+        await new Promise((r) => setTimeout(r, 2000));
+        const s = await api('GET', '/api/learn');
+        if (s.last && s.last.at !== before) break;
+      }
+      learnBtn.disabled = false; learnBtn.textContent = 'Learn now';
+      await showLearn(); await reload();
+    }));
     root.append(h('div', { class: 'stack' },
+      h('div', { class: 'glass panel' }, h('div', { class: 'row between' }, h('h2', { class: 'grow' }, 'Learning'), learnBtn), learnBody),
       h('div', { class: 'glass panel' }, h('h2', null, 'Add a memory'),
         form([{ name: 'content', label: 'What should JARVIS remember?', type: 'textarea', required: true, wide: true }, ...metaSpecs()],
           'Save memory', async (data) => { await api('POST', '/api/memories', data); toast('Memory saved'); await reload(); })),
       panel));
-    await reload();
+    await Promise.all([reload(), showLearn().catch(() => learnBody.replaceChildren(h('div', { class: 'muted small' }, 'Learning status is unavailable.')))]);
   },
 };
 

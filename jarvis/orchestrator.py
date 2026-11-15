@@ -64,6 +64,8 @@ class Jarvis:
         register_web(self.tools)
         register_claude(self.tools)
         self.engine = Engine(self)
+        from .learner import Learner
+        self.learner = Learner(self)
         self.voice = Voice(self.config)
         self.conversation = Conversation(self)
         self.started_at = time.time()
