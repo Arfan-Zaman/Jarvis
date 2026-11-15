@@ -2,6 +2,20 @@
 
 Newest entries first. Record what changed, why, and what was verified.
 
+## 2026-11-16 — Claude Code as JARVIS's deep mind
+
+- New tool `claude.work` (`jarvis/tools/claude.py`, category workspace): runs
+  `claude -p` in `workspace/` with Bash disallowed, no MCP servers, no saved
+  session, 15-minute limit. Read and web search only unless `write_files`, then
+  Edit/Write inside the workspace only.
+- Chat router has a new "delegate" mode for code, building, in-depth research,
+  analysis, long writing and planning; a keyword backstop catches hard requests
+  the 9B router calls "answer". If Claude Code fails, the local model answers
+  and the reply says why (e.g. signed out).
+- Real check: the router delegated coding and page-building requests; the call
+  failed only because the `claude` CLI is signed out (OAuth expired), and the
+  reply said so. 243 tests pass (3 new, Claude never run in tests).
+
 ## 2026-11-16 — Nanobot swarm face
 
 - `base.png` generated on Higgsfield (GPT Image 2, 2K, owner chose version 1;

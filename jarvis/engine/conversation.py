@@ -45,6 +45,13 @@ NO = re.compile(r"^\s*(no|nope|nah|don'?t|do not|not now|no thanks)\b[\w\s,.!']{
 MEMORY_CATEGORIES = ("preference", "personal", "general")
 # Saving straight away needs the owner's own words to ask for it. The model's
 # opinion is not enough: without one of these, it can only OFFER to remember.
+# Requests that need real skill: sent to Claude Code even if the small router says "answer".
+HARD_WORK = re.compile(
+    r"\b(write|build|create|make|generate|code|program|script|function|debug|fix|refactor|implement|"
+    r"analy[sz]e|research|compare|evaluate|design|plan|strategy|essay|report|proposal|explain in detail|"
+    r"step[- ]by[- ]step|prove|calculate|optimi[sz]e|translate)\b.{12,}", re.I | re.S)
+MAKE_FILES = re.compile(r"\b(save|file|files|folder|page|website|site|app|project|script|document|"
+                        r"\.(py|html|js|md|css|json|txt|csv))\b", re.I)
 EXPLICIT_REMEMBER = re.compile(r"\b(remember|memori[sz]e|note (that|this|down)|make a note|take a note|"
                                r"don'?t forget|keep in mind|save (this|that))\b", re.I)
 # Sentences that claim something was kept. Removed from a reply while JARVIS is
@@ -60,9 +67,15 @@ ROUTER = """You decide how JARVIS handles the owner's latest message. Reply with
 {"mode": "act", "goal": "<the request restated as a complete, self-contained instruction>"}
   when the owner wants JARVIS to DO something with its own tools, or to look up their own
   stored information: create, change, complete or list tasks; search stored memories;
-  record a lesson; list or read projects; check JARVIS's health. Also choose "act" for
-  questions that need up-to-date or looked-up information from the internet (news, recent
-  events, prices, facts you are not sure of) or when the owner gives a web address to read.
+  record a lesson; list or read projects; check JARVIS's health. Also choose "act" for a
+  QUICK look-up on the internet (news, a price, one fact) or when the owner gives a web
+  address to read. In-depth research or comparisons are "delegate", not "act".
+
+{"mode": "delegate", "task": "<the request restated as a complete, self-contained task>", "files": true | false}
+  when the request needs real skill or deep thinking: writing, fixing or explaining code; building
+  something (a script, a web page, an app, a document); in-depth research or comparison; careful
+  analysis; long or polished writing; detailed plans or strategy; hard maths or reasoning.
+  "files": true when the owner wants something made or saved as files.
 
 {"mode": "remember", "fact": "<the fact in the first person, as the owner would say it,
  e.g. 'I prefer short answers' - never 'The user ...'>", "category": "preference" | "personal" | "general"}
@@ -171,6 +184,8 @@ class Conversation:
         decision = self._route(conversation_id)
         if decision.get("mode") == "act":
             return self._act(conversation_id, decision["goal"])
+        if decision.get("mode") == "delegate":
+            return self._delegate(conversation_id, decision["task"], decision["files"])
         if decision.get("mode") == "remember":
             return self._remember(conversation_id, decision["fact"], decision["category"])
         return self._answer(conversation_id, offer=decision.get("remember"))
@@ -195,6 +210,14 @@ class Conversation:
         goal, fact = decision.get("goal"), decision.get("fact") or decision.get("remember")
         category = decision.get("category") if decision.get("category") in MEMORY_CATEGORIES else "general"
         fact = fact.strip()[:500] if isinstance(fact, str) and fact.strip() else None
+        task = decision.get("task")
+        latest = next((m["content"] for m in reversed(self._history(conversation_id)) if m["role"] == "user"), "")
+        can_delegate = "claude.work" in self.app.tools.names()
+        if can_delegate and decision.get("mode") in ("answer", None) and HARD_WORK.search(latest):
+            task, decision = latest, {"mode": "delegate"}   # the small model under-rates hard work
+        if decision.get("mode") == "delegate" and isinstance(task, str) and task.strip() and can_delegate:
+            files = decision.get("files") is True or bool(MAKE_FILES.search(f"{latest} {task}"))
+            return {"mode": "delegate", "task": task.strip()[:6000], "files": files}
         if decision.get("mode") == "act" and isinstance(goal, str) and goal.strip():
             return {"mode": "act", "goal": goal.strip()[:2000]}
         if decision.get("mode") == "remember" and fact:
@@ -221,7 +244,7 @@ class Conversation:
         return replies[-1]["memory_offer"] if replies else None
 
     # --- answering ---------------------------------------------------------
-    def _answer(self, conversation_id: int, offer: dict | None = None) -> dict:
+    def _answer(self, conversation_id: int, offer: dict | None = None, note: str = "") -> dict:
         history = self._history(conversation_id)
         latest = next((m["content"] for m in reversed(history) if m["role"] == "user"), "")
         memories = ContextBuilder(self.app).build(latest)["memories"]
@@ -245,7 +268,7 @@ class Conversation:
             text = " ".join(kept) if "?" in latest and kept else "Understood."
             text += f"\n\nShall I remember that: {_quote(offer['fact'], 200)}?"
         return self.app.conversations.add_message(
-            conversation_id, "assistant", text or "…", response.provider, response.model,
+            conversation_id, "assistant", (text or "…") + note, response.provider, response.model,
             memory_refs=refs or None, memory_offer=offer)
 
     # --- remembering -------------------------------------------------------
@@ -274,6 +297,22 @@ class Conversation:
                 conversation_id, "system", f"I couldn't start that: {exc}", run_id=resume)
         text = self._narrate(conversation_id, report)
         return self._say(conversation_id, text, report["run_id"])
+
+    def _delegate(self, conversation_id: int, task: str, files: bool) -> dict:
+        """Hard work goes to Claude Code (claude.work); its result is JARVIS's reply."""
+        result = self.app.tools.execute("claude.work", {"task": task, "write_files": files}, actor="user:chat")
+        if result["ok"]:
+            text = (result["output"] or {}).get("result", "").strip() or "Completed."
+            return self.app.conversations.add_message(
+                conversation_id, "assistant", text, "claude-code", "claude", run_id=result["run_id"])
+        if result["status"] == "approval_required":
+            return self._say(conversation_id, persona.NEEDS_APPROVAL if hasattr(persona, "NEEDS_APPROVAL")
+                             else "That needs your approval first.", result["run_id"])
+        log.info("Delegation failed, answering locally: %s", result["error"])
+        error = str(result["error"] or "")
+        why = ("Claude Code is signed out; run `claude` in Terminal and sign in"
+               if "authenticat" in error.lower() or "login" in error.lower() else f"Claude Code failed: {error[:200]}")
+        return self._answer(conversation_id, note=f"\n\n(Answered by the local model only. {why}.)")
 
     def _say(self, conversation_id: int, text: str, run_id: int | None) -> dict:
         status = self.app.provider.status()

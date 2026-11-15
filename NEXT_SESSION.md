@@ -9,8 +9,9 @@ section 4b (autonomous design).
 swarm built from it (see DEVLOG). The Higgsfield project connector is still on
 the old account; generation works through the owner's Chrome (Claude in Chrome)
 on the new account, 6.5 credits per 2K image. Never buy add-ons ("Unlimited").
-Owner's next wishes: a Tony Stark style HUD dashboard and a far more capable
-JARVIS (delegate hard work to Claude Code at `~/.local/bin/claude`).
+Hard work now goes to Claude Code via the `claude.work` tool (see DEVLOG). It
+needs the `claude` CLI signed in (`claude` in Terminal, then sign in); it was
+signed out on 2026-11-16. Next wish: a Tony Stark style HUD dashboard.
 
 ## Earlier: art-mode session handoff
 
