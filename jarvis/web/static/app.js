@@ -916,9 +916,13 @@ views.presence = {
       return (data.text || '').trim();
     }
 
-    // --- hands-free conversation: listen, notice silence, answer aloud, listen again ---
-    const convo = { on: false };
-    const convoBtn = h('button', { class: 'btn sm', type: 'button', disabled: !voiceOk.listening || !voiceOk.speaking || !connected }, 'Start conversation');
+    // --- hands-free: always listening for its name; "Jarvis" opens a conversation ---
+    // waiting: short utterances are transcribed locally and checked for the name.
+    // talking: every utterance is a message; ~25 s of silence or "stop" returns to waiting.
+    const WAKE = /\b(jarvis|jarvi|javis|jervis|jarves|jarviss)\b[\s,.!?:-]*/i;
+    const convo = { on: false, talking: false };
+    const convoBtn = h('button', { class: 'btn sm', type: 'button', disabled: !voiceOk.listening || !voiceOk.speaking || !connected }, 'Hands-free: off');
+    const setBtn = () => { convoBtn.textContent = convo.on ? (convo.talking ? 'In conversation · end' : 'Hands-free: on') : 'Hands-free: off'; convoBtn.classList.toggle('primary', convo.on); };
     async function listenOnce(stream) {
       const context = new (window.AudioContext || window.webkitAudioContext)();
       const analyser = context.createAnalyser(); analyser.fftSize = 1024;
@@ -945,33 +949,47 @@ views.presence = {
       rec.stop(); await stopped; context.close(); identity.setLevel(0);
       return spoke ? new Blob(chunks, { type: rec.mimeType || 'audio/webm' }) : null;
     }
-    async function conversation() {
+    async function handsFree() {
       let stream;
       try { stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } }); }
-      catch (e) { convo.on = false; convoBtn.textContent = 'Start conversation'; throw new Error('Microphone access was blocked. Allow it for this page in the browser settings.'); }
+      catch (e) { convo.on = false; setBtn(); identity.setState('calm', 'Allow the microphone to talk hands-free.'); return; }
+      let quiet = 0;
       while (convo.on) {
-        identity.setState('listening', 'Go ahead. I’m listening.');
+        if (!convo.talking) identity.setState('calm', 'Say “Jarvis” to talk.');
+        else identity.setState('listening', 'Go ahead.');
         const blob = await listenOnce(stream);
         if (!convo.on) break;
-        if (!blob) continue;
-        identity.setState('analysing', 'Transcribing…');
+        if (!blob) { if (convo.talking && ++quiet >= 2) { convo.talking = false; setBtn(); } continue; }
+        quiet = 0;
         let heard = '';
-        try { heard = await transcribe(blob); } catch (error) { identity.setState('error', error.message); continue; }
+        try { heard = await transcribe(blob); } catch (error) { continue; }
         if (!heard || /^\W*$/.test(heard)) continue;
-        if (/^(stop|end|goodbye|bye)( (the )?conversation)?[.!]*$/i.test(heard)) { convo.on = false; break; }
+        if (!convo.talking) {
+          const hit = heard.match(WAKE);
+          if (!hit) continue;                                  // not for JARVIS: ignored, never sent anywhere
+          convo.talking = true; setBtn();
+          heard = heard.slice(hit.index + hit[0].length).trim();
+          if (!heard || heard.split(/\s+/).length < 2) { identity.setState('listening', 'Yes?'); await speakWith(identity, 'Yes?').catch(() => {}); continue; }
+        }
+        if (/^(stop|end|that'?s all|goodbye|bye)( (the )?conversation)?[.!]*$/i.test(heard)) {
+          convo.talking = false; setBtn(); await speakWith(identity, 'Standing by.').catch(() => {}); continue;
+        }
         speakNext = true;
         await submit(heard);
       }
       stream.getTracks().forEach((t) => t.stop());
-      convoBtn.textContent = 'Start conversation'; convoBtn.classList.remove('primary');
-      identity.setState('calm', 'Conversation ended.');
+      convo.talking = false; setBtn();
+      identity.setState('calm', 'Hands-free is off.');
     }
-    convoBtn.addEventListener('click', act(async () => {
-      if (convo.on) { convo.on = false; return; }
-      convo.on = true; convoBtn.textContent = 'End conversation'; convoBtn.classList.add('primary');
-      await conversation();
-    }));
+    convoBtn.addEventListener('click', () => {
+      if (convo.on && convo.talking) { convo.talking = false; setBtn(); return; }   // end this conversation, keep listening
+      convo.on = !convo.on; setBtn();
+      try { localStorage.setItem('jarvis.handsfree', convo.on ? 'on' : 'off'); } catch (e) { /* private window */ }
+      if (convo.on) handsFree();
+    });
     state.cleanup.push(() => { convo.on = false; });
+    // on by default once the owner has allowed the microphone; a click is never needed again
+    if (!convoBtn.disabled && localStorageGet('jarvis.handsfree') !== 'off') { convo.on = true; setBtn(); setTimeout(handsFree, 600); }
 
     let recorder = null;
     mic.addEventListener('click', act(async () => {

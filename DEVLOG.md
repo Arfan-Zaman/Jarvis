@@ -2,6 +2,22 @@
 
 Newest entries first. Record what changed, why, and what was verified.
 
+## 2026-11-16 — Wake word and purposeful motion
+
+- Hands-free is now on by default on the JARVIS page: it listens quietly,
+  transcribes short utterances locally (whisper.cpp) and ignores anything
+  without its name; "Jarvis" (alone, or followed by a request) starts a
+  conversation; ~25 s of silence or "stop" returns to waiting. One toggle
+  ("Hands-free: on/off"), remembered per browser.
+- The periodic split-and-fly cycle is gone. Motion now has a cause: first load
+  builds the face from the rings layer by layer; thinking re-places a thin band
+  as a build line passes (the face stays whole); executing and success sweep a
+  scan line; failure breaks one side off and rebuilds it; voice ripples the
+  surface; the cursor parts the bots; a click sends a ripple from that point.
+- Ultron likeness declined (Marvel IP); the face stays original.
+- Checked in Chrome: build on load, intact thinking face, hands-free on and
+  waiting for the name, no console errors.
+
 ## 2026-11-16 — Emotion, hands-free talk, auto-learning, full-power mode
 
 - Spec for a living JARVIS written at the top of `NEXT_SESSION.md`.

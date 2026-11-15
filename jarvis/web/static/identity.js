@@ -211,8 +211,8 @@
   function makeSwarm(pool, cumulative, total, data, S, N) {
     const f = () => new Float32Array(N);
     const hx = f(), hy = f(), hz = f(), x = f(), y = f(), z = f(), vx = f(), vy = f(), vz = f();
-    const cr = f(), cg = f(), cb = f(), lum = f(), seed = f(), cl = new Uint8Array(N);
-    const K = 5, cx0 = new Float32Array(K), cy0 = new Float32Array(K), cn = new Float32Array(K);
+    const cr = f(), cg = f(), cb = f(), lum = f(), seed = f();
+    const born = performance.now();
     for (let n = 0; n < N; n++) {
       let lo = 0, hi = cumulative.length - 1;
       const r = Math.random() * total;
@@ -224,14 +224,9 @@
       const d2 = hx[n] * hx[n] + hy[n] * hy[n];
       hz[n] = Math.max(0, 0.22 - d2 * 0.9) + (lum[n] - 0.4) * 0.08;   // a sculpted, bulging mask
       seed[n] = Math.random() * 1000;
-      const a = Math.atan2(hy[n], hx[n]);                               // fragments: slices of the face
-      cl[n] = Math.floor(((a + Math.PI) / (Math.PI * 2)) * K) % K;
-      cx0[cl[n]] += hx[n]; cy0[cl[n]] += hy[n]; cn[cl[n]]++;
-      const s = 0.7 + Math.random() * 0.6, b = Math.random() * Math.PI * 2;  // start scattered: it assembles
-      x[n] = Math.cos(b) * s; y[n] = Math.sin(b) * s; z[n] = (Math.random() - 0.5) * 0.6;
+      const b = Math.random() * Math.PI * 2;                            // start on the reticle: it is built from there
+      x[n] = Math.cos(b) * 0.6; y[n] = Math.sin(b) * 0.6 * 0.3; z[n] = Math.sin(b) * 0.55;
     }
-    for (let k = 0; k < K; k++) { cx0[k] /= cn[k] || 1; cy0[k] /= cn[k] || 1; }
-    const ccx = new Float32Array(K), ccy = new Float32Array(K), ccz = new Float32Array(K);
 
     let lastNow = 0;
     function snap() { x.set(hx); y.set(hy); z.set(hz); vx.fill(0); vy.fill(0); vz.fill(0); }
@@ -258,30 +253,35 @@
       const sec = now / 1000;
       const steps = lastNow ? Math.max(1, Math.min(30, Math.round((now - lastNow) / 16.7))) : 1;
       lastNow = now;
-      const period = spec.still || state === 'offline' ? 0 : state === 'executing' ? 9 : state === 'calm' || state === 'speaking' ? 16 : 12;
-      let split = 0, offX = 0, offY = 0;
-      if (period && !o.reduced) {
-        const cycle = Math.floor(sec / period), c = (sec % period) / period;
-        split = smooth(0.5, 0.58, c) * (1 - smooth(0.72, 0.8, c));
-        const sx = (hash(cycle) - 0.5) * 0.34, sy = (hash(cycle + 7) - 0.5) * 0.22;
-        const shift = smooth(0.7, 0.78, c) * (1 - smooth(0.82, 1, c));
-        offX = sx * shift; offY = sy * shift;
-      }
-      for (let k = 0; k < K; k++) {
-        const a = (k / K) * Math.PI * 2 + sec * (state === 'executing' ? 1.1 : 0.55);
-        ccx[k] = Math.cos(a) * 0.5; ccy[k] = Math.sin(a) * 0.36; ccz[k] = Math.sin(a * 2) * 0.35;
-      }
-      let swell = 1;
-      if (spec.sag) { offY += 0.05; split = 0; }                       // sadness: the swarm sinks, holds together
+      // Motion with a cause. Nothing splits apart for show:
+      //  build  - thinking / first load / repair: rebuilt layer by layer from the rings (bottom up)
+      //  scan   - executing / success: a bright line sweeps down, nothing moves out of place
+      //  ripple - voice in or out, or a click: waves through the surface
+      //  field  - the cursor parts the bots like a hand through smoke
+      const age = (now - born) / 1000;
+      const thinking = state === 'analysing' || state === 'planning';
+      let build = null, scan = null;
+      if (age < 2.6) build = 0.6 - 1.2 * (age / 2.6);
+      else if (thinking) build = 0.6 - 1.2 * ((t % 2.6) / 2.6);
+      else if (spec.disrupt && t > 0.7 && t < 3.2) build = 0.6 - 1.2 * ((t - 0.7) / 2.5);
+      if (state === 'executing') scan = -0.6 + 1.2 * ((t % 1.8) / 1.8);
+      else if (spec.burst && t < 1.1) scan = -0.6 + 1.2 * (t / 1.1);
+      const broken = spec.disrupt && t <= 0.7;                          // failure: a section breaks off first
+      const breakX = hash(Math.floor(o.enteredAt || 0)) - 0.5;
+      let swell = 1, offX = 0, offY = 0;
+      if (spec.sag) offY += 0.05;                                       // sadness: sinks, holds together
       if (spec.lively) swell += 0.025 * Math.sin(sec * 5);              // warmth: a buoyant pulse
-      if (spec.tilt) offX += 0.03 * Math.sin(sec * 1.3);               // curiosity: leans in
-      if (spec.burst && t < 1.6) swell += 0.55 * Math.sin(Math.PI * t / 1.6);
-      const shimmer = state === 'analysing' || state === 'planning' ? 0.014 : 0.004;
-      const kick = spec.disrupt && t < 0.9 ? (1 - t / 0.9) * 0.02 : spec.rage ? 0.007 + level * 0.01 : 0;   // anger trembles
-      const spring = split > 0.05 ? 0.035 : 0.055, damp = 0.86;
-      const tilt = gaze[0] * 0.6 + (spec.still ? 0 : Math.sin(sec / 4.5) * 0.18), pitch = -gaze[1] * 0.4;
+      if (spec.tilt) offX += 0.03 * Math.sin(sec * 1.3);                // curiosity: leans in
+      const voiceWave = (spec.voice || state === 'listening') ? level : 0;
+      const pulseAge = o.pulseAt ? (now - o.pulseAt) / 1000 : 9;
+      const pulseR = pulseAge < 1.4 ? pulseAge * 0.75 : -1;
+      const kick = broken ? 0.012 : spec.rage ? 0.007 + level * 0.01 : 0; // anger trembles
+      const spring = 0.06, damp = 0.85;
+      const tilt = gaze[0] * 0.6 + (spec.still ? 0 : Math.sin(sec / 4.5) * 0.12), pitch = -gaze[1] * 0.4;
       const ct = Math.cos(tilt), st = Math.sin(tilt), cp = Math.cos(pitch), sp = Math.sin(pitch);
       const W = w * 0.78, mid = w / 2, accent = color;
+      const px = o.pointer ? (o.pointer[0] - mid) / W : null, py = o.pointer ? (o.pointer[1] - mid) / W : null;
+      const ox = o.pulseFrom ? (o.pulseFrom[0] - mid) / W : 0, oy = o.pulseFrom ? (o.pulseFrom[1] - mid) / W : 0;
       const mix = { angry: 0.9, warm: 0.7, sad: 0.75, curious: 0.5, warning: 0.75, error: 0.75, failure: 0.75 }[state] ?? (spec.mix > 0.3 ? 0.45 : 0.15);
       const flicker = spec.flicker ? 0.65 + 0.35 * Math.sin(now / 80) : 1;
       const glow = Math.max(0.25, spec.glow) * flicker;
@@ -293,14 +293,33 @@
         out[m++] = r / 255; out[m++] = g / 255; out[m++] = b / 255; out[m++] = Math.min(1, a * fog);
       };
       for (let n = 0; n < N; n++) {
-        const k = cl[n], s = seed[n];
-        let tx = hx[n] * swell + offX, ty = hy[n] * swell + offY, tz = hz[n];
-        if (split > 0) {
-          const fx = ccx[k] + (hx[n] - cx0[k]) * 0.42, fy = ccy[k] + (hy[n] - cy0[k]) * 0.42;
-          tx += (fx - tx) * split; ty += (fy - ty) * split; tz += (ccz[k] - tz) * split;
+        const s = seed[n];
+        let tx = hx[n] * swell + offX, ty = hy[n] * swell + offY, tz = hz[n], flash = 0, dim = 1;
+        // build: layers above the line wait on the reticle, the line places them
+        if (build !== null && hy[n] < build && (age < 2.6 || hy[n] > build - 0.1)) {   // only the band being worked on lifts
+          const ang = s + sec * 0.6;
+          if (age < 2.6) { tx = Math.cos(ang) * 0.6; ty = Math.sin(ang) * 0.18; tz = Math.sin(ang) * 0.55; }
+          else { tz += 0.12; tx *= 1.06; }                                // lifted just off the surface
+          dim = 0.45;
         }
-        const amp = shimmer + split * 0.03;
-        tx += Math.sin(sec * 1.7 + s) * amp; ty += Math.cos(sec * 1.3 + s * 1.3) * amp; tz += Math.sin(sec + s * 0.7) * amp;
+        if (build !== null && Math.abs(hy[n] - build) < 0.03) flash = 0.9;
+        if (scan !== null && Math.abs(hy[n] - scan) < 0.025) flash = 0.8;
+        // failure: one side breaks off (it is then rebuilt by the build line)
+        if (broken && (hx[n] - breakX * 0.4) * Math.sign(breakX || 1) > 0.05) { tx += hx[n] * 0.5; ty += 0.15; tz -= 0.2; dim = 0.6; }
+        // ripple: voice, or a click
+        const r0 = Math.hypot(hx[n], hy[n] - 0.08);
+        if (voiceWave) tz += voiceWave * 0.07 * Math.sin(r0 * 22 - sec * 14);
+        if (pulseR > 0) {
+          const d = Math.hypot(hx[n] - ox, hy[n] - oy), band = 1 - Math.min(1, Math.abs(d - pulseR) / 0.06);
+          if (band > 0) { tz += band * 0.12 * (1 - pulseAge / 1.4); flash = Math.max(flash, band * 0.7); }
+        }
+        // the cursor parts the swarm
+        if (px !== null) {
+          const dx = hx[n] - px, dy = hy[n] - py, d = Math.hypot(dx, dy);
+          if (d < 0.11 && d > 1e-4) { const push = (1 - d / 0.11) * 0.07; tx += (dx / d) * push; ty += (dy / d) * push; tz += push; }
+        }
+        const amp = thinking ? 0.006 : 0.003;                          // a breath, not a wobble
+        tx += Math.sin(sec * 1.7 + s) * amp; ty += Math.cos(sec * 1.3 + s * 1.3) * amp;
         if (!o.reduced) for (let step = 0; step < steps; step++) {
           vx[n] = (vx[n] + (tx - x[n]) * spring + (kick ? (Math.random() - 0.5) * kick : 0)) * damp;
           vy[n] = (vy[n] + (ty - y[n]) * spring + (kick ? (Math.random() - 0.5) * kick : 0)) * damp;
@@ -310,10 +329,10 @@
         let X = x[n] * ct + z[n] * st, Z = -x[n] * st + z[n] * ct, Y = y[n];
         [Y, Z] = [Y * cp - Z * sp, Y * sp + Z * cp];
         const L = lum[n], speed = Math.abs(vx[n]) + Math.abs(vy[n]);
-        let a = (0.42 + 0.75 * L) * glow + Math.min(0.35, speed * 7);
+        let a = ((0.42 + 0.75 * L) * dim + flash) * glow + Math.min(0.3, speed * 6);
         if (spec.voice && L > 0.6) a += level * 0.8;
-        const twinkle = 0.85 + 0.15 * Math.sin(sec * 3 + s);
-        emit(X, Y, Z, L > 0.7 ? 3.2 : 2.1, cr[n] + (accent[0] - cr[n]) * mix, cg[n] + (accent[1] - cg[n]) * mix,
+        const twinkle = 0.88 + 0.12 * Math.sin(sec * 3 + s);
+        emit(X, Y, Z, L > 0.7 || flash > 0.5 ? 3.2 : 2.1, cr[n] + (accent[0] - cr[n]) * mix, cg[n] + (accent[1] - cg[n]) * mix,
              cb[n] + (accent[2] - cb[n]) * mix, a * twinkle);
       }
       // rings: real 3D circles, spinning in their own planes, seen through the same camera
@@ -550,7 +569,13 @@
       const R = w * (compact ? 0.36 : 0.34);
       const color = mixColor(spec.color, VIOLET, spec.mix);
       if (swarm) {
-        Object.assign(swarmOpts, { spec, state, t, gaze, level, color, dpr, reduced: reducedMotion() });
+        let local = null;                       // cursor in canvas pixels, while it is over the face
+        if (pointer && now - lastPointerMove < 2500) {
+          const box = canvas.getBoundingClientRect();
+          const lx = (pointer[0] - box.left) * dpr, ly = (pointer[1] - box.top) * dpr;
+          if (lx >= 0 && ly >= 0 && lx <= w && ly <= w) local = [lx, ly];
+        }
+        Object.assign(swarmOpts, { spec, state, t, gaze, level, color, dpr, enteredAt, pointer: local, reduced: reducedMotion() });
         if (glr) { ctx.clearRect(0, 0, w, w); glr.render(swarm.out, swarm.frame(w, now, swarmOpts), w); }
         else swarm.draw(ctx, w, now, swarmOpts);
         return;
@@ -666,6 +691,11 @@
       gazeTarget = spec.still ? [0, 0] : [Math.max(-1, Math.min(1, dx)), Math.max(-1, Math.min(1, dy))];
     }
     function onLeave() { gazeTarget = [0, 0]; pointer = null; }
+    function onClick(event) {                 // a click sends a ripple out from where it landed
+      const box = canvas.getBoundingClientRect();
+      swarmOpts.pulseFrom = [(event.clientX - box.left) * dpr, (event.clientY - box.top) * dpr];
+      swarmOpts.pulseAt = performance.now();
+    }
 
     resize(); apply();
     const observer = new ResizeObserver(() => { resize(); if (options.static) draw(enteredAt + 900); });
@@ -675,6 +705,7 @@
       requestAnimationFrame(() => draw(enteredAt + 900));
     } else {
       window.addEventListener('pointermove', onPointer, { passive: true });
+      root.addEventListener('pointerdown', onClick);
       document.addEventListener('mouseleave', onLeave);
       raf = requestAnimationFrame(loop);
       if (reducedMotion()) draw(performance.now());
@@ -700,6 +731,7 @@
         running = false; cancelAnimationFrame(raf); clearInterval(previewTimer);
         observer.disconnect();
         window.removeEventListener('pointermove', onPointer);
+        root.removeEventListener('pointerdown', onClick);
         document.removeEventListener('mouseleave', onLeave);
         root.remove();
       },
