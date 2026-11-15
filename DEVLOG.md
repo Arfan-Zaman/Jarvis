@@ -2,6 +2,32 @@
 
 Newest entries first. Record what changed, why, and what was verified.
 
+## 2026-11-16 — Phase 3.5: voice
+
+### Built
+- `jarvis/voice.py`: transcribe (ffmpeg to 16 kHz WAV, then whisper.cpp with
+  `data/models/ggml-small.en.bin`; non-speech markers removed) and speak (macOS
+  `say`, voice Daniel by default, AAC/M4A). Argument lists only, never a
+  shell; text to speak goes in a file; temporary audio is deleted.
+- API: `GET /api/voice/status`, `POST /api/voice/transcribe` (raw audio body),
+  `POST /api/voice/speak` (returns `audio/mp4`). The security policy allows
+  `blob:` media so the browser can play the reply.
+- Chat: microphone (click to start, click to stop), speaker toggle (remembered
+  per browser), spoken questions get spoken answers, "go to sleep" phrases.
+- Config: `JARVIS_WHISPER_MODEL`, `JARVIS_VOICE` (validated), `JARVIS_VOICE_RATE`.
+- The chat self-description now says JARVIS can search the web and talk; it
+  still said "cannot browse the web" from before Phase 3.4.
+
+### Verified
+- 227 tests passing (212 existing, 15 new), including a real round trip: JARVIS
+  speaks a sentence and transcribes it back.
+- Spoken conversation through the server on a throwaway database: questions
+  heard exactly in about 1 second; "remind me to call the bank tomorrow
+  morning" created the task and was answered aloud.
+- Browser: microphone and speaker buttons present; a reply was spoken (speak
+  request 200), no console errors. The microphone itself was not exercised from
+  the automated browser (no microphone there).
+
 ## 2026-11-16 — Reference videos studied; roadmap updated
 
 - The owner shared four Instagram reels showing JARVIS-style assistants.

@@ -41,6 +41,9 @@ DEFAULTS = {
     "JARVIS_ENGINE_MAX_FAILURES": "3",
     "JARVIS_ENGINE_MAX_MODEL_CALLS": "40",
     "JARVIS_BRAVE_API_KEY": "",
+    "JARVIS_WHISPER_MODEL": "data/models/ggml-small.en.bin",
+    "JARVIS_VOICE": "Daniel",
+    "JARVIS_VOICE_RATE": "185",
 }
 
 
@@ -69,6 +72,9 @@ class Config:
     engine_max_failures: int = 3
     engine_max_model_calls: int = 40
     brave_api_key: str = ""
+    whisper_model: Path = Path("data/models/ggml-small.en.bin")
+    voice_name: str = "Daniel"
+    voice_rate: int = 185
 
     @property
     def db_path(self) -> Path:
@@ -141,6 +147,18 @@ def _integer(name: str, value: str, minimum: int, maximum: int) -> int:
     return number
 
 
+def _path(root: Path, value: str) -> Path:
+    path = Path(value).expanduser()
+    return (path if path.is_absolute() else root / path).resolve()
+
+
+def _voice(value: str) -> str:
+    value = value.strip()
+    if not value or not all(ch.isalnum() or ch in " ()-_" for ch in value):
+        raise ConfigError("JARVIS_VOICE must be a voice name such as Daniel")
+    return value
+
+
 def load_config(
     root: Path | str | None = None,
     env_file: Path | str | None = None,
@@ -193,4 +211,7 @@ def load_config(
         engine_max_failures=_integer("JARVIS_ENGINE_MAX_FAILURES", get("JARVIS_ENGINE_MAX_FAILURES"), 1, 20),
         engine_max_model_calls=_integer("JARVIS_ENGINE_MAX_MODEL_CALLS", get("JARVIS_ENGINE_MAX_MODEL_CALLS"), 1, 500),
         brave_api_key=get("JARVIS_BRAVE_API_KEY").strip(),
+        whisper_model=_path(root, get("JARVIS_WHISPER_MODEL")),
+        voice_name=_voice(get("JARVIS_VOICE")),
+        voice_rate=_integer("JARVIS_VOICE_RATE", get("JARVIS_VOICE_RATE"), 90, 360),
     )

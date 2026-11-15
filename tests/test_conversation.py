@@ -62,6 +62,8 @@ class AnswerTests(ConversationCase):
         for tool in self.app.tools.list():
             self.assertIn(tool["description"], prompt)
         self.assertIn("Never say you have done", prompt)
+        self.assertNotIn("browse the web", prompt)                     # it can, since Phase 3.4
+        self.assertIn("search the web", prompt)
         self.assertEqual(system_prompt(self.app.tools.list()), prompt)
 
     def test_history_is_carried_forward(self):

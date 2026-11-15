@@ -7,7 +7,8 @@ reasoning engine that plans and carries out goals using those tools. Phase 2.3
 connects a local AI model (Qwen 3.5 9B through Ollama), so JARVIS can now chat
 and carry out goals for real, entirely on this Mac. Phase 3.1 makes chat one
 conversation that both talks and acts; Phase 3.2 gives it a memory of you;
-Phases 3.3 and 3.4 let it act on its own and use the internet.
+Phases 3.3 and 3.4 let it act on its own and use the internet; Phase 3.5 gives
+it a voice.
 
 - Runs entirely on this Mac. Nothing is sent anywhere.
 - Python standard library only. The one outside program is Ollama, which runs
@@ -98,6 +99,23 @@ Real conversation, Qwen 3.5 9B: a greeting, "15% of 240" (36), "remind me to
 call Sam tomorrow" (task created with the correct date), an ambiguous request
 that asked which business, a task list, saving a preference, and declining to
 send email. Replies take 2 to 30 seconds; the first after a restart is slowest.
+
+## Voice
+
+In Chat, click the **microphone**, speak, and click it again. JARVIS writes
+down what you said, answers, and speaks the answer. Turn on the **speaker**
+button to hear every reply, or click it while JARVIS is talking to stop it.
+Say "go to sleep" or "that's all" to end without a new request.
+
+- Everything runs on this Mac and works offline: speech-to-text with
+  whisper.cpp (model `data/models/ggml-small.en.bin`, English), speech with the
+  macOS voice **Daniel** (British). Change it with `JARVIS_VOICE` (list voices
+  with `say -v '?'`) and `JARVIS_VOICE_RATE`.
+- Recordings are deleted as soon as they are transcribed; only the words are
+  kept, as your chat message. Links and sources are not read aloud.
+- The browser asks once for microphone permission.
+- Speed with Qwen 3.5 9B: hearing about 1 second, thinking 5 to 30 seconds,
+  speaking 1 to 2 seconds.
 
 ## Autonomy and the internet
 
@@ -341,7 +359,7 @@ cd ~/JARVIS
 python3 -m unittest discover -s tests
 ```
 
-212 tests cover database initialisation, memory create/retrieve/delete, task
+227 tests cover database initialisation, memory create/retrieve/delete, task
 creation and completion, project creation, experience storage, configuration
 loading, safety checks, AI provider reporting, backup and restore, the web
 API, the tool registry, tool execution, permissions, the run log, and the
@@ -350,7 +368,8 @@ approvals, limits, false completion claims, goal review, interruption
 recovery), and the conversation (routing, truthful reporting, follow-up
 questions, approvals in chat), and memory (index sync, ranking, the
 remember and offer-to-remember flows, citations), autonomy levels, and the web
-tools (against a fake local server, so tests never use the internet). The automated tests use a scripted stand-in, so they never need
+tools (against a fake local server, so tests never use the internet), and
+voice (including a real speak-then-hear round trip on this Mac). The automated tests use a scripted stand-in, so they never need
 Ollama. Each test uses its own temporary database and never touches `data/`.
 
 ## Backup and recovery
@@ -381,6 +400,8 @@ Ollama. Each test uses its own temporary database and never touches `data/`.
 - Without a search key, web search is limited to Wikipedia and instant answers,
   so some factual questions fail (honestly) and news is not available.
 - Web answers take 20 to 60 seconds with the local model.
+- Voice is push-to-talk; there is no wake word yet. Speech recognition is
+  English only with the current model.
 - Memory search matches words and word forms, not meaning: "car" will not find
   "vehicle". Near-duplicates worded differently can both be stored.
 - The model sometimes cites a memory it did not really need.
@@ -404,6 +425,6 @@ Ollama. Each test uses its own temporary database and never touches `data/`.
 
 ## Next recommended milestone
 
-**Phase 3.5: the code runner.** JARVIS writes and runs Python inside its
-workspace, sandboxed so it cannot touch anything else. Then 3.6 and 3.7: skills
-built once with Claude Code and reused locally. See `NEXT_SESSION.md`.
+**Phase 3.6: the living interface.** An arc-reactor status ring showing when
+JARVIS is listening, thinking, working or speaking, live action cards while it
+works, and the active model, all driven by real state. See `NEXT_SESSION.md`.

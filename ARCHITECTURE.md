@@ -16,7 +16,7 @@ See `JARVIS_ROADMAP.md` for sequence and `NEXT_SESSION.md` for the next task.
    download needs a stated reason.
 7. **Claude Code builds JARVIS; it is not JARVIS's brain.**
 
-## 2. What exists today (Phases 1 and 2, steps 3.1 to 3.4; complete and tested)
+## 2. What exists today (Phases 1 and 2, steps 3.1 to 3.5; complete and tested)
 
 ```
 Web interface / command line
@@ -48,7 +48,8 @@ Web interface / command line
 | Memory context (full-text, ranked) | `jarvis/engine/context.py` | Working (3.2) |
 | Autonomy levels (`web_read`, `workspace`) | `jarvis/safety.py` | Working (3.3) |
 | Internet (`web.search`, `web.fetch`) | `jarvis/tools/web.py` | Working; keyless search is limited (3.4) |
-| Tests | `tests/` | 212 passing |
+| Voice (whisper.cpp in, macOS speech out) | `jarvis/voice.py` | Working, push-to-talk (3.5) |
+| Tests | `tests/` | 227 passing |
 
 Tables: memories, experiences, tasks, projects, agents, conversations,
 messages, system_events, settings, approvals, runs, run_steps, run_plan.

@@ -20,6 +20,7 @@ from .engine.conversation import Conversation
 from .logging_setup import get_logger
 from .providers import AIProvider, ProviderError, build_provider
 from .safety import ActionCategory, SafetyLayer
+from .voice import Voice
 from .stores.runs import RunStore
 from .tools import ToolRegistry, register_builtin, register_web
 from .stores import (
@@ -62,6 +63,7 @@ class Jarvis:
         register_builtin(self.tools)
         register_web(self.tools)
         self.engine = Engine(self)
+        self.voice = Voice(self.config)
         self.conversation = Conversation(self)
         self.started_at = time.time()
         # Record kinds reachable through the generic API below.
@@ -309,10 +311,11 @@ class Jarvis:
                 "integrity_ok": self.db.integrity_ok(),
             },
             "safety": self.safety.policy(),
+            "voice": self.voice.status(),
             "backups": {"count": len(backups), "latest": backups[0] if backups else None,
                         "keep": self.config.backup_keep},
             "counts": self.counts(),
-            "not_built_yet": ["voice", "autonomous agents", "browser automation",
+            "not_built_yet": ["wake word (hands-free voice)", "autonomous agents", "browser automation",
                               "semantic memory search", "external integrations"],
         }
 

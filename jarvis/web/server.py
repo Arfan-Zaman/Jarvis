@@ -29,7 +29,8 @@ INT_FILTERS = ("project_id", "task_id")
 SECURITY_HEADERS = {
     "X-Content-Type-Options": "nosniff",
     "Referrer-Policy": "no-referrer",
-    "Content-Security-Policy": "default-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+    "Content-Security-Policy": ("default-src 'self'; media-src 'self' blob:; frame-ancestors 'none'; "
+                                "base-uri 'none'; form-action 'self'"),
 }
 
 
@@ -38,6 +39,18 @@ class Request:
     params: tuple
     query: dict
     body: dict = field(default_factory=dict)
+    raw: bytes = b""            # audio uploads
+    content_type: str = ""
+
+
+@dataclass
+class Raw:
+    """A non-JSON response, such as audio."""
+    data: bytes
+    content_type: str
+
+
+RAW_ROUTES = {"/api/voice/transcribe"}   # these take binary bodies, not JSON
 
 
 ROUTES: list[tuple[str, re.Pattern, callable]] = []
@@ -194,6 +207,23 @@ def _executions(app: Jarvis, req: Request):
                                       tool=req.query.get("tool"), status=req.query.get("status"))}
 
 
+# --- voice ----------------------------------------------------------------
+@route("GET", "/api/voice/status")
+def _voice_status(app: Jarvis, req: Request):
+    return app.voice.status()
+
+
+@route("POST", "/api/voice/transcribe")
+def _voice_transcribe(app: Jarvis, req: Request):
+    """Body: the recorded audio itself. Returns the words heard; nothing is stored."""
+    return {"text": app.voice.transcribe(req.raw, req.content_type or "application/octet-stream")}
+
+
+@route("POST", "/api/voice/speak")
+def _voice_speak(app: Jarvis, req: Request):
+    return Raw(app.voice.speak(req.body.get("text", "")), "audio/mp4")
+
+
 # --- system ---------------------------------------------------------------
 @route("GET", "/api/agents")
 def _agents(app: Jarvis, req: Request):
@@ -261,6 +291,13 @@ class Handler(BaseHTTPRequestHandler):
         origin = self.headers.get("Origin")
         return origin is None or origin in (f"http://{host}",)
 
+    def _read_raw(self) -> bytes:
+        from ..voice import MAX_AUDIO_BYTES
+        length = _int(self.headers.get("Content-Length") or 0, "Content-Length")
+        if length > MAX_AUDIO_BYTES:
+            raise ValidationError("that recording is too large")
+        return self.rfile.read(length) if length else b""
+
     def _read_body(self) -> dict:
         length = _int(self.headers.get("Content-Length") or 0, "Content-Length")
         if length > MAX_BODY_BYTES:
@@ -287,7 +324,9 @@ class Handler(BaseHTTPRequestHandler):
                 return self._error(405, "method not allowed")
             return self._static(url.path)
         try:
-            body = self._read_body() if self.command in ("POST", "PATCH", "DELETE") else {}
+            raw = self._read_raw() if self.command == "POST" and url.path in RAW_ROUTES else b""
+            body = self._read_body() if self.command in ("POST", "PATCH", "DELETE") and not raw \
+                and url.path not in RAW_ROUTES else {}
             query = {key: values[-1] for key, values in parse_qs(url.query).items()}
             path_known = False
             for method, pattern, handler in ROUTES:
@@ -297,7 +336,10 @@ class Handler(BaseHTTPRequestHandler):
                 path_known = True
                 if method != self.command:
                     continue
-                result = handler(self.server.app, Request(match.groups(), query, body))
+                result = handler(self.server.app, Request(match.groups(), query, body, raw,
+                                                          self.headers.get("Content-Type", "")))
+                if isinstance(result, Raw):
+                    return self._send(200, result.data, result.content_type)
                 status, payload = result if isinstance(result, tuple) else (200, result)
                 return self._json(status, payload)
             return self._error(405 if path_known else 404,

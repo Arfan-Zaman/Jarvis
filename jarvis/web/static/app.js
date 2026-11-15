@@ -352,7 +352,78 @@ views.chat = {
       await loadThreads();
     };
 
-    const composer = h('form', { class: 'composer' }, input, send);
+    // --- voice: push-to-talk in, spoken replies out (all processed on this Mac) ---
+    const voiceOk = status.voice || {};
+    const remembered = (() => { try { return localStorage.getItem('jarvis.speak') === 'on'; } catch (e) { return false; } })();
+    const voice = { speakReplies: remembered, speakNext: false, recorder: null, audio: null };
+    const voiceLine = h('div', { class: 'voice-line muted small' });
+    const setVoiceLine = (text) => { voiceLine.textContent = text || ''; voiceLine.hidden = !text; };
+    setVoiceLine('');
+
+    const stopSpeaking = () => { if (voice.audio) { voice.audio.pause(); voice.audio = null; } speaker.classList.remove('speaking'); };
+    const speak = async (text) => {
+      stopSpeaking();
+      setVoiceLine('Speaking…');
+      try {
+        const response = await fetch('/api/voice/speak', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text }) });
+        if (!response.ok) throw new Error((await response.json().catch(() => ({}))).error || 'Speech failed');
+        const audio = new Audio(URL.createObjectURL(await response.blob()));
+        voice.audio = audio;
+        speaker.classList.add('speaking');
+        audio.onended = () => { speaker.classList.remove('speaking'); setVoiceLine(''); voice.audio = null; };
+        await audio.play();
+      } catch (error) { setVoiceLine(''); toast(error.message, true); }
+    };
+
+    const SLEEP = /^\s*(go to sleep|sleep now|that'?s all|goodbye,? jarvis|you can (go to )?sleep)/i;
+    const finishRecording = async (blob) => {
+      setVoiceLine('Transcribing…');
+      try {
+        const response = await fetch('/api/voice/transcribe', { method: 'POST', headers: { 'Content-Type': blob.type || 'audio/webm' }, body: blob });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.error || 'Could not understand the recording');
+        const heard = (data.text || '').trim();
+        if (!heard) { setVoiceLine(''); toast("I didn't catch that. Try again a little closer to the microphone."); return; }
+        if (SLEEP.test(heard)) { setVoiceLine(''); await speak('Very good, sir. I shall be here when you need me.'); return; }
+        input.value = heard;
+        voice.speakNext = true;               // a spoken question gets a spoken answer
+        setVoiceLine('');
+        composer.requestSubmit();
+      } catch (error) { setVoiceLine(''); toast(error.message, true); }
+    };
+
+    const mic = h('button', { class: 'btn icon-btn', type: 'button', title: voiceOk.listening ? 'Talk to JARVIS (click to start, click again to stop)' : `Voice input unavailable: missing ${(voiceOk.missing || []).join(', ')}`, 'aria-label': 'Talk to JARVIS', disabled: !voiceOk.listening }, '🎙');
+    mic.addEventListener('click', act(async () => {
+      if (voice.recorder) { voice.recorder.stop(); return; }
+      stopSpeaking();
+      let stream;
+      try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
+      catch (error) { throw new Error('Microphone access was blocked. Allow it for this page in the browser settings.'); }
+      const chunks = [];
+      const recorder = new MediaRecorder(stream);
+      voice.recorder = recorder;
+      recorder.ondataavailable = (event) => { if (event.data.size) chunks.push(event.data); };
+      recorder.onstop = () => {
+        stream.getTracks().forEach((track) => track.stop());
+        voice.recorder = null;
+        mic.classList.remove('recording');
+        finishRecording(new Blob(chunks, { type: recorder.mimeType || 'audio/webm' }));
+      };
+      recorder.start();
+      mic.classList.add('recording');
+      setVoiceLine('Listening… click the microphone again when you have finished.');
+    }));
+
+    const speaker = h('button', { class: 'btn icon-btn' + (voice.speakReplies ? ' on' : ''), type: 'button', 'aria-pressed': String(voice.speakReplies), title: voiceOk.speaking ? 'Read every reply aloud' : 'Spoken replies unavailable', 'aria-label': 'Read replies aloud', disabled: !voiceOk.speaking }, '🔊');
+    speaker.addEventListener('click', () => {
+      if (voice.audio) { stopSpeaking(); setVoiceLine(''); return; }   // a click while speaking stops it
+      voice.speakReplies = !voice.speakReplies;
+      speaker.classList.toggle('on', voice.speakReplies);
+      speaker.setAttribute('aria-pressed', String(voice.speakReplies));
+      try { localStorage.setItem('jarvis.speak', voice.speakReplies ? 'on' : 'off'); } catch (e) { /* private mode */ }
+    });
+
+    const composer = h('form', { class: 'composer' }, mic, input, speaker, send);
     composer.addEventListener('submit', act(async (event) => {
       event.preventDefault();
       const text = input.value.trim();
@@ -371,11 +442,13 @@ views.chat = {
         const result = await api('POST', '/api/chat', { message: text, conversation_id: state.conversationId });
         state.conversationId = result.conversation.id;
         await openThread();
+        if ((voice.speakNext || voice.speakReplies) && result.reply && result.reply.content) speak(result.reply.content);
       } catch (error) {
         messages.querySelector('.thinking')?.remove();
         input.value = text;                        // give the message back so it can be resent
         throw error;
       } finally {
+        voice.speakNext = false;
         send.disabled = false;
         input.focus();
       }
@@ -386,7 +459,7 @@ views.chat = {
 
     root.append(h('div', { class: 'stack' },
       status.ai.configured && status.ai.available ? null : aiBanner(status.ai),
-      h('div', { class: 'chat' }, threads, h('div', { class: 'glass conversation' }, messages, composer))));
+      h('div', { class: 'chat' }, threads, h('div', { class: 'glass conversation' }, messages, voiceLine, composer))));
     await loadThreads();
     await openThread();
   },

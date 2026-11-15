@@ -5,48 +5,38 @@ section 4b (autonomous design).
 
 ## Where things stand (2026-11-16)
 
-- Phases 1 and 2 and steps 3.1 to 3.4 complete. 212 tests passing.
-- JARVIS runs on Qwen 3.5 9B in the Ollama desktop app (`.env`, git-ignored).
-  Claude Code 2.1 is installed at `~/.local/bin/claude` and supports `-p`.
-- Chat talks and acts, remembers the owner, acts without asking for everyday
-  work (asks only for destructive, external, financial and system actions), and
-  searches and reads the web with sources. Keyless search is Wikipedia and
-  DuckDuckGo instant answers; an optional `JARVIS_BRAVE_API_KEY` adds full web
-  search.
-- **Owner's decisions:** autonomous within the hard lines; Claude Code once per
-  kind of task, then reuse locally as a skill; automatic reviewable memory;
-  self-improvement behind tests and Git. Business work later.
+- Phases 1 and 2 and steps 3.1 to 3.5 complete. 227 tests passing.
+- JARVIS runs on Qwen 3.5 9B in Ollama; talks and acts, remembers, acts on its
+  own within the hard lines, uses the web with sources, and now has a voice
+  (push-to-talk with whisper.cpp; spoken replies with the macOS voice Daniel).
+- Installed with approval: Ollama + qwen3.5:9b, whisper.cpp + ggml-small.en
+  (`data/models`). yt-dlp was already present. Claude Code 2.1 is at
+  `~/.local/bin/claude`.
+- Reference videos (four reels) are in `data/media/reels` with transcripts and
+  contact sheets; the roadmap's Phase 3 list is derived from them.
 - Remote `origin` is GitHub; push only when the owner asks.
 
-## Exact next task: step 3.5, the code runner
+## Exact next task: step 3.6, the living interface (HUD)
 
 No installs needed.
 
-1. `jarvis/tools/code.py`: tool `code.run` (permission `workspace`). Inputs:
-   `code` (Python source), optional `filename`, `timeout` (default 30 s, max
-   120), `args`. Writes the file under `workspace/runs/<run-id>/` and runs it
-   with the same Python as JARVIS as a child process, with cwd in that folder.
-2. Sandbox: run through macOS `sandbox-exec` with a profile that denies file
-   writes outside the run folder and `workspace/`, and denies network unless
-   the call sets `network: true` (then outbound only). Verify `sandbox-exec`
-   exists; if it does not, refuse to run rather than run unsandboxed.
-3. Limits: timeout (kill the process group), output capped (e.g. 20,000
-   characters each for stdout and stderr), environment stripped of secrets
-   (no `JARVIS_BRAVE_API_KEY`, etc.).
-4. Result: exit code, stdout, stderr, duration, files created (names and sizes).
-5. `code.read_file` / `code.write_file` (`workspace`) for files under
-   `workspace/` only, via `SafetyLayer.authorize_path`.
-6. Engine protocol: for calculations, data processing or anything a short
-   script does better, write and run code; check the result before using it.
-7. Tests: success, syntax error, timeout kill, output cap, write outside the
-   workspace blocked by the sandbox, network blocked by default, secrets absent
-   from the environment, refusal when the sandbox is unavailable.
-8. Real model: "what is the 50th Fibonacci number", "make a CSV of the next 12
-   months with their number of days and save it in my workspace", "count the
-   words in this text: …".
-9. Update README, DEVLOG, ARCHITECTURE, ROADMAP and this file. Commit.
+1. An arc-reactor status ring (SVG + CSS, no libraries) in the sidebar and,
+   larger, on the Chat page, with states: online, listening, transcribing,
+   thinking, working, speaking, offline. Each state is driven by real events
+   (recording started, request in flight, run executing, audio playing,
+   server unreachable), never decorative animation alone.
+2. Show the active model under the ring (from `/api/status`).
+3. Live action cards: while a chat request runs an action, poll
+   `/api/runs/<id>` (or a new lightweight `/api/runs/active`) and show the
+   current step ("Searching the web…", "Reading python.org…", "Adding a
+   task…") until it finishes; the run must exist server-side before the card
+   appears (start runs asynchronously or expose the active run id).
+4. Respect `prefers-reduced-motion`; keep the existing colours and layout.
+5. Tests: the active-run endpoint, state mapping, no claims without a run.
+6. Verify in the browser at desktop and phone widths.
+7. Update README, DEVLOG, ARCHITECTURE, ROADMAP and this file. Commit.
 
-Then 3.6 and 3.7: skills and the Claude Code bridge (learn once).
+Then 3.7 (sandboxed code runner) and 3.8 (skills built once with Claude Code).
 
 ## Rules for the session
 
@@ -59,7 +49,7 @@ Then 3.6 and 3.7: skills and the Claude Code bridge (learn once).
 ## Prompt to paste
 
 > Continue JARVIS. Read NEXT_SESSION.md, JARVIS_ROADMAP.md and
-> ARCHITECTURE.md, then implement step 3.5 (the sandboxed code runner) exactly
+> ARCHITECTURE.md, then implement step 3.6 (the living interface) exactly
 > as described. Standard library only, no installs, preserve existing tests,
 > test with the real local model, update the docs and commit. Do not push.
 > Keep the report short and in plain language.
