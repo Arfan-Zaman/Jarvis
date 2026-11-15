@@ -2,6 +2,26 @@
 
 Newest entries first. Record what changed, why, and what was verified.
 
+## 2026-11-16 — Emotion, hands-free talk, auto-learning, full-power mode
+
+- Spec for a living JARVIS written at the top of `NEXT_SESSION.md`.
+- Emotion: four new swarm states (warm/amber with a buoyant pulse, curious/
+  violet leaning in, sad/blue sinking and dim, angry/red trembling with the
+  voice). Replies are spoken sentence by sentence; each sentence's feeling
+  (`feel()` in app.js) sets the state while it plays, and the next sentence's
+  audio is prepared during playback, so speech starts sooner.
+- Hands-free conversation on Presence ("Start conversation"): listens, detects
+  the end of speech by silence, answers aloud, listens again; "stop
+  conversation" ends it.
+- Auto-learning: lasting facts said in chat are saved without asking
+  (`JARVIS_AUTO_LEARN`, default on) as unverified, source `jarvis:learn`.
+- `claude.operate`: Claude Code with shell, confined to `workspace/`, system
+  category, so JARVIS asks the owner every time.
+- Project skills: `.claude/skills/jarvis-ship` and `.claude/skills/jarvis-art`.
+- Checked in Chrome: sentence feelings classify correctly, speech endpoint
+  returns audio, sad/angry/warm render distinctly, no console errors. 246 tests
+  pass. Not yet tried with a real microphone conversation.
+
 ## 2026-11-16 — HUD on every page
 
 - `hud.css` (loaded last) reskins every page through the shared parts:

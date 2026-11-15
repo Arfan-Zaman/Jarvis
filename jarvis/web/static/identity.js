@@ -17,6 +17,7 @@
  */
 (function () {
   const PINK = [255, 45, 140], VIOLET = [124, 77, 255], WHITE = [232, 234, 245], RED = [255, 59, 59], GREY = [120, 124, 140];
+  const AMBER = [255, 138, 76], SKY = [92, 132, 255];
 
   // label, line (character language), core behaviour, eye and face geometry
   const STATES = {
@@ -34,6 +35,11 @@
     failure:   { label: 'FAILED',      line: 'I have not marked this as complete.',       color: RED,    mix: 0,   speed: 0.05, glow: 0.7,  eye: 0.45, face: 0.8,  brow: 6,  paths: 0, particles: 0, disrupt: true },
     warning:   { label: 'WARNING',     line: 'Attention required.',                       color: RED,    mix: 0.4, speed: 0.1,  glow: 0.8,  eye: 0.5,  face: 0.85, brow: 6,  paths: 0, particles: 0 },
     error:     { label: 'ERROR',       line: 'Something is not responding.',              color: RED,    mix: 0,   speed: 0.04, glow: 0.65, eye: 0.4,  face: 0.7,  brow: 5,  paths: 0, particles: 0, disrupt: true },
+    // emotions while speaking, chosen per sentence from what JARVIS is saying
+    warm:      { label: 'WARM',        line: '',                                          color: AMBER,  mix: 0,    speed: 0.3, glow: 1.0,  eye: 0.95, face: 0.8,  brow: 0,  paths: 0, particles: 0, voice: true, lively: true },
+    curious:   { label: 'CURIOUS',     line: '',                                          color: VIOLET, mix: 0.45, speed: 0.4, glow: 0.85, eye: 1.0,  face: 0.8,  brow: 1,  paths: 0, particles: 0, voice: true, tilt: true },
+    sad:       { label: 'SAD',         line: '',                                          color: SKY,    mix: 0.6,  speed: 0.06, glow: 0.45, eye: 0.55, face: 0.6, brow: 0,  paths: 0, particles: 0, voice: true, sag: true },
+    angry:     { label: 'ANGRY',       line: '',                                          color: RED,    mix: 0.15, speed: 0.6, glow: 1.0,  eye: 0.35, face: 0.95, brow: 9,  paths: 0, particles: 0, voice: true, rage: true },
     offline:   { label: 'OFFLINE',     line: 'The intelligence is not connected.',        color: GREY,   mix: 0,   speed: 0.02, glow: 0.2,  eye: 0.25, face: 0.35, brow: 0,  paths: 0, particles: 0 },
   };
 
@@ -266,14 +272,17 @@
         ccx[k] = Math.cos(a) * 0.5; ccy[k] = Math.sin(a) * 0.36; ccz[k] = Math.sin(a * 2) * 0.35;
       }
       let swell = 1;
+      if (spec.sag) { offY += 0.05; split = 0; }                       // sadness: the swarm sinks, holds together
+      if (spec.lively) swell += 0.025 * Math.sin(sec * 5);              // warmth: a buoyant pulse
+      if (spec.tilt) offX += 0.03 * Math.sin(sec * 1.3);               // curiosity: leans in
       if (spec.burst && t < 1.6) swell += 0.55 * Math.sin(Math.PI * t / 1.6);
       const shimmer = state === 'analysing' || state === 'planning' ? 0.014 : 0.004;
-      const kick = spec.disrupt && t < 0.9 ? (1 - t / 0.9) * 0.02 : 0;
+      const kick = spec.disrupt && t < 0.9 ? (1 - t / 0.9) * 0.02 : spec.rage ? 0.007 + level * 0.01 : 0;   // anger trembles
       const spring = split > 0.05 ? 0.035 : 0.055, damp = 0.86;
       const tilt = gaze[0] * 0.6 + (spec.still ? 0 : Math.sin(sec / 4.5) * 0.18), pitch = -gaze[1] * 0.4;
       const ct = Math.cos(tilt), st = Math.sin(tilt), cp = Math.cos(pitch), sp = Math.sin(pitch);
       const W = w * 0.78, mid = w / 2, accent = color;
-      const mix = state === 'warning' || state === 'error' || state === 'failure' ? 0.75 : spec.mix > 0.3 ? 0.45 : 0.15;
+      const mix = { angry: 0.9, warm: 0.7, sad: 0.75, curious: 0.5, warning: 0.75, error: 0.75, failure: 0.75 }[state] ?? (spec.mix > 0.3 ? 0.45 : 0.15);
       const flicker = spec.flicker ? 0.65 + 0.35 * Math.sin(now / 80) : 1;
       const glow = Math.max(0.25, spec.glow) * flicker;
       const big = w / dpr > 400 ? 1.3 : 1;

@@ -12,7 +12,7 @@ from jarvis.web import create_server
 from support import JarvisTestCase
 
 EXPECTED_TOOLS = {
-    "claude.work": "workspace",
+    "claude.work": "workspace", "claude.operate": "system",
     "jarvis.info": "read", "system.health": "read", "projects.list": "read", "projects.get": "read",
     "tasks.list": "read", "memory.search": "read",
     "tasks.create": "write", "tasks.update": "write", "tasks.complete": "write",
@@ -49,7 +49,8 @@ class RegistryTests(ToolCase):
         for tool in tools.values():
             self.assertTrue(tool["description"])
             self.assertIsInstance(tool["inputs"], dict)
-            self.assertFalse(tool["requires_approval"])
+            # Only the full-power Claude Code tool (shell in the workspace) asks first.
+            self.assertEqual(tool["requires_approval"], tool["name"] == "claude.operate")
         self.assertEqual(tools["tasks.create"]["inputs"]["title"], {
             "type": "string", "description": "What needs doing.", "required": True})
         self.assertEqual({t["name"] for t in self.app.tools.list("write")},

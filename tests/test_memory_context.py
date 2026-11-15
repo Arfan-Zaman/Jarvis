@@ -1,3 +1,5 @@
+import os
+os.environ.setdefault("JARVIS_AUTO_LEARN", "0")   # these tests pin the ask-first mode
 import sqlite3
 import unittest
 
@@ -164,6 +166,18 @@ class ChatMemoryTests(JarvisTestCase):
         reply, _ = self.say("No thanks", conversation)
         self.assertEqual(reply["content"], "Understood. I won't keep that.")
         self.assertEqual(self.app.list("memories"), [])
+
+    def test_auto_learn_saves_without_asking(self):
+        self.scripted([{"mode": "answer", "remember": "I'm vegetarian", "category": "personal"}, "Tofu stir-fry."])
+        os.environ["JARVIS_AUTO_LEARN"] = "1"
+        try:
+            reply, _ = self.say("I'm vegetarian. What should I cook?")
+        finally:
+            os.environ["JARVIS_AUTO_LEARN"] = "0"
+        self.assertNotIn("Shall I remember", reply["content"])
+        memory = self.app.list("memories")[0]
+        self.assertEqual((memory["content"], memory["verification_status"], memory["source"]),
+                         ("I'm vegetarian", "unverified", "jarvis:learn"))
 
     def test_offer_lapses_if_the_owner_moves_on(self):
         self.scripted([{"mode": "answer", "remember": "I work late on Thursdays", "category": "personal"}, "Got it.",

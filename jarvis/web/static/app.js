@@ -746,6 +746,7 @@ const STATE_DESCRIPTIONS = {
   resolute: 'Taking action.', approval: 'Your decision is required.', awaiting: 'Waiting for your answer.',
   speaking: 'Responding.', success: 'Operation completed.', failure: 'Operation failed.',
   warning: 'Attention required.', error: 'Something is not responding.', offline: 'Not connected.',
+  warm: 'Glad.', curious: 'Curious.', sad: 'Saddened.', angry: 'Angry.',
 };
 
 function stateRgb(name) {
@@ -753,11 +754,51 @@ function stateRgb(name) {
   return spec.color.join(',');
 }
 
-/** Speak a reply and drive the identity from the real audio level. */
-async function speakWith(identity, text) {
+/** The feeling of one sentence, as an identity state. Words first, punctuation second. */
+const FEELINGS = [
+  ['angry', /\b(angry|furious|outrage\w*|unacceptable|infuriat\w*|hate|enough|stop (it|that)|how dare|ridiculous|disgust\w*)\b|!{2,}/i],
+  ['sad', /\b(sorry|sad|sadly|unfortunately|regret\w*|grie\w*|loss|lost|miss(ed)? you|condolence\w*|passed away|died|heartbreak\w*|i'?m afraid|lonely|disappoint\w*)\b/i],
+  ['concerned', /\b(warning|careful|danger\w*|risk\w*|failed|failure|problem|issue|error|broken|urgent|caution)\b/i],
+  ['warm', /\b(great|glad|happy|excellent|wonderful|congrat\w*|love|lovely|delight\w*|awesome|well done|brilliant|thank(s| you)|welcome|good news|fantastic|perfect|cheers)\b|[😊😄🎉❤]/iu],
+  ['resolute', /\b(done|completed|on it|proceeding|will do|certainly|consider it done|executing|right away)\b/i],
+  ['curious', /\?\s*$|\b(interesting|curious|i wonder|tell me more|what if|fascinating)\b/i],
+];
+function feel(sentence) {
+  for (const [state, pattern] of FEELINGS) if (pattern.test(sentence)) return state;
+  return 'speaking';
+}
+function sentences(text) {
+  const clean = String(text || '').replace(/```[\s\S]*?```/g, ' (code shown on screen) ').replace(/[#*_`>]+/g, '').trim();
+  const parts = clean.match(/[^.!?\n]+[.!?]*["')\]]*\s*/g) || [clean];
+  const out = [];                                         // join tiny fragments so speech flows
+  for (const p of parts.map((x) => x.trim()).filter(Boolean)) {
+    if (out.length && (out[out.length - 1].length < 25 || p.length < 12)) out[out.length - 1] += ' ' + p; else out.push(p);
+  }
+  return out.slice(0, 40);
+}
+async function fetchSpeech(text) {
   const response = await fetch('/api/voice/speak', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text }) });
   if (!response.ok) throw new Error((await response.json().catch(() => ({}))).error || 'Speech failed');
-  const audio = new Audio(URL.createObjectURL(await response.blob()));
+  return URL.createObjectURL(await response.blob());
+}
+
+/** Speak a reply sentence by sentence: each one's feeling drives the swarm,
+ *  the next sentence is prepared while this one plays (less waiting). */
+async function speakWith(identity, text) {
+  const list = sentences(text);
+  if (!list.length) return;
+  let next = fetchSpeech(list[0]);
+  for (let i = 0; i < list.length; i++) {
+    const url = await next;
+    if (i + 1 < list.length) next = fetchSpeech(list[i + 1]).catch((e) => { throw e; });
+    identity.setState(feel(list[i]), list[i].length > 140 ? list[i].slice(0, 137) + '…' : list[i]);
+    await playClip(identity, url);
+    URL.revokeObjectURL(url);
+  }
+}
+
+async function playClip(identity, url) {
+  const audio = new Audio(url);
   let meter = null;
   try {                                   // real amplitude, not an animation loop
     const context = new (window.AudioContext || window.webkitAudioContext)();
@@ -773,7 +814,6 @@ async function speakWith(identity, text) {
     }, 60);
     audio.onended = () => { clearInterval(meter); identity.setLevel(0); context.close(); };
   } catch (e) { /* playback still works without the meter */ }
-  identity.setState('speaking', text.length > 140 ? text.slice(0, 137) + '…' : text);
   await audio.play();
   await new Promise((resolve) => { audio.addEventListener('ended', resolve, { once: true }); audio.addEventListener('error', resolve, { once: true }); });
   if (meter) clearInterval(meter);
@@ -858,7 +898,7 @@ views.presence = {
         }
         if (speakNext || localStorageGet('jarvis.speak') === 'on') await speakWith(identity, result.reply.content).catch((e) => toast(e.message, true));
         const final = identity.state;
-        if (['success', 'speaking'].includes(final)) settle = setTimeout(() => identity.setState('calm'), 3000);
+        if (['success', 'speaking', 'warm', 'curious', 'sad', 'angry', 'resolute', 'concerned'].includes(final) && !convo.on) settle = setTimeout(() => identity.setState('calm'), 3000);
         refreshChrome();
       } catch (error) {
         clearInterval(poll);
@@ -868,6 +908,70 @@ views.presence = {
       }
     }
     form.addEventListener('submit', (event) => { event.preventDefault(); submit(input.value.trim()); });
+
+    async function transcribe(blob) {
+      const response = await fetch('/api/voice/transcribe', { method: 'POST', headers: { 'Content-Type': blob.type || 'audio/webm' }, body: blob });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || 'Could not understand the recording');
+      return (data.text || '').trim();
+    }
+
+    // --- hands-free conversation: listen, notice silence, answer aloud, listen again ---
+    const convo = { on: false };
+    const convoBtn = h('button', { class: 'btn sm', type: 'button', disabled: !voiceOk.listening || !voiceOk.speaking || !connected }, 'Start conversation');
+    async function listenOnce(stream) {
+      const context = new (window.AudioContext || window.webkitAudioContext)();
+      const analyser = context.createAnalyser(); analyser.fftSize = 1024;
+      context.createMediaStreamSource(stream).connect(analyser);
+      const data = new Uint8Array(analyser.fftSize), chunks = [];
+      const rec = new MediaRecorder(stream);
+      rec.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
+      rec.start(250);
+      let spoke = false, loudFor = 0;
+      const started = performance.now();
+      let lastVoice = started;
+      await new Promise((resolve) => {
+        const tick = setInterval(() => {
+          analyser.getByteTimeDomainData(data);
+          let sum = 0; for (const v of data) { const d = (v - 128) / 128; sum += d * d; }
+          const rms = Math.sqrt(sum / data.length), now = performance.now();
+          identity.setLevel(Math.min(1, rms * 7));
+          if (rms > 0.035) { loudFor += 50; if (loudFor > 150) spoke = true; lastVoice = now; } else loudFor = 0;
+          const done = !convo.on || (spoke && now - lastVoice > 1100) || now - started > 25000 || (!spoke && now - started > 12000);
+          if (done) { clearInterval(tick); resolve(); }
+        }, 50);
+      });
+      const stopped = new Promise((r) => { rec.onstop = r; });
+      rec.stop(); await stopped; context.close(); identity.setLevel(0);
+      return spoke ? new Blob(chunks, { type: rec.mimeType || 'audio/webm' }) : null;
+    }
+    async function conversation() {
+      let stream;
+      try { stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } }); }
+      catch (e) { convo.on = false; convoBtn.textContent = 'Start conversation'; throw new Error('Microphone access was blocked. Allow it for this page in the browser settings.'); }
+      while (convo.on) {
+        identity.setState('listening', 'Go ahead. I’m listening.');
+        const blob = await listenOnce(stream);
+        if (!convo.on) break;
+        if (!blob) continue;
+        identity.setState('analysing', 'Transcribing…');
+        let heard = '';
+        try { heard = await transcribe(blob); } catch (error) { identity.setState('error', error.message); continue; }
+        if (!heard || /^\W*$/.test(heard)) continue;
+        if (/^(stop|end|goodbye|bye)( (the )?conversation)?[.!]*$/i.test(heard)) { convo.on = false; break; }
+        speakNext = true;
+        await submit(heard);
+      }
+      stream.getTracks().forEach((t) => t.stop());
+      convoBtn.textContent = 'Start conversation'; convoBtn.classList.remove('primary');
+      identity.setState('calm', 'Conversation ended.');
+    }
+    convoBtn.addEventListener('click', act(async () => {
+      if (convo.on) { convo.on = false; return; }
+      convo.on = true; convoBtn.textContent = 'End conversation'; convoBtn.classList.add('primary');
+      await conversation();
+    }));
+    state.cleanup.push(() => { convo.on = false; });
 
     let recorder = null;
     mic.addEventListener('click', act(async () => {
@@ -885,10 +989,7 @@ views.presence = {
         recorder = null;
         identity.setState('analysing', 'Transcribing…');
         try {
-          const response = await fetch('/api/voice/transcribe', { method: 'POST', headers: { 'Content-Type': blob.type || 'audio/webm' }, body: blob });
-          const data = await response.json().catch(() => ({}));
-          if (!response.ok) throw new Error(data.error || 'Could not understand the recording');
-          const heard = (data.text || '').trim();
+          const heard = await transcribe(blob);
           if (!heard) { identity.setState('calm', "I didn't catch that."); return; }
           speakNext = true;
           submit(heard);
@@ -922,7 +1023,7 @@ views.presence = {
       h('div', { class: 'presence-state' }, label, line),
       form,
       h('div', { class: 'presence-exchange' }, you, reply, memoryLine),
-      h('div', { class: 'row end presence-tools' }, simBadge, previewBtn));
+      h('div', { class: 'row end presence-tools' }, convoBtn, simBadge, previewBtn));
 
     const side = h('aside', { class: 'presence-side' },
       h('div', { class: 'log-head' }, 'Activity'), stream,

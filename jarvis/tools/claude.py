@@ -44,20 +44,24 @@ def claude_binary() -> str | None:
     return str(default) if default.exists() else None
 
 
-def command(binary: str, task: str, write_files: bool) -> list[str]:
-    allowed = READ_TOOLS + (WRITE_TOOLS if write_files else [])
+def command(binary: str, task: str, write_files: bool, shell: bool = False) -> list[str]:
+    allowed = READ_TOOLS + (WRITE_TOOLS if write_files or shell else []) + (["Bash"] if shell else [])
     files = ("You may create and edit files, but only inside the current directory."
-             if write_files else "Do not create or change any files.")
+             if write_files or shell else "Do not create or change any files.")
+    if shell:
+        files += (" You may run shell commands, but only inside the current directory: never touch "
+                  "files elsewhere, never use sudo, never delete outside it, never send messages or spend money.")
+    never = [t for t in NEVER if not (shell and t in ("Bash", "BashOutput", "KillShell"))]
     return [binary, "-p", task, "--output-format", "json",
-            "--permission-mode", "acceptEdits" if write_files else "default",
+            "--permission-mode", "acceptEdits" if write_files or shell else "default",
             "--allowedTools", ",".join(allowed),
-            "--disallowedTools", ",".join(NEVER + ([] if write_files else WRITE_TOOLS)),
+            "--disallowedTools", ",".join(never + ([] if write_files or shell else WRITE_TOOLS)),
             "--strict-mcp-config", "--mcp-config", '{"mcpServers":{}}',
             "--no-session-persistence",
             "--append-system-prompt", BRIEF.format(files=files)]
 
 
-def claude_work(app, inputs, actor, runner=subprocess.run):
+def claude_work(app, inputs, actor, runner=subprocess.run, shell=False):
     task = inputs["task"].strip()
     if not task:
         raise ValidationError("claude.work: 'task' is empty")
@@ -68,7 +72,7 @@ def claude_work(app, inputs, actor, runner=subprocess.run):
     workspace.mkdir(parents=True, exist_ok=True)
     env = {k: v for k, v in os.environ.items() if not k.startswith("CLAUDE_CODE_")}
     try:
-        done = runner(command(binary, task, bool(inputs.get("write_files"))), cwd=str(workspace),
+        done = runner(command(binary, task, bool(inputs.get("write_files")), shell), cwd=str(workspace),
                       capture_output=True, text=True, timeout=TIMEOUT, env=env, stdin=subprocess.DEVNULL)
     except subprocess.TimeoutExpired:
         raise JarvisError(f"Claude Code did not finish within {TIMEOUT // 60} minutes") from None
@@ -84,7 +88,18 @@ def claude_work(app, inputs, actor, runner=subprocess.run):
             "cost_usd": reply.get("total_cost_usd")}
 
 
+def claude_operate(app, inputs, actor, runner=subprocess.run):
+    return claude_work(app, inputs, actor, runner=runner, shell=True)
+
+
 def register_claude(registry: ToolRegistry) -> None:
+    registry.register(Tool(
+        "claude.operate",
+        "Hand a job to Claude Code with full power inside JARVIS's workspace folder: it can run "
+        "commands, install packages there, build and test software, and create files. Always asks the "
+        "owner first. Use only when the job truly needs running commands; otherwise use claude.work.",
+        ActionCategory.SYSTEM, claude_operate,
+        {"task": {"type": "string", "description": "The complete, self-contained task.", "required": True}}))
     registry.register(Tool(
         "claude.work",
         "Hand a hard job to Claude Code, a far stronger mind: writing or fixing code, deep research "

@@ -57,6 +57,17 @@ class ClaudeToolTests(unittest.TestCase):
         self.assertIn("Bash", cmd[cmd.index("--disallowedTools") + 1].split(","))
         self.assertEqual(kw["cwd"], self.tmp.name)
 
+    def test_operate_allows_shell_in_workspace(self):
+        calls = []
+        def runner(cmd, **kw):
+            calls.append((cmd, kw)); return done(json.dumps({"result": "built"}))
+        out = claude.claude_operate(FakeApp, {"task": "build it"}, "user", runner=runner)
+        cmd, kw = calls[0]
+        self.assertEqual(out["result"], "built")
+        self.assertIn("Bash", cmd[cmd.index("--allowedTools") + 1].split(","))
+        self.assertNotIn("Bash", cmd[cmd.index("--disallowedTools") + 1].split(","))
+        self.assertEqual(kw["cwd"], self.tmp.name)
+
     def test_errors_are_reported(self):
         with self.assertRaises(JarvisError):
             self.run_tool({"task": "x"}, "not json", code=1)

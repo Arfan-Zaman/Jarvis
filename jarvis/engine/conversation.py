@@ -26,6 +26,7 @@ taken as the answer (unless they cancel it).
 from __future__ import annotations
 
 import json
+import os
 import re
 
 from ..common import JarvisError, now_local
@@ -161,6 +162,11 @@ def _join(parts: list[str]) -> str:
     return parts[0] if len(parts) == 1 else ", ".join(parts[:-1]) + " and " + parts[-1]
 
 
+def auto_learn() -> bool:
+    """Save lasting facts from chat without asking (default on; JARVIS_AUTO_LEARN=0 turns it off)."""
+    return os.environ.get("JARVIS_AUTO_LEARN", "1") != "0"
+
+
 class Conversation:
     def __init__(self, app):
         self.app = app
@@ -188,7 +194,18 @@ class Conversation:
             return self._delegate(conversation_id, decision["task"], decision["files"])
         if decision.get("mode") == "remember":
             return self._remember(conversation_id, decision["fact"], decision["category"])
+        if decision.get("remember") and auto_learn():
+            # Owner's standing instruction: keep lasting facts without asking. Saved as
+            # unverified, with the chat as its source, so it can be reviewed or deleted.
+            self._learn(decision["remember"])
+            return self._answer(conversation_id)
         return self._answer(conversation_id, offer=decision.get("remember"))
+
+    def _learn(self, offer: dict) -> dict | None:
+        result = self.app.tools.execute(
+            "memory.save", {"content": offer["fact"], "category": offer["category"],
+                            "verification_status": "unverified", "confidence": 0.7}, actor="jarvis:learn")
+        return result["output"] if result["ok"] else None
 
     # --- routing -----------------------------------------------------------
     def _history(self, conversation_id: int) -> list[dict]:

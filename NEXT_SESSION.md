@@ -3,6 +3,38 @@
 Read this first. Then `JARVIS_ROADMAP.md` (Phase 3) and `ARCHITECTURE.md`
 section 4b (autonomous design).
 
+## THE SPEC: a living JARVIS (owner's brief, 2026-11-16, refined)
+
+Build toward this, one shippable piece at a time; push after each piece and
+turn any repeatable process into a skill in `.claude/skills/`.
+
+1. **Talks in real time.** Hands-free conversation mode: JARVIS listens,
+   detects when you stop talking, answers out loud, then listens again. No
+   button per turn. Latency target: first spoken word in under 3 s for short
+   replies.
+2. **Its body matches its words.** Each spoken sentence is read for emotion
+   (calm, warm/happy, curious, concerned, sad, angry, resolute) and the 3D
+   swarm shifts colour, tempo, eye shape and motion with it, sentence by
+   sentence, in sync with the voice.
+3. **Makes images.** An `image.generate` tool (Higgsfield, GPT Image 2). It
+   spends credits, so it asks first and states the cost.
+4. **Uses the internet and does what Claude Code does, and more.** Hard work
+   goes to Claude Code (`claude.work`: no shell, files in the workspace,
+   automatic). Shell-level work (`claude.operate`: Bash allowed, confined to the
+   workspace) always asks the owner first.
+5. **Runs and improves itself.** Scheduled self-runs: a daily learning pass
+   (web reading on the owner's interests and active projects, stored as
+   unverified memories with sources) and a weekly self-review that proposes
+   improvements to JARVIS's own code as a branch for the owner to approve.
+6. **Remembers everything.** Every conversation is stored locally (already
+   true) and lasting facts are saved automatically, without asking, marked
+   with their source; the owner can review or delete them on the Memory page.
+7. **Hard lines stay.** No unrestricted shell without approval, no spending,
+   messaging, deleting or publishing without approval, never claims a result
+   it didn't verify.
+
+Status: see DEVLOG for which pieces are done.
+
 ## Latest (2026-11-16): nanobot swarm face is live
 
 `base.png` (version 1) is in place and the presence face is now a live particle
