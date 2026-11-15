@@ -195,3 +195,48 @@ html.desktop-mode #view { animation: none; }
 .desktop-identity { width: 100vmin; height: 100vmin; margin: 0 auto; }
 
 .presence-tools { margin-top: 10px; }
+
+/* ---- Art mode: rendered character stills/loops over the core halo ----
+   Used when /api/identity/assets lists rendered files. The vector face is
+   hidden; the canvas core stays behind as a halo; eye glow, parallax and the
+   voice level are applied live on top of the art. */
+.jv-art { position: absolute; inset: 8%; z-index: 1; display: none; perspective: 900px; pointer-events: none; }
+.jv-art-mode .jv-art { display: block; }
+.jv-art-mode .jv-face { display: none; }
+.jv-art-mode .jv-core { opacity: 0.55; transform: scale(1.12); }
+.jv-art-stack { position: absolute; inset: 0; transform-style: preserve-3d; will-change: transform; }
+.jv-art-media {
+  position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover;
+  opacity: 0; transition: opacity 0.55s ease, filter 0.6s ease;
+  /* black art background melts into the page; square edges disappear */
+  -webkit-mask-image: radial-gradient(circle at 50% 48%, #000 52%, transparent 71%);
+  mask-image: radial-gradient(circle at 50% 48%, #000 52%, transparent 71%);
+}
+.jv-art-media.jv-on { opacity: 1; }
+.jv-identity[data-state="offline"] .jv-art-media { filter: grayscale(1) brightness(0.45); }
+.jv-identity[data-state="resolute"] .jv-art-media { filter: contrast(1.08) brightness(0.92); }
+
+.jv-art-eye {
+  position: absolute; width: 17%; height: 4.2%;
+  left: calc(var(--x) * 100% - 8.5%); top: calc(var(--y) * 100% - 2.1%);
+  border-radius: 50%;
+  background: radial-gradient(ellipse at center, rgba(255,255,255,0.9) 0%, rgba(var(--jv-accent-rgb), 0.85) 28%, rgba(var(--jv-accent-rgb), 0) 72%);
+  mix-blend-mode: screen;
+  filter: blur(calc(2px + var(--jv-glow) * 4px));
+  opacity: calc(var(--jv-glow) * 0.7 + var(--jv-level) * 0.5);
+  transform: rotate(var(--rot)) scaleY(calc(0.6 + var(--jv-eye-open) * 0.6 + var(--jv-level) * 0.5));
+  transition: opacity 0.5s ease, background 0.5s ease;
+}
+.jv-art-bloom {
+  position: absolute; inset: 20%; border-radius: 50%; mix-blend-mode: screen; opacity: 0;
+  background: radial-gradient(circle, rgba(var(--jv-accent-rgb), 0.45), rgba(var(--jv-accent-rgb), 0) 70%);
+}
+.jv-identity[data-state="success"] .jv-art-bloom { animation: jv-art-release 1.4s ease-out 1; }
+.jv-identity[data-state="failure"] .jv-art-stack,
+.jv-identity[data-state="error"] .jv-art-stack { animation: jv-art-disrupt 0.7s steps(7) 1; }
+@keyframes jv-art-release { 0% { opacity: 0; transform: scale(0.8); } 35% { opacity: 1; } 100% { opacity: 0; transform: scale(1.5); } }
+@keyframes jv-art-disrupt { 0%, 100% { translate: 0 0; } 20% { translate: -0.6% 0.3%; } 40% { translate: 0.5% -0.4%; } 60% { translate: -0.3% 0; } 80% { translate: 0.2% 0.2%; } }
+@media (prefers-reduced-motion: reduce) {
+  .jv-art-media { transition: none; }
+  .jv-identity .jv-art-stack, .jv-identity .jv-art-bloom { animation: none !important; }
+}

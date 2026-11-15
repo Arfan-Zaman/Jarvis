@@ -117,6 +117,15 @@ class WebTests(JarvisTestCase):
             with self.subTest(path=path):
                 self.assertEqual(self.call("GET", path)[0], 404)
 
+    def test_identity_assets_lists_only_existing_files(self):
+        from jarvis.web import server
+        status, data = self.call("GET", "/api/identity/assets")
+        self.assertEqual((status, data["base"]), (200, "/static/identity/"))
+        folder = server.STATIC_DIR / "identity"
+        expected = [n for n in server.IDENTITY_ASSETS if (folder / n).is_file()]
+        self.assertEqual(data["files"], expected)
+        self.assertTrue(set(data["files"]) <= set(server.IDENTITY_ASSETS))
+
 
 if __name__ == "__main__":
     unittest.main()

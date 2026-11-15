@@ -2,6 +2,28 @@
 
 Newest entries first. Record what changed, why, and what was verified.
 
+## 2026-11-16 — Art mode for the face (rendered character)
+
+- `identity.js` now has an "art mode". `GET /api/identity/assets` lists which
+  rendered files exist in `jarvis/web/static/identity/` (fixed names: see
+  NEXT_SESSION.md). If any exist, the vector face hides and the art shows:
+  the state's still (or its loop: idle/thinking/executing) crossfades in once
+  fully loaded; live eye glow uses the state table's colour, glow and eye
+  opening; the voice level drives the eyes while speaking; the cursor gives a
+  subtle 3D tilt; the canvas core stays behind as a halo. A state with no still
+  of its own uses `base.png` (glow still shows the state colour). With no
+  files at all, the vector face is used unchanged. States still come only from
+  real events; the preview stays labelled as a simulation.
+- Verified in the browser (throwaway data dir, temporary placeholder PNGs,
+  since deleted): Presence and desktop views enter art mode, listening swaps
+  in its still, analysing falls back to base, no files gives the vector face,
+  no console errors. 240 tests pass (including a new test for the asset endpoint).
+- Not done yet: the art itself. The Higgsfield account connected had 0
+  credits; quote given (about 33 credits for base plus 11 stills at 2K high,
+  plus 105 for three 720p loops or 240 at 1080p). The owner is switching the
+  connector to a new account. Eye positions in `ART_EYES` must be matched to
+  the real render once it exists.
+
 ## 2026-11-16 — Clap detector retuned on real claps
 
 - The owner reported missed claps. The new diagnostic log

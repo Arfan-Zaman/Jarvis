@@ -130,6 +130,46 @@
     return points;
   }
 
+  // --- art mode: rendered character files (see NEXT_SESSION.md / docs) ---
+  // Per state: the still to show and, optionally, a seamless loop. A missing
+  // state still falls back to base.png (the eye glow still carries the state's
+  // colour); with no rendered files at all the vector face above is used.
+  const ART = {
+    calm:      { still: 'base.png',      loop: 'idle.mp4' },
+    listening: { still: 'listening.png' },
+    analysing: { still: 'analysing.png', loop: 'thinking.mp4' },
+    planning:  { still: 'planning.png',  loop: 'thinking.mp4' },
+    executing: { still: 'executing.png', loop: 'executing.mp4' },
+    concerned: { still: 'concerned.png' },
+    resolute:  { still: 'resolute.png' },
+    approval:  { still: 'approval.png' },
+    awaiting:  { still: 'listening.png' },
+    speaking:  { still: 'base.png',      loop: 'idle.mp4' },
+    success:   { still: 'success.png' },
+    failure:   { still: 'critical.png',  alt: 'error.png' },
+    warning:   { still: 'warning.png' },
+    error:     { still: 'error.png' },
+    offline:   { still: 'base.png' },
+  };
+  // Eye centres in the rendered frame (fractions of width/height) and slant.
+  const ART_EYES = [{ x: 0.405, y: 0.455, rot: '18deg' }, { x: 0.595, y: 0.455, rot: '-18deg' }];
+  let artIndex = null;
+  function artAssets() {
+    if (!artIndex) {
+      artIndex = fetch('/api/identity/assets', { cache: 'no-cache' })
+        .then((r) => (r.ok ? r.json() : { files: [] }))
+        .then((d) => ({ base: d.base || '/static/identity/', files: new Set(d.files || []) }))
+        .catch(() => ({ base: '/static/identity/', files: new Set() }));
+    }
+    return artIndex;
+  }
+  function pickArt(index, name, allowLoop) {
+    const a = ART[name] || ART.calm, has = (f) => f && index.files.has(f);
+    if (allowLoop && has(a.loop)) return a.loop;
+    for (const f of [a.still, a.alt, 'base.png']) if (has(f)) return f;
+    return null;
+  }
+
   let counter = 0;
 
   function create(host, options = {}) {
@@ -137,8 +177,48 @@
     const compact = !!options.compact;
     const root = document.createElement('div');
     root.className = 'jv-identity' + (compact ? ' jv-compact' : '');
-    root.innerHTML = `<canvas class="jv-core"></canvas>${faceSVG(id)}`;
+    root.innerHTML = `<canvas class="jv-core"></canvas>
+      <div class="jv-art" aria-hidden="true"><div class="jv-art-stack">
+        <div class="jv-art-bloom"></div>
+        ${ART_EYES.map(() => '<div class="jv-art-eye"></div>').join('')}
+      </div></div>${faceSVG(id)}`;
     host.append(root);
+    const artStack = root.querySelector('.jv-art-stack');
+    root.querySelectorAll('.jv-art-eye').forEach((el, i) => {
+      el.style.setProperty('--x', ART_EYES[i].x); el.style.setProperty('--y', ART_EYES[i].y);
+      el.style.setProperty('--rot', ART_EYES[i].rot);
+    });
+    let art = null, artShown = null, artCurrent = null, artToken = 0;
+
+    // Crossfade to the state's still/loop. Loaded fully before it is shown.
+    function showArt() {
+      if (!art) return;
+      const file = pickArt(art, state, !options.static && !reducedMotion());
+      if (!file) { root.classList.remove('jv-art-mode'); return; }
+      root.classList.add('jv-art-mode');
+      if (file === artShown) return;
+      artShown = file;
+      const token = ++artToken, isVideo = file.endsWith('.mp4');
+      const el = document.createElement(isVideo ? 'video' : 'img');
+      el.className = 'jv-art-media';
+      if (isVideo) { el.muted = true; el.loop = true; el.playsInline = true; el.autoplay = true; }
+      else { el.alt = ''; el.decoding = 'async'; }
+      const reveal = () => {
+        if (token !== artToken) { el.remove(); return; }
+        const old = artCurrent; artCurrent = el;
+        void el.offsetWidth;                         // commit opacity 0 so the fade runs
+        el.classList.add('jv-on');
+        if (old) { old.classList.remove('jv-on'); setTimeout(() => old.remove(), 650); }
+      };
+      el.addEventListener(isVideo ? 'loadeddata' : 'load', reveal, { once: true });
+      el.addEventListener('error', () => {         // file vanished: forget it, choose again
+        art.files.delete(file); el.remove();
+        if (token === artToken) { artShown = null; showArt(); }
+      }, { once: true });
+      artStack.prepend(el);
+      el.src = art.base + file;
+    }
+    if (options.art !== false) artAssets().then((index) => { art = index; showArt(); });
     const canvas = root.querySelector('canvas');
     const ctx = canvas.getContext('2d');
     const eyes = [...root.querySelectorAll('.jv-pupil')];
@@ -189,6 +269,7 @@
       root.style.setProperty('--jv-glow', spec.glow);
       root.style.setProperty('--jv-brow', `${spec.brow}deg`);
       paths = Array.from({ length: spec.paths }, () => randomPath(compact ? 5 : 7));
+      showArt();
     }
 
     function setState(name, line) {
@@ -303,6 +384,11 @@
       gaze[0] += (gazeTarget[0] - gaze[0]) * 0.08;
       gaze[1] += (gazeTarget[1] - gaze[1]) * 0.08;
       eyes.forEach((eye) => { eye.style.transform = `translate(${(gaze[0] * 5).toFixed(2)}px, ${(gaze[1] * 3).toFixed(2)}px)`; });
+      // art mode: subtle 3D parallax toward the cursor; voice level on the eyes
+      if (artCurrent) {
+        artStack.style.transform = `rotateY(${(gaze[0] * 5).toFixed(2)}deg) rotateX(${(-gaze[1] * 4).toFixed(2)}deg) translate(${(gaze[0] * 1.2).toFixed(2)}%, ${(gaze[1] * 0.8).toFixed(2)}%)`;
+        root.style.setProperty('--jv-level', spec.voice ? level.toFixed(2) : '0');
+      }
       angle += 0.016 * spec.speed;
       // stillness: when calm and nobody is moving, draw rarely
       const idle = (state === 'calm' || state === 'offline') && now - lastPointerMove > 3000;

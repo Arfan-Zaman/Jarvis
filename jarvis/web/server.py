@@ -179,6 +179,19 @@ def _live(app: Jarvis, req: Request):
     return app.engine.live()
 
 
+IDENTITY_ASSETS = ("base.png", "listening.png", "analysing.png", "planning.png", "executing.png",
+                   "concerned.png", "resolute.png", "approval.png", "success.png", "warning.png",
+                   "error.png", "critical.png", "idle.mp4", "thinking.mp4", "executing.mp4")
+
+
+@route("GET", "/api/identity/assets")
+def _identity_assets(app: Jarvis, req: Request):
+    """Which rendered character files exist, so the face uses art only where it is present."""
+    folder = STATIC_DIR / "identity"
+    return {"base": "/static/identity/",
+            "files": [name for name in IDENTITY_ASSETS if (folder / name).is_file()]}
+
+
 @route("GET", "/api/runs")
 def _runs(app: Jarvis, req: Request):
     return {"items": app.runs.list(limit=_int(req.query.get("limit", 50), "limit"),

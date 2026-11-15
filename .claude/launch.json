@@ -4,8 +4,20 @@
     {
       "name": "jarvis",
       "runtimeExecutable": "sh",
-      "runtimeArgs": ["-c", "JARVIS_PORT=${PORT:-8765} exec python3 -m jarvis serve"],
+      "runtimeArgs": [
+        "-c",
+        "JARVIS_PORT=${PORT:-8765} exec python3 -m jarvis serve"
+      ],
       "port": 8765
+    },
+    {
+      "name": "jarvis-throwaway",
+      "runtimeExecutable": "sh",
+      "runtimeArgs": [
+        "-c",
+        "JARVIS_DATA_DIR=\"${TMPDIR:-/tmp}/jarvis-art-check\" JARVIS_PORT=8777 exec python3 -m jarvis serve"
+      ],
+      "port": 8777
     }
   ]
 }

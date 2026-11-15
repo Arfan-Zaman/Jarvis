@@ -77,6 +77,9 @@ keeping the existing state machine, `/api/live` wiring and honesty rules:
    eyes while speaking, and the canvas core as a halo behind. Fall back to the
    current vector face when an asset is missing. Never show a state that the
    real system did not report (simulated preview stays labelled).
+   **Status:** engine done (art mode in `identity.js`, endpoint
+   `GET /api/identity/assets`); waiting for the art files. After adding them,
+   adjust `ART_EYES` (eye centres and slant) to the real render.
 3. **Later:** a true 3D head (Higgsfield `generate_3d` to GLB) rendered with
    three.js (PBR obsidian, emissive eyes, bloom), turning toward the cursor.
 
