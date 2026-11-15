@@ -50,7 +50,7 @@ class Raw:
     content_type: str
 
 
-RAW_ROUTES = {"/api/voice/transcribe"}   # these take binary bodies, not JSON
+RAW_ROUTES = {"/api/voice/transcribe", "/api/files"}   # these take binary bodies, not JSON
 
 
 ROUTES: list[tuple[str, re.Pattern, callable]] = []
@@ -154,7 +154,10 @@ def _chat(app: Jarvis, req: Request):
     conversation_id = req.body.get("conversation_id")
     if conversation_id is not None:
         conversation_id = _int(conversation_id, "conversation_id")
-    return app.chat(req.body.get("message", ""), conversation_id)
+    attachments = req.body.get("attachments") or []
+    if not isinstance(attachments, list) or not all(isinstance(a, str) for a in attachments):
+        raise ValidationError("attachments must be a list of uploaded file paths")
+    return app.chat(req.body.get("message", ""), conversation_id, attachments=attachments[:10])
 
 
 # --- tools and run log ----------------------------------------------------
@@ -252,6 +255,13 @@ def _voice_transcribe(app: Jarvis, req: Request):
     return {"text": app.voice.transcribe(req.raw, req.content_type or "application/octet-stream")}
 
 
+@route("POST", "/api/files")
+def _upload(app: Jarvis, req: Request):
+    """Body: the file itself; ?name= its original name. Stored inertly in the workspace, never run."""
+    from ..uploads import save_upload
+    return 201, save_upload(app, req.query.get("name", "file"), req.raw)
+
+
 @route("POST", "/api/voice/speak")
 def _voice_speak(app: Jarvis, req: Request):
     return Raw(app.voice.speak(req.body.get("text", "")), "audio/mp4")
@@ -325,10 +335,12 @@ class Handler(BaseHTTPRequestHandler):
         return origin is None or origin in (f"http://{host}",)
 
     def _read_raw(self) -> bytes:
+        from ..uploads import MAX_UPLOAD_BYTES
         from ..voice import MAX_AUDIO_BYTES
         length = _int(self.headers.get("Content-Length") or 0, "Content-Length")
-        if length > MAX_AUDIO_BYTES:
-            raise ValidationError("that recording is too large")
+        limit = MAX_UPLOAD_BYTES if urlparse(self.path).path == "/api/files" else MAX_AUDIO_BYTES
+        if length > limit:
+            raise ValidationError(f"that file is too large (the limit is {limit // 1_000_000} MB)")
         return self.rfile.read(length) if length else b""
 
     def _read_body(self) -> dict:

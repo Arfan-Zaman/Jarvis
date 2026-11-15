@@ -39,8 +39,12 @@ class ClaudeToolTests(unittest.TestCase):
         return out, calls[0]
 
     def test_read_only_by_default_no_shell_no_mcp(self):
-        out, (cmd, kw) = self.run_tool({"task": "explain x"}, json.dumps({"result": "Done.", "num_turns": 2}))
+        out, (cmd, kw) = self.run_tool({"task": "--explain x"}, json.dumps({"result": "Done.", "num_turns": 2}))
         self.assertEqual(out["result"], "Done.")
+        self.assertEqual(cmd[-2:], ["--", "--explain x"])      # the task can never be read as an option
+        allowed_ = cmd[cmd.index("--allowedTools") + 1].split(",")
+        self.assertIn("Read(./**)", allowed_)                   # reads confined to the workspace
+        self.assertNotIn("Read", allowed_)
         self.assertEqual(kw["cwd"], self.tmp.name)
         allowed = cmd[cmd.index("--allowedTools") + 1].split(",")
         denied = cmd[cmd.index("--disallowedTools") + 1].split(",")
@@ -52,11 +56,18 @@ class ClaudeToolTests(unittest.TestCase):
     def test_write_files_allows_edits_in_workspace_only(self):
         _, (cmd, kw) = self.run_tool({"task": "make a page", "write_files": True}, json.dumps({"result": "ok"}))
         allowed = cmd[cmd.index("--allowedTools") + 1].split(",")
-        self.assertIn("Write", allowed)
+        self.assertIn("Write(./**)", allowed)                   # writes only inside the workspace
+        self.assertNotIn("Write", allowed)
         self.assertNotIn("Bash", allowed)
         self.assertIn("Bash", cmd[cmd.index("--disallowedTools") + 1].split(","))
         self.assertEqual(kw["cwd"], self.tmp.name)
 
+    def test_operate_is_off_unless_enabled(self):
+        with mock.patch.dict("os.environ", {"JARVIS_OPERATE": ""}):
+            with self.assertRaises(JarvisError):
+                claude.claude_operate(FakeApp, {"task": "build it"}, "user", runner=lambda *a, **k: None)
+
+    @mock.patch.dict("os.environ", {"JARVIS_OPERATE": "1"})
     def test_operate_allows_shell_in_workspace(self):
         calls = []
         def runner(cmd, **kw):

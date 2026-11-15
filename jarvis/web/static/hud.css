@@ -118,3 +118,10 @@ dialog { border-radius: var(--radius); }
 .toast { border-radius: var(--radius-sm); }
 
 @media (prefers-reduced-motion: reduce) { .item { transition: none; } }
+
+/* files and approvals on the JARVIS page */
+.attach-row { justify-content: center; margin-top: 8px; }
+.attach-row .btn.sm { padding: 0 6px; margin-left: 4px; }
+.approve-row { margin-top: 10px; gap: 8px; padding: 10px 12px; border-left: 2px solid var(--pink); background: rgba(255, 46, 136, 0.06); }
+.approve-row:empty { display: none; }
+.presence-hero.dropping { outline: 1px dashed var(--pink); outline-offset: -6px; }

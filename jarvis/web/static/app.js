@@ -916,13 +916,67 @@ views.presence = {
     const voiceOk = status.voice || {};
     const mic = h('button', { class: 'round-btn', type: 'button', title: 'Talk to JARVIS', 'aria-label': 'Talk to JARVIS', disabled: !voiceOk.listening || !connected }, '🎙');
     const send = h('button', { class: 'round-btn', type: 'submit', title: 'Send', 'aria-label': 'Send', disabled: !connected }, '➤');
-    const form = h('form', { class: 'presence-command' }, mic, input, send);
+    // --- files and photos: 📎, or drop them anywhere on this page ---
+    const picker = h('input', { type: 'file', multiple: true, hidden: true, 'aria-hidden': 'true' });
+    const attach = h('button', { class: 'round-btn', type: 'button', title: 'Attach files or photos', 'aria-label': 'Attach files or photos', disabled: !connected }, '📎');
+    const attachRow = h('div', { class: 'meta attach-row' });
+    let pending = [];                                   // uploaded, waiting to be sent: {path, name}
+    const showPending = () => attachRow.replaceChildren(...pending.map((f, i) => {
+      const x = h('button', { class: 'btn sm', type: 'button', 'aria-label': `Remove ${f.name}` }, '×');
+      x.addEventListener('click', () => { pending.splice(i, 1); showPending(); });
+      return h('span', { class: 'chip' }, f.name.replace(/^\d{8}-\d{6}-/, ''), ' ', x);
+    }));
+    async function addFiles(files) {
+      for (const file of files) {
+        const response = await fetch(`/api/files?name=${encodeURIComponent(file.name)}`, {
+          method: 'POST', headers: { 'Content-Type': file.type || 'application/octet-stream' }, body: file });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) { toast(data.error || `Could not attach ${file.name}`, true); continue; }
+        pending.push(data); showPending();
+      }
+      input.focus();
+    }
+    attach.addEventListener('click', () => picker.click());
+    picker.addEventListener('change', () => { addFiles([...picker.files]); picker.value = ''; });
+    hero.addEventListener('dragover', (e) => { e.preventDefault(); hero.classList.add('dropping'); });
+    hero.addEventListener('dragleave', () => hero.classList.remove('dropping'));
+    hero.addEventListener('drop', (e) => { e.preventDefault(); hero.classList.remove('dropping'); addFiles([...e.dataTransfer.files]); });
+
+    // --- one-click approval, right under the reply (never granted by speech) ---
+    const decision = h('div', { class: 'row approve-row' });
+    async function offerApproval(runId) {
+      decision.replaceChildren();
+      const run = await api('GET', `/api/runs/${runId}`).catch(() => null);
+      const approval = run && run.report && run.report.approval;
+      if (!approval || approval.status !== 'pending') return;
+      const yes = h('button', { class: 'btn primary', type: 'button' }, 'Approve');
+      const no = h('button', { class: 'btn', type: 'button' }, 'Deny');
+      decision.replaceChildren(h('span', { class: 'grow small' }, approval.summary), no, yes);
+      no.addEventListener('click', act(async () => {
+        await api('POST', `/api/approvals/${approval.id}/deny`); await api('POST', `/api/runs/${runId}/cancel`).catch(() => {});
+        decision.replaceChildren(); reply.textContent = 'Cancelled. Nothing was done.'; identity.setState('calm');
+      }));
+      yes.addEventListener('click', act(async () => {
+        decision.replaceChildren(); identity.setState('executing', 'Approved. Working on it…');
+        await api('POST', `/api/approvals/${approval.id}/approve`);
+        const report = await api('POST', `/api/runs/${runId}/resume`);
+        const done = await api('GET', `/api/runs/${runId}`);
+        const results = (done.steps || []).filter((st) => st.status === 'succeeded' && st.output && typeof st.output.result === 'string').map((st) => st.output.result);
+        reply.textContent = results.join('\n\n') || (report.summary || report.status || 'Done.');
+        identity.setState(report.status === 'completed' ? 'success' : report.status === 'failed' ? 'failure' : 'calm');
+        if (localStorageGet('jarvis.speak') === 'on' || convo.on) await speakWith(identity, reply.textContent).catch(() => {});
+        refreshChrome();
+      }));
+    }
+
+    const form = h('form', { class: 'presence-command' }, picker, attach, mic, input, send);
     let speakNext = false, busy = false, settle = null;
 
     async function submit(text) {
-      if (!text || busy) return;
-      busy = true; send.disabled = mic.disabled = true; clearTimeout(settle);
-      input.value = ''; you.textContent = `You: ${text}`; reply.textContent = ''; memoryLine.replaceChildren();
+      if ((!text && !pending.length) || busy) return;
+      const files = pending.map((f) => f.path); pending = []; showPending();
+      busy = true; send.disabled = mic.disabled = true; clearTimeout(settle); decision.replaceChildren();
+      input.value = ''; you.textContent = `You: ${text || '(files)'}${files.length ? `  📎 ${files.length}` : ''}`; reply.textContent = ''; memoryLine.replaceChildren();
       identity.setState('analysing', 'Understood. Reviewing…');
       let baseline = 0;
       try { const before = await api('GET', '/api/live'); baseline = before.run_id || before.last_run || 0; } catch (e) { /* ignore */ }
@@ -937,10 +991,11 @@ views.presence = {
         } catch (e) { /* the next poll will try again */ }
       }, 450);
       try {
-        const result = await api('POST', '/api/chat', { message: text, conversation_id: state.presenceConversation || null });
+        const result = await api('POST', '/api/chat', { message: text, attachments: files, conversation_id: state.presenceConversation || null });
         state.presenceConversation = result.conversation.id;
+        if (result.reply.run_id) offerApproval(result.reply.run_id);
         clearInterval(poll);
-        reply.textContent = result.reply.content;
+        reply.textContent = result.reply.content.replace(/ Approve or deny it on the System page, then press Continue\./, ' Approve or deny it below.');
         if (result.reply.memory_refs) memoryLine.replaceChildren(chip('From memory', 'violet'), ...result.reply.memory_refs.map((r) => chip(r.content.length > 40 ? r.content.slice(0, 39) + '…' : r.content)));
         const live = await api('GET', '/api/live').catch(() => null);
         if (live && live.run_id && live.run_id > baseline) {
@@ -1123,7 +1178,8 @@ views.presence = {
         callout('br', 'Tools', status.counts.tools, okRate == null ? 'No tool runs yet' : `${okRate}% of the last ${runs} runs worked`)),
       h('div', { class: 'presence-state' }, label, line),
       form,
-      h('div', { class: 'presence-exchange' }, you, reply, memoryLine),
+      attachRow,
+      h('div', { class: 'presence-exchange' }, you, reply, decision, memoryLine),
       h('div', { class: 'row end presence-tools' }, convoBtn, simBadge, previewBtn));
 
     const side = h('aside', { class: 'presence-side' },

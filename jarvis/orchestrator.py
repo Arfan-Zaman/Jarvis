@@ -229,15 +229,20 @@ class Jarvis:
         return task
 
     # --- chat --------------------------------------------------------------
-    def chat(self, text: str, conversation_id: int | None = None) -> dict:
+    def chat(self, text: str, conversation_id: int | None = None, attachments: list[str] | None = None) -> dict:
         """Store the user's message and JARVIS's reply.
 
         JARVIS decides whether to just answer or to carry out an action through
         the reasoning engine (see `engine/conversation.py`). With no provider, a
         clearly labelled system notice is stored instead.
         """
-        if not isinstance(text, str) or not text.strip():
+        from .uploads import check_refs
+        attachments = check_refs(self, attachments or [])
+        if (not isinstance(text, str) or not text.strip()) and not attachments:
             raise ValidationError("message is required")
+        text = (text or "").strip() or "Look at the attached file."
+        if attachments:                       # kept in the message so the conversation remembers them
+            text += "\n\n" + "\n".join(f"[Attached: {ref}]" for ref in attachments)
         self._write("chat.message", "Send chat message")
         if conversation_id is None:
             title = text.strip().splitlines()[0][:60]

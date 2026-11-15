@@ -2,6 +2,30 @@
 
 Newest entries first. Record what changed, why, and what was verified.
 
+## 2026-11-16 — Browser, files and photos, security hardening
+
+- `claude.browse` (system category, asks first): Claude Code drives a real
+  browser through Playwright MCP (pinned 0.0.85, private signed-out profile,
+  file uploads disabled, rules: never buy, sign in, send, post, solve
+  CAPTCHAs). Chat routes "go to this site and..." requests to it. Real run:
+  read Hacker News' top stories in 22 s.
+- Uploads: `POST /api/files` (25 MB, allow-listed types, safe names, exclusive
+  create in `workspace/uploads/`, never executed); `/api/chat` takes
+  `attachments`, checked to be real uploads; messages with files go to Claude
+  Code, which reads them (images and PDFs too). JARVIS page: paperclip button
+  and drop-anywhere. Real runs: answered from a text note and described a
+  photo correctly.
+- One-click Approve / Deny under the reply on the JARVIS page (approval is
+  still never granted by speech or chat text).
+- Security review (independent agent) and fixes: Claude Code reads/writes now
+  confined to the workspace with path rules (a bare `Read` could read
+  `~/.zshrc`, verified, now denied); `claude.operate` (shell) is off unless
+  `JARVIS_OPERATE=1`; task text passed after `--`; research sends only the
+  query, no personal context. Verified: a poisoned uploaded note asking to
+  read ~/.zshrc leaked nothing. Confirmed safe: loopback-only server,
+  Origin/Host checks, CSP, static path checks, no innerHTML of content.
+- 255 tests pass.
+
 ## 2026-11-16 — Interrupt and mute
 
 - While JARVIS thinks or talks, a quiet second listener runs; hearing

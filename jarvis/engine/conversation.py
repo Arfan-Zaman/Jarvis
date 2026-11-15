@@ -46,6 +46,7 @@ NO = re.compile(r"^\s*(no|nope|nah|don'?t|do not|not now|no thanks)\b[\w\s,.!']{
 MEMORY_CATEGORIES = ("preference", "personal", "general")
 # Saving straight away needs the owner's own words to ask for it. The model's
 # opinion is not enough: without one of these, it can only OFFER to remember.
+ATTACHED = re.compile(r"\[Attached: (uploads/[A-Za-z0-9][A-Za-z0-9._-]*)\]")
 # Requests that need real skill: sent to Claude Code even if the small router says "answer".
 HARD_WORK = re.compile(
     r"\b(write|build|create|make|generate|code|program|script|function|debug|fix|refactor|implement|"
@@ -77,6 +78,11 @@ ROUTER = """You decide how JARVIS handles the owner's latest message. Reply with
   something (a script, a web page, an app, a document); in-depth research or comparison; careful
   analysis; long or polished writing; detailed plans or strategy; hard maths or reasoning.
   "files": true when the owner wants something made or saved as files.
+
+{"mode": "browse", "task": "<the request restated as a complete browsing task, keeping any web address>"}
+  when the owner wants JARVIS to go to a website and do something there like a person would:
+  open a site, click around, use a site's search, check what a live page shows now, compare
+  products or prices on shops. (Not for questions a normal search can answer: those are "act".)
 
 {"mode": "remember", "fact": "<the fact in the first person, as the owner would say it,
  e.g. 'I prefer short answers' - never 'The user ...'>", "category": "preference" | "personal" | "general"}
@@ -187,6 +193,12 @@ class Conversation:
         if offer and NO.match(text):
             return self._say(conversation_id, persona.WONT_KEEP, None)
 
+        files = ATTACHED.findall(text)
+        if files and "claude.work" in self.app.tools.names():   # files and photos: Claude Code can see them
+            return self._delegate(conversation_id, (
+                f"The owner attached these files (paths relative to the current folder): {', '.join(files)}. "
+                "Open and look at them (images and PDFs can be read directly). Their request:\n"
+                + ATTACHED.sub("", text).strip()), bool(MAKE_FILES.search(ATTACHED.sub("", text))))
         decision = self._route(conversation_id)
         if decision.get("mode") == "act":
             return self._act(conversation_id, decision["goal"])
@@ -228,6 +240,9 @@ class Conversation:
         category = decision.get("category") if decision.get("category") in MEMORY_CATEGORIES else "general"
         fact = fact.strip()[:500] if isinstance(fact, str) and fact.strip() else None
         task = decision.get("task")
+        if decision.get("mode") == "browse" and isinstance(task, str) and task.strip() \
+                and "claude.browse" in self.app.tools.names():
+            return {"mode": "act", "goal": f"Use the claude.browse tool to do this in a web browser: {task.strip()[:2000]}"}
         latest = next((m["content"] for m in reversed(self._history(conversation_id)) if m["role"] == "user"), "")
         can_delegate = "claude.work" in self.app.tools.names()
         if can_delegate and decision.get("mode") in ("answer", None) and HARD_WORK.search(latest):
