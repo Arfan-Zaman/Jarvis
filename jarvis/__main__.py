@@ -59,6 +59,7 @@ def cmd_serve(config, args) -> int:
     logger.info("Press Ctrl+C to stop.")
     app.learner.start()                       # continuous learning while the server runs
     app.selfreview.start()                    # weekly self-review; proposals wait for the owner
+    app.briefing.start()                      # the day's headlines ready before the first "Jarvis"
     try:
         server.serve_forever()
     except KeyboardInterrupt:

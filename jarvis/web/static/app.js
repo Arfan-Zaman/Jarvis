@@ -245,8 +245,10 @@ views.dashboard = {
     const counts = status.counts;
     const stat = (value, text) => h('div', { class: 'glass stat' }, h('div', { class: 'value' }, value), h('div', { class: 'label' }, text));
 
+    const briefing = h('div', { class: 'glass panel' }, h('h2', null, 'Briefing'), h('div', { class: 'muted' }, 'Preparing today’s briefing…'));
     root.append(h('div', { class: 'stack' },
       aiBanner(status.ai),
+      briefing,
       h('div', { class: 'grid stats' },
         stat(counts.tasks_open, 'Open tasks'),
         stat(counts.projects, 'Projects'),
@@ -269,8 +271,30 @@ views.dashboard = {
               chip(project.status, 'ok'))))
             : h('div', { class: 'empty' }, 'No projects.'))),
       h('div', { class: 'glass panel' }, h('h2', null, 'Recent activity'), eventTable(data.recent_events))));
+    fillBriefing(briefing);
   },
 };
+
+const hostOf = (url) => { try { return new URL(url).hostname; } catch (e) { return url; } };
+
+/** The day's spoken briefing as text, with where each headline and learned fact came from. */
+async function fillBriefing(panel, refresh = false) {
+  let data;
+  try { data = await api('GET', '/api/briefing' + (refresh ? '?refresh=1' : '')); }
+  catch (error) { panel.replaceChildren(h('h2', null, 'Briefing'), h('div', { class: 'empty' }, error.message)); return; }
+  const again = h('button', { class: 'btn sm', type: 'button', onclick: () => {
+    again.disabled = true; again.textContent = 'Preparing…'; fillBriefing(panel, true);
+  } }, 'Make a new one');
+  const sources = (data.sources || []).map((s) => h('div', { class: 'item' }, h('div', { class: 'grow' },
+    h('div', { class: 'small' }, s.title.length > 140 ? s.title.slice(0, 139) + '…' : s.title),
+    h('div', { class: 'meta' }, chip(s.kind === 'headline' ? 'Headline' : 'Learned', s.kind === 'headline' ? 'violet' : 'ok'),
+      h('a', { href: s.url, target: '_blank', rel: 'noopener', class: 'muted small' }, hostOf(s.url))))));
+  panel.replaceChildren(
+    h('h2', null, 'Briefing'),
+    h('p', null, data.text),
+    h('div', { class: 'meta' }, chip(data.day), data.partial ? chip('headlines still coming', 'warn') : null, again),
+    ...(sources.length ? [h('div', { class: 'list' }, sources)] : []));
+}
 
 function aiBanner(ai) {
   if (ai.configured && ai.available) {
@@ -1193,6 +1217,9 @@ views.presence = {
         if (watch.done || !blob) continue;
         let text = '';
         try { text = await transcribe(blob); } catch (e) { continue; }
+        if (watch.skip && watch.skip.test(text) && !watch.skip.test(speech.current)) {   // "skip" during the briefing
+          stopSpeaking(); watch.heard = ''; identity.setState('listening', 'Okay. Go ahead.'); return;
+        }
         const hit = text.match(WAKE);
         if (!hit || /jarvis/i.test(speech.current)) continue;  // its own voice saying its name is not a call
         stopSpeaking();
@@ -1209,6 +1236,24 @@ views.presence = {
       convo.talking = false; setBtn();
       setTimeout(() => identity.setState('calm', 'Muted. Say “Jarvis” when you need me.'), 60);
     });
+    // the morning briefing: played on the first "Jarvis" of the day, or when asked for
+    const BRIEFING_ASK = /\b(briefing|brief me|morning (update|summary|rundown)|what'?s (on )?(my|the) day)\b/i;
+    const SKIP = /\b(skip|stop|enough|later|not now|that'?s (enough|fine)|quiet)\b/i;
+    const localDay = () => { const d = new Date(); return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`; };
+    const briefedToday = () => localStorageGet('jarvis.briefed') === localDay();
+    async function playBriefing(stream) {
+      try { localStorage.setItem('jarvis.briefed', localDay()); } catch (e) { /* private window */ }
+      identity.setState('analysing', 'Getting your briefing…');
+      let data;
+      try { data = await api('GET', '/api/briefing'); } catch (e) { identity.setState('listening', 'Yes?'); return null; }
+      you.textContent = 'Morning briefing'; reply.textContent = data.text; memoryLine.replaceChildren();
+      const watch = { done: false, heard: null, skip: SKIP };
+      const watching = bargeIn(stream, watch);             // "skip", "stop" or "Jarvis" cuts it short
+      await speakWith(identity, data.text).catch(() => {});
+      watch.done = true; await watching;
+      return watch.heard;
+    }
+
     async function handsFree() {
       let stream;
       try { stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } }); }
@@ -1232,7 +1277,18 @@ views.presence = {
           if (!hit) continue;                                  // not for JARVIS: ignored, never sent anywhere
           convo.talking = true; setBtn();
           heard = heard.slice(hit.index + hit[0].length).trim();
+          if ((!heard || heard.split(/\s+/).length < 2) && !briefedToday()) {   // first "Jarvis" of the day
+            const after = await playBriefing(stream);
+            if (after) queued = after;
+            else if (!speech.stop) identity.setState('listening', 'Anything else?');
+            continue;
+          }
           if (!heard || heard.split(/\s+/).length < 2) { identity.setState('listening', 'Yes?'); await speakWith(identity, 'Yes?').catch(() => {}); continue; }
+        }
+        if (BRIEFING_ASK.test(heard) && heard.split(/\s+/).length <= 8) {     // "what's my briefing"
+          const after = await playBriefing(stream);
+          if (after) queued = after;
+          continue;
         }
         // "So...", "Um", "Alright, so": the start of a thought, not a message. Keep it, add the next part.
         if (convo.talking && /^(so|um+|uh+|er+|hmm+|alright|all right|okay|ok|well|and|but|like|right|listen|look)([\s,.!?…-]+(so|um+|uh+|then|listen|look))*[\s,.!?…-]*$/i.test(heard)) {

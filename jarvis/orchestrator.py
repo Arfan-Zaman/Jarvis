@@ -70,6 +70,8 @@ class Jarvis:
         self.learner = Learner(self)
         from .selfreview import SelfReview
         self.selfreview = SelfReview(self)
+        from .briefing import Briefing
+        self.briefing = Briefing(self)
         self.voice = Voice(self.config)
         self.conversation = Conversation(self)
         self.started_at = time.time()

@@ -2,6 +2,30 @@
 
 Newest entries first. Record what changed, why, and what was verified.
 
+## 2026-11-16 — Spoken morning briefing
+
+- New `jarvis/briefing.py`: a 30-60 second spoken briefing from open tasks
+  (due today, overdue, top priority), what the learner saved since yesterday
+  (source `jarvis:learn`), pending approvals and self-review proposals, the Mac
+  (`mac.status`), and 2-3 headlines on the owner's interests via read-only
+  `claude.research` (`JARVIS_BRIEFING_TOPICS` to change them; no personal data
+  is sent). The local model writes it in spoken style; markdown and URLs are
+  stripped, and if the model is unavailable or rambles, plain sentences are used.
+- `GET /api/briefing` keeps one briefing per day (`?refresh=1` makes a new one).
+  Headlines are fetched in the background at server start (after 4 am); the
+  endpoint waits at most `JARVIS_BRIEFING_NEWS_WAIT` (20 s) for them, and a
+  briefing made without them is not kept, so the next request picks them up.
+  `JARVIS_BRIEFING=0` turns the background fetch off.
+- JARVIS page, hands-free: the first bare "Jarvis" of the day plays the
+  briefing; "what's my briefing" plays it any time. "Skip", "stop" or "Jarvis"
+  cuts it off (barge-in), as does a click on JARVIS.
+- Dashboard: a Briefing card with the text, sources (headline / learned, with
+  site links) and "Make a new one".
+- Verified: 288 tests pass (scripted model, faked research and Mac tools, never
+  real Claude); Dashboard card checked in the browser on a throwaway server
+  (plain briefing, sources list, rebuild, no console errors). The voice flow
+  was not tried with a microphone.
+
 ## 2026-11-16 — Mac access, sandboxed
 
 - `claude.operate` is now Mac access, on by default (`JARVIS_OPERATE=0` turns
