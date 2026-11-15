@@ -2,6 +2,14 @@
 
 Newest entries first. Record what changed, why, and what was verified.
 
+## 2026-11-16 — Claude Code signed in; its answers reach the owner
+
+- Owner confirmed the wake word works with a real voice, and signed in the
+  `claude` CLI.
+- Real check: a coding request went through the planner to `claude.work` and
+  came back in 18 s. Runs that used Claude Code now reply with its result
+  instead of "I ran claude.work."
+
 ## 2026-11-16 — Wake word and purposeful motion
 
 - Hands-free is now on by default on the JARVIS page: it listens quietly,

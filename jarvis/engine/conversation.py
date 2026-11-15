@@ -356,6 +356,12 @@ class Conversation:
         status = report["status"]
 
         prefix = f"{did} " if did else ""
+        # Claude Code's finished work is the answer itself: show it, not just "I ran it".
+        deep = [s["output"].get("result", "").strip() for s in done
+                if s["tool"] in ("claude.work", "claude.operate") and isinstance(s["output"], dict)]
+        deep = [d for d in deep if d]
+        if status == "completed" and deep:
+            return "\n\n".join(deep)
         if status == "completed":
             if changes:
                 return persona.COMPLETED.format(did=did)
