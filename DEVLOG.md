@@ -2,6 +2,18 @@
 
 Newest entries first. Record what changed, why, and what was verified.
 
+## 2026-11-16 — Interrupt and mute
+
+- While JARVIS thinks or talks, a quiet second listener runs; hearing
+  "Jarvis" stops speech instantly (also mid-sentence and while audio is still
+  loading) and what follows the name is sent in the same conversation, so the
+  answer takes the whole exchange into account. Its own voice saying "Jarvis"
+  is ignored.
+- A press on the face while it thinks or talks mutes it (the pending reply is
+  not spoken) until it is called again.
+- Checked in Chrome: stop takes 0-1 ms at 0.8 s and 2.5 s into a reply; no
+  console errors. The spoken barge-in itself needs the owner's voice to try.
+
 ## 2026-11-16 — Free full-web learning through Claude Code
 
 - Owner wanted a free-for-life search. SearXNG was rejected: it scrapes Google

@@ -810,23 +810,49 @@ async function fetchSpeech(text) {
   return URL.createObjectURL(await response.blob());
 }
 
+// What JARVIS is saying right now, so it can be cut off mid-sentence.
+const speech = { active: false, stop: false, cancelNext: false, audio: null, current: '', wake: null };
+/** Resolve with the promise's value, or null the moment speech is stopped. */
+function unlessStopped(promise) {
+  return Promise.race([promise, new Promise((resolve) => { speech.wake = () => resolve(null); })]);
+}
+/** Stop talking now (or skip the reply that is about to be spoken). */
+function stopSpeaking() {
+  speech.stop = true;
+  if (!speech.active) speech.cancelNext = true;
+  if (speech.audio) { speech.audio.pause(); speech.audio.dispatchEvent(new Event('ended')); }
+  if (speech.wake) speech.wake();
+}
+
 /** Speak a reply sentence by sentence: each one's feeling drives the swarm,
- *  the next sentence is prepared while this one plays (less waiting). */
+ *  the next sentence is prepared while this one plays (less waiting).
+ *  Returns false if it was interrupted. */
 async function speakWith(identity, text) {
+  if (speech.cancelNext) { speech.cancelNext = false; return false; }
   const list = sentences(text);
-  if (!list.length) return;
-  let next = fetchSpeech(list[0]);
-  for (let i = 0; i < list.length; i++) {
-    const url = await next;
-    if (i + 1 < list.length) next = fetchSpeech(list[i + 1]).catch((e) => { throw e; });
-    identity.setState(feel(list[i]), list[i].length > 140 ? list[i].slice(0, 137) + '…' : list[i]);
-    await playClip(identity, url);
-    URL.revokeObjectURL(url);
+  if (!list.length) return true;
+  speech.active = true; speech.stop = false;
+  try {
+    let next = fetchSpeech(list[0]);
+    for (let i = 0; i < list.length; i++) {
+      const url = await unlessStopped(next);
+      if (speech.stop || !url) { if (url) URL.revokeObjectURL(url); return false; }
+      if (i + 1 < list.length) next = fetchSpeech(list[i + 1]);
+      speech.current = list[i];
+      identity.setState(feel(list[i]), list[i].length > 140 ? list[i].slice(0, 137) + '…' : list[i]);
+      await playClip(identity, url);
+      URL.revokeObjectURL(url);
+      if (speech.stop) return false;
+    }
+    return true;
+  } finally {
+    speech.active = false; speech.current = ''; speech.audio = null;
   }
 }
 
 async function playClip(identity, url) {
   const audio = new Audio(url);
+  speech.audio = audio;
   let meter = null;
   try {                                   // real amplitude, not an animation loop
     const context = new (window.AudioContext || window.webkitAudioContext)();
@@ -951,7 +977,7 @@ views.presence = {
     const convo = { on: false, talking: false };
     const convoBtn = h('button', { class: 'btn sm', type: 'button', disabled: !voiceOk.listening || !voiceOk.speaking || !connected }, 'Hands-free: off');
     const setBtn = () => { convoBtn.textContent = convo.on ? (convo.talking ? 'In conversation · end' : 'Hands-free: on') : 'Hands-free: off'; convoBtn.classList.toggle('primary', convo.on); };
-    async function listenOnce(stream) {
+    async function listenOnce(stream, opts = {}) {
       const context = new (window.AudioContext || window.webkitAudioContext)();
       const analyser = context.createAnalyser(); analyser.fftSize = 1024;
       context.createMediaStreamSource(stream).connect(analyser);
@@ -967,30 +993,55 @@ views.presence = {
           analyser.getByteTimeDomainData(data);
           let sum = 0; for (const v of data) { const d = (v - 128) / 128; sum += d * d; }
           const rms = Math.sqrt(sum / data.length), now = performance.now();
-          identity.setLevel(Math.min(1, rms * 7));
+          if (!opts.quiet) identity.setLevel(Math.min(1, rms * 7));
           if (rms > 0.035) { loudFor += 50; if (loudFor > 150) spoke = true; lastVoice = now; } else loudFor = 0;
-          const done = !convo.on || (spoke && now - lastVoice > 1100) || now - started > 25000 || (!spoke && now - started > 12000);
+          const done = !convo.on || (opts.abort && opts.abort()) || (spoke && now - lastVoice > 1100) || now - started > 25000 || (!spoke && now - started > 12000);
           if (done) { clearInterval(tick); resolve(); }
         }, 50);
       });
       const stopped = new Promise((r) => { rec.onstop = r; });
-      rec.stop(); await stopped; context.close(); identity.setLevel(0);
+      rec.stop(); await stopped; context.close(); if (!opts.quiet) identity.setLevel(0);
       return spoke ? new Blob(chunks, { type: rec.mimeType || 'audio/webm' }) : null;
     }
+    async function bargeIn(stream, watch) {
+      while (!watch.done && convo.on) {
+        const blob = await listenOnce(stream, { quiet: true, abort: () => watch.done });
+        if (watch.done || !blob) continue;
+        let text = '';
+        try { text = await transcribe(blob); } catch (e) { continue; }
+        const hit = text.match(WAKE);
+        if (!hit || /jarvis/i.test(speech.current)) continue;  // its own voice saying its name is not a call
+        stopSpeaking();
+        convo.talking = true; setBtn();
+        watch.heard = text.slice(hit.index + hit[0].length).trim();
+        identity.setState('listening', 'Go ahead.');
+        return;
+      }
+    }
+    // a press on JARVIS while it talks mutes it until it is called again
+    stage.addEventListener('pointerdown', () => {
+      if (!speech.active && !busy) return;
+      stopSpeaking();
+      convo.talking = false; setBtn();
+      setTimeout(() => identity.setState('calm', 'Muted. Say “Jarvis” when you need me.'), 60);
+    });
     async function handsFree() {
       let stream;
       try { stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } }); }
       catch (e) { convo.on = false; setBtn(); identity.setState('calm', 'Allow the microphone to talk hands-free.'); return; }
-      let quiet = 0;
+      let quiet = 0, queued = null;
       while (convo.on) {
-        if (!convo.talking) identity.setState('calm', 'Say “Jarvis” to talk.');
-        else identity.setState('listening', 'Go ahead.');
-        const blob = await listenOnce(stream);
-        if (!convo.on) break;
-        if (!blob) { if (convo.talking && ++quiet >= 2) { convo.talking = false; setBtn(); } continue; }
-        quiet = 0;
         let heard = '';
-        try { heard = await transcribe(blob); } catch (error) { continue; }
+        if (queued) { heard = queued; queued = null; }              // said right after interrupting
+        else {
+          if (!convo.talking) identity.setState('calm', 'Say “Jarvis” to talk.');
+          else identity.setState('listening', 'Go ahead.');
+          const blob = await listenOnce(stream);
+          if (!convo.on) break;
+          if (!blob) { if (convo.talking && ++quiet >= 2) { convo.talking = false; setBtn(); } continue; }
+          quiet = 0;
+          try { heard = await transcribe(blob); } catch (error) { continue; }
+        }
         if (!heard || /^\W*$/.test(heard)) continue;
         if (!convo.talking) {
           const hit = heard.match(WAKE);
@@ -1003,7 +1054,11 @@ views.presence = {
           convo.talking = false; setBtn(); await speakWith(identity, 'Standing by.').catch(() => {}); continue;
         }
         speakNext = true;
+        const watch = { done: false, heard: null };
+        const watching = bargeIn(stream, watch);              // "Jarvis" while it thinks or talks cuts it off
         await submit(heard);
+        watch.done = true; await watching;
+        if (watch.heard) queued = watch.heard;
       }
       stream.getTracks().forEach((t) => t.stop());
       convo.talking = false; setBtn();
