@@ -175,8 +175,22 @@ class Engine:
         success, failure. Success and failure are shown only for a few seconds.
         """
         from datetime import datetime, timezone
-        runs = self.app.runs.list(limit=1, kind="goal")
         idle = {"state": "calm", "run_id": None, "goal": None, "step": None, "activity": []}
+        # A long Claude Code job started straight from chat: show it, with how long it has run.
+        for tool_run in self.app.runs.list(limit=3, kind="tool", status="running"):
+            name = (tool_run.get("goal") or "").removeprefix("Tool call: ")
+            if name.startswith("claude.") or name.startswith("image."):
+                try:
+                    started = datetime.fromisoformat(str(tool_run["created_at"]).replace("Z", "+00:00"))
+                    seconds = int((datetime.now(timezone.utc) - started).total_seconds())
+                except (KeyError, ValueError):
+                    seconds = 0
+                label = {"claude.research": "Researching on the web", "claude.browse": "Using the browser",
+                         "image.generate": "Making the picture"}.get(name, "Working with Claude Code")
+                return {**idle, "state": "executing", "run_id": tool_run["id"], "goal": label,
+                        "step": {"position": 1, "description": f"{label}… {seconds // 60}m {seconds % 60:02d}s", "tool": name},
+                        "detail": "Long jobs can take a few minutes."}
+        runs = self.app.runs.list(limit=1, kind="goal")
         if not runs:
             return idle
         run = self.app.runs.get(runs[0]["id"])

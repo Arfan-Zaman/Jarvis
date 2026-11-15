@@ -46,6 +46,8 @@ NO = re.compile(r"^\s*(no|nope|nah|don'?t|do not|not now|no thanks)\b[\w\s,.!']{
 MEMORY_CATEGORIES = ("preference", "personal", "general")
 # Saving straight away needs the owner's own words to ask for it. The model's
 # opinion is not enough: without one of these, it can only OFFER to remember.
+# Requests to rewrite JARVIS itself: only the self-review may propose that, and the owner approves.
+SELF_CHANGE = re.compile(r"\b(code|improve|upgrade|rewrite|reprogram|modify|change|update|optimi[sz]e)\s+(yourself|your\s+own\s+(code|program|software|system)|your\s+code)\b", re.I)
 ATTACHED = re.compile(r"\[Attached: (uploads/[A-Za-z0-9][A-Za-z0-9._-]*)\]")
 # Requests that need real skill: sent to Claude Code even if the small router says "answer".
 HARD_WORK = re.compile(
@@ -204,6 +206,8 @@ class Conversation:
         if offer and NO.match(text):
             return self._say(conversation_id, persona.WONT_KEEP, None)
 
+        if SELF_CHANGE.search(text):
+            return self._say(conversation_id, persona.SELF_CHANGE, None)
         files = ATTACHED.findall(text)
         if files and "claude.work" in self.app.tools.names():   # files and photos: Claude Code can see them
             return self._delegate(conversation_id, (

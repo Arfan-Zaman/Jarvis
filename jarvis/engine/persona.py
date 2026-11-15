@@ -49,3 +49,7 @@ DROPPED = "Understood. I've dropped that request."
 REMEMBERED = "Understood. I'll remember {fact}."
 ALREADY_KNOWN = "I already have that: {fact}."
 WONT_KEEP = "Understood. I won't keep that."
+
+SELF_CHANGE = ("I can't rewrite my own code from a conversation: that would change me without your review. "
+               "Open the System page and press Review now in Self-review: I'll study my code and logs, propose "
+               "up to three improvements on a separate branch, and nothing changes until you approve them.")

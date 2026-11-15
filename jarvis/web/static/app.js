@@ -488,10 +488,17 @@ views.chat = {
       messages.querySelector('.empty')?.remove();
       messages.append(bubble({ role: 'user', content: text + (files.length ? `\n📎 ${files.length} file${files.length > 1 ? 's' : ''}` : '') }),
         h('div', { class: 'msg assistant thinking' }, h('div', { class: 'who' }, 'JARVIS'),
-          h('div', null, 'Thinking…'),
+          h('div', { class: 'thinking-line' }, 'Thinking…'),
           h('div', { class: 'muted small' }, 'The first reply after JARVIS starts can take up to 30 seconds.')));
       messages.scrollTop = messages.scrollHeight;
       input.value = '';
+      const progress = setInterval(async () => {          // say what it is doing, e.g. "Working with Claude Code… 1m 20s"
+        try {
+          const live = await api('GET', '/api/live');
+          const line = messages.querySelector('.thinking .thinking-line');
+          if (line && live.step && live.step.description) line.textContent = live.step.description;
+        } catch (e) { /* try again */ }
+      }, 2000);
       try {
         const result = await api('POST', '/api/chat', { message: text, attachments: files, conversation_id: state.conversationId });
         state.conversationId = result.conversation.id;
@@ -503,6 +510,7 @@ views.chat = {
         input.value = text;                        // give the message back so it can be resent
         throw error;
       } finally {
+        clearInterval(progress);
         voice.speakNext = false;
         send.disabled = false;
         input.focus();

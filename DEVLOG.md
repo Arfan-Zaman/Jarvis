@@ -2,6 +2,17 @@
 
 Newest entries first. Record what changed, why, and what was verified.
 
+## 2026-11-16 — Long Claude jobs are visible; faster default model
+
+- Chat looked broken because Claude Code jobs ran for 6+ minutes behind a
+  silent "Thinking…". `/api/live` now reports a running claude.*/image.* tool
+  run ("Working with Claude Code… 1m 20s"); the face and the Chat page's
+  thinking bubble show it.
+- `claude.work` uses Sonnet by default (`JARVIS_WORK_MODEL`, e.g. opus).
+- "Code/improve yourself" requests get a plain answer pointing to Self-review
+  (Claude Code works in the workspace and cannot change JARVIS itself).
+- 281 tests pass.
+
 ## 2026-11-16 — Chat and the JARVIS page share one conversation
 
 - Owner reported Chat "not working": it worked, but the Chat page and the JARVIS

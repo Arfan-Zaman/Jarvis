@@ -59,6 +59,7 @@ def command(binary: str, task: str, write_files: bool, shell: bool = False) -> l
     never = [t for t in NEVER if not (shell and t in ("Bash", "BashOutput", "KillShell"))]
     return [binary, "-p", "--output-format", "json",
             "--permission-mode", "acceptEdits" if write_files or shell else "default",
+            "--model", os.environ.get("JARVIS_WORK_MODEL", "sonnet"),            # fast and strong; set opus for hardest work
             "--allowedTools", ",".join(allowed),
             "--disallowedTools", ",".join(never + ([] if write_files or shell else WRITE_TOOLS)),
             "--strict-mcp-config", "--mcp-config", '{"mcpServers":{}}', "--setting-sources", "project",
