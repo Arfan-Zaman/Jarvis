@@ -33,7 +33,7 @@ turn any repeatable process into a skill in `.claude/skills/`.
    messaging, deleting or publishing without approval, never claims a result
    it didn't verify.
 
-Status: see DEVLOG. Done: 1 (wake word), 2 (emotion), 4, 5 (continuous learning; self-review not yet), 6. Open: 3 (images), 5b (self-review).
+Status (2026-11-16): all seven done. 3 (images) waits on the higgsfield connector moving to the paid account. Mac access = `claude.operate` (one approval per task, macOS sandbox blocks secrets and JARVIS's API) plus no-approval `mac.*` tools. Conversation brain = `claude.converse` (Haiku).
 
 ## Latest (2026-11-16): nanobot swarm face is live
 

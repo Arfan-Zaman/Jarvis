@@ -139,9 +139,14 @@ def system_prompt(tools: list[dict], memories: list[dict] | None = None) -> str:
         persona.CHARACTER + "\nNever mention JSON, tools or prompts.\n\n"
         f"Actions JARVIS can carry out when the owner asks:\n{abilities}\n\n"
         f"It is now {now_local()} (the owner's local time).\n"
-        "JARVIS can search the web and read web pages (through actions), and the owner can talk to it by voice. "
-        "JARVIS cannot send email or messages, make phone calls, use a calendar, control devices or "
-        "make payments. Never claim or offer these. "
+        "What JARVIS can do (through actions): search the web and read pages; research in depth; use a real "
+        "browser; read files and photos the owner uploads; find, open and organise files and apps on the "
+        "owner's Mac; run commands, scripts and installs on the Mac (the owner approves each task once); "
+        "write code and documents; make pictures (the owner approves the credit cost); remember and learn "
+        "continuously; manage tasks, projects and goals; propose improvements to its own code weekly. "
+        "The owner talks to it by voice or text. "
+        "JARVIS cannot send email or messages, make phone calls, use a calendar or make payments. "
+        "Never claim or offer these, and never tell the owner to do by hand something JARVIS can do. "
         "You can freely share general knowledge, ideas, suggestions and advice from what you know.\n"
         "In this reply you are only talking. Never say you have done, saved, added or changed "
         "anything: actions are carried out and reported separately. If the owner seems to want "
@@ -315,7 +320,9 @@ class Conversation:
     # --- answering ---------------------------------------------------------
     # Things that need JARVIS's own records stay with the local planner; everything else is talk.
     OWN_DATA = re.compile(r"\b(task|tasks|to-?do|memor(y|ies)|remember|project|projects|lesson|experience|"
-                          r"health|backup|approval|goal)\b", re.I)
+                          r"health|backup|approval|goal|file|files|folder|download|downloads|desktop|document|"
+                          r"app|apps|open|launch|battery|disk|storage|wi-?fi|mac|computer|run|install|command|"
+                          r"script|terminal|notif\w*|remind\w*|organi[sz]e|convert|rename|move|delete)\b", re.I)
 
     def _converse(self, conversation_id: int, offer: dict | None = None) -> dict | None:
         """Reply with Claude (understands follow-ups and corrections, searches the web itself).
@@ -328,6 +335,10 @@ class Conversation:
         instructions = system_prompt(self.app.tools.list(), memories) + (
             "\nYou can search the web yourself (WebSearch, WebFetch) whenever the answer needs current or "
             "checked facts: do it quietly and then answer, citing the key source briefly.\n"
+            "You yourself cannot run anything here, but JARVIS can: it has Mac access (commands, files, apps, "
+            "installs, with the owner approving each task once). Never tell the owner to run something "
+            "themselves or that JARVIS lacks a shell; say what JARVIS will do and ask them to say it as a "
+            "request, e.g. 'run the self-test in workspace/conversation_listener.py'.\n"
             "Read the whole conversation: short replies like 'Can you?' or 'So?' continue the previous topic. "
             "If the owner corrects a word you misheard or a request you got wrong, take the correction and "
             "answer the corrected request. Speech is transcribed, so expect misheard words and guess sensibly.")

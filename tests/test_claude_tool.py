@@ -1,6 +1,7 @@
 """claude.work: the Claude Code bridge. Claude itself is never run here."""
 
 import json
+from pathlib import Path
 import subprocess
 import unittest
 from unittest import mock
@@ -62,22 +63,38 @@ class ClaudeToolTests(unittest.TestCase):
         self.assertIn("Bash", cmd[cmd.index("--disallowedTools") + 1].split(","))
         self.assertEqual(kw["cwd"], self.tmp.name)
 
-    def test_operate_is_off_unless_enabled(self):
-        with mock.patch.dict("os.environ", {"JARVIS_OPERATE": ""}):
+    def test_operate_can_be_switched_off(self):
+        with mock.patch.dict("os.environ", {"JARVIS_OPERATE": "0"}):
             with self.assertRaises(JarvisError):
                 claude.claude_operate(FakeApp, {"task": "build it"}, "user", runner=lambda *a, **k: None)
 
-    @mock.patch.dict("os.environ", {"JARVIS_OPERATE": "1"})
-    def test_operate_allows_shell_in_workspace(self):
+    def test_operate_is_mac_access_without_secrets(self):
         calls = []
         def runner(cmd, **kw):
             calls.append((cmd, kw)); return done(json.dumps({"result": "built"}))
         out = claude.claude_operate(FakeApp, {"task": "build it"}, "user", runner=runner)
         cmd, kw = calls[0]
         self.assertEqual(out["result"], "built")
-        self.assertIn("Bash", cmd[cmd.index("--allowedTools") + 1].split(","))
-        self.assertNotIn("Bash", cmd[cmd.index("--disallowedTools") + 1].split(","))
-        self.assertEqual(kw["cwd"], self.tmp.name)
+        allowed = cmd[cmd.index("--allowedTools") + 1].split(",")
+        denied = cmd[cmd.index("--disallowedTools") + 1].split(",")
+        self.assertIn("Bash", allowed)
+        self.assertEqual(kw["cwd"], str(Path.home()))                 # the owner's Mac, not the workspace
+        for blocked in ("Bash(sudo:*)", "Bash(security:*)", "Bash(osascript:*)", "Read(~/.ssh/**)",
+                        "Read(~/Library/Keychains/**)", "Read(~/JARVIS/.env)", "Edit(~/JARVIS/data/**)"):
+            self.assertIn(blocked, denied)
+        self.assertNotIn("Bash", denied)
+
+    def test_runs_inside_a_macos_sandbox_that_blocks_secrets(self):
+        with mock.patch.dict("os.environ", {"JARVIS_SANDBOX": "1"}):
+            cmd = claude.sandboxed(FakeApp, ["claude", "-p"])
+        if cmd[0].endswith("sandbox-exec"):                     # macOS
+            profile = cmd[2]
+            self.assertIn("/.ssh", profile)
+            self.assertIn(".env", profile)
+            self.assertIn("network-outbound", profile)
+            self.assertEqual(cmd[3:], ["claude", "-p"])
+        with mock.patch.dict("os.environ", {"JARVIS_SANDBOX": "0"}):
+            self.assertEqual(claude.sandboxed(FakeApp, ["claude"]), ["claude"])
 
     def test_research_is_read_only_and_keeps_sourced_facts(self):
         calls = []

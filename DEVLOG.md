@@ -2,6 +2,29 @@
 
 Newest entries first. Record what changed, why, and what was verified.
 
+## 2026-11-16 — Mac access, sandboxed
+
+- `claude.operate` is now Mac access, on by default (`JARVIS_OPERATE=0` turns
+  it off): runs from the home folder with Bash, files, installs (no sudo) and
+  the web; the owner approves each task once (system category), then it works
+  without further prompts. Blocked: sudo, security, osascript, ssh, diskutil,
+  launchctl, crontab, git push, file tools on keys/credentials/browser and mail
+  data/JARVIS's .env and data.
+- macOS sandbox (`sandbox-exec`, `JARVIS_SANDBOX=0` disables) around every
+  Claude Code run except the browser: ~/.ssh, ~/.aws, ~/.gnupg, gh/docker
+  config, .netrc/.npmrc, JARVIS .env and data are unreadable, and JARVIS's API
+  port is unreachable, even from shell commands. Verified with real Claude:
+  `ls ~/.ssh` -> Operation not permitted; API unreachable; web works. (The
+  keychain folder cannot be blocked: Claude Code signs in through it.)
+- New no-approval tools `mac.find_files` (Spotlight), `mac.status`,
+  `mac.open`, `mac.notify` (argument lists, never a shell). Verified: battery
+  99%, 242 GB free; found workspace/conversation_listener.py.
+- Real run through Mac access: the owner's "fix it" on conversation_listener.py
+  ran its self-test (passed, exit 0, 11 s).
+- The conversational brain now knows JARVIS can act on the Mac and never tells
+  the owner to run things by hand; JARVIS's prompt lists what it can do.
+- 282 tests pass.
+
 ## 2026-11-16 — JARVIS understands: Claude as the conversational brain
 
 - Owner: "it's not understanding me". Causes found in real transcripts: names
