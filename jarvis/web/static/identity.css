@@ -240,3 +240,8 @@ html.desktop-mode #view { animation: none; }
   .jv-art-media { transition: none; }
   .jv-identity .jv-art-stack, .jv-identity .jv-art-bloom { animation: none !important; }
 }
+
+/* nanobot swarm: the canvas draws the face itself from base.png's particles */
+.jv-swarm-mode .jv-art,
+.jv-swarm-mode .jv-face { display: none; }
+.jv-swarm-mode .jv-core { opacity: 1; transform: none; }

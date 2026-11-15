@@ -2,6 +2,18 @@
 
 Newest entries first. Record what changed, why, and what was verified.
 
+## 2026-11-16 — Nanobot swarm face
+
+- `base.png` generated on Higgsfield (GPT Image 2, 2K, owner chose version 1;
+  version 2 kept in `data/media/identity_candidates/`).
+- `identity.js`: swarm mode. ~3,200 particles (1,300 compact) sampled from
+  `base.png` assemble into the face, divide into five fragments that orbit the
+  core, merge again at a shifted spot and drift home (16 s calm, 9 s executing).
+  State colour, burst on success, scatter on failure, voice level on the eyes,
+  gaze tilt. Physics is step-based, so a throttled tab still converges. Falls
+  back to the still art, then the vector face. Checked in Chrome on port 8765;
+  240 tests pass.
+
 ## 2026-11-16 — Art mode for the face (rendered character)
 
 - `identity.js` now has an "art mode". `GET /api/identity/assets` lists which

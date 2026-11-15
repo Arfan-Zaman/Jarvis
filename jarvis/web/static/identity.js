@@ -170,6 +170,136 @@
     return null;
   }
 
+  // --- nanobot swarm: the rendered face rebuilt from thousands of glowing particles ---
+  // Each particle takes its home position, colour and depth from base.png. On a
+  // cycle the swarm divides into fragments that fly around the core, merges again
+  // at a shifted place and drifts home. Real-time; no files beyond base.png.
+  const smooth = (a, b, x) => { const k = Math.max(0, Math.min(1, (x - a) / (b - a))); return k * k * (3 - 2 * k); };
+  const hash = (n) => { const s = Math.sin(n * 127.1 + 311.7) * 43758.5453; return s - Math.floor(s); };
+
+  function loadSwarm(url, count) {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.decoding = 'async';
+      img.onerror = reject;
+      img.onload = () => {
+        const S = 180, c = document.createElement('canvas');
+        c.width = c.height = S;
+        const g = c.getContext('2d', { willReadFrequently: true });
+        g.drawImage(img, 0, 0, S, S);
+        const data = g.getImageData(0, 0, S, S).data;
+        const pool = [], cumulative = [];
+        let total = 0;
+        for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+          const i = (y * S + x) * 4, lum = Math.max(data[i], data[i + 1], data[i + 2]) / 255;
+          if (lum < 0.1) continue;
+          total += 0.35 + lum ** 1.15; cumulative.push(total); pool.push(i);   // dark plates still get bots
+        }
+        if (!pool.length) { reject(new Error('empty image')); return; }
+        resolve(makeSwarm(pool, cumulative, total, data, S, count));
+      };
+      img.src = url;
+    });
+  }
+
+  function makeSwarm(pool, cumulative, total, data, S, N) {
+    const f = () => new Float32Array(N);
+    const hx = f(), hy = f(), hz = f(), x = f(), y = f(), z = f(), vx = f(), vy = f(), vz = f();
+    const cr = f(), cg = f(), cb = f(), lum = f(), seed = f(), cl = new Uint8Array(N);
+    const K = 5, cx0 = new Float32Array(K), cy0 = new Float32Array(K), cn = new Float32Array(K);
+    for (let n = 0; n < N; n++) {
+      let lo = 0, hi = cumulative.length - 1;
+      const r = Math.random() * total;
+      while (lo < hi) { const m = (lo + hi) >> 1; if (cumulative[m] < r) lo = m + 1; else hi = m; }
+      const i = pool[lo], px = (i / 4) % S, py = Math.floor(i / 4 / S);
+      hx[n] = (px + Math.random()) / S - 0.5; hy[n] = (py + Math.random()) / S - 0.5;
+      cr[n] = data[i]; cg[n] = data[i + 1]; cb[n] = data[i + 2];
+      lum[n] = Math.max(cr[n], cg[n], cb[n]) / 255;
+      const d2 = hx[n] * hx[n] + hy[n] * hy[n];
+      hz[n] = Math.max(0, 0.22 - d2 * 0.9) + (lum[n] - 0.4) * 0.08;   // a sculpted, bulging mask
+      seed[n] = Math.random() * 1000;
+      const a = Math.atan2(hy[n], hx[n]);                               // fragments: slices of the face
+      cl[n] = Math.floor(((a + Math.PI) / (Math.PI * 2)) * K) % K;
+      cx0[cl[n]] += hx[n]; cy0[cl[n]] += hy[n]; cn[cl[n]]++;
+      const s = 0.7 + Math.random() * 0.6, b = Math.random() * Math.PI * 2;  // start scattered: it assembles
+      x[n] = Math.cos(b) * s; y[n] = Math.sin(b) * s; z[n] = (Math.random() - 0.5) * 0.6;
+    }
+    for (let k = 0; k < K; k++) { cx0[k] /= cn[k] || 1; cy0[k] /= cn[k] || 1; }
+    const ccx = new Float32Array(K), ccy = new Float32Array(K), ccz = new Float32Array(K);
+
+    let lastNow = 0;
+    function snap() { x.set(hx); y.set(hy); z.set(hz); vx.fill(0); vy.fill(0); vz.fill(0); }
+
+    function draw(ctx, w, now, o) {
+      const { spec, state, t, gaze, level, color, dpr } = o;
+      ctx.clearRect(0, 0, w, w);
+      if (o.reduced && !o.snapped) { snap(); o.snapped = true; }
+      const sec = now / 1000;
+      // physics runs in ~60 Hz steps whatever the frame rate (a throttled tab still converges)
+      const steps = lastNow ? Math.max(1, Math.min(30, Math.round((now - lastNow) / 16.7))) : 1;
+      lastNow = now;
+      // the divide / fly / merge-elsewhere cycle
+      const period = spec.still || state === 'offline' ? 0 : state === 'executing' ? 9 : state === 'calm' || state === 'speaking' ? 16 : 12;
+      let split = 0, offX = 0, offY = 0;
+      if (period && !o.reduced) {
+        const cycle = Math.floor(sec / period), c = (sec % period) / period;
+        split = smooth(0.5, 0.58, c) * (1 - smooth(0.72, 0.8, c));
+        const sx = (hash(cycle) - 0.5) * 0.34, sy = (hash(cycle + 7) - 0.5) * 0.22;
+        const shift = smooth(0.7, 0.78, c) * (1 - smooth(0.82, 1, c));
+        offX = sx * shift; offY = sy * shift;
+      }
+      for (let k = 0; k < K; k++) {
+        const a = (k / K) * Math.PI * 2 + sec * (state === 'executing' ? 1.1 : 0.55);
+        ccx[k] = Math.cos(a) * 0.46; ccy[k] = Math.sin(a) * 0.34; ccz[k] = Math.sin(a * 2) * 0.2;
+      }
+      let swell = 1;
+      if (spec.burst && t < 1.6) swell += 0.55 * Math.sin(Math.PI * t / 1.6);
+      const shimmer = state === 'analysing' || state === 'planning' ? 0.014 : 0.004;
+      const kick = spec.disrupt && t < 0.9 ? (1 - t / 0.9) * 0.02 : 0;
+      const spring = split > 0.05 ? 0.035 : 0.055, damp = 0.86;
+      const tilt = gaze[0] * 0.55 + (spec.still ? 0 : Math.sin(sec / 4.5) * 0.14), pitch = -gaze[1] * 0.35;
+      const ct = Math.cos(tilt), st = Math.sin(tilt), cp = Math.cos(pitch), sp = Math.sin(pitch);
+      const W = w * 0.84, mid = w / 2, accent = color;
+      const mix = state === 'warning' || state === 'error' || state === 'failure' ? 0.75 : spec.mix > 0.3 ? 0.45 : 0.18;
+      const flicker = spec.flicker ? 0.65 + 0.35 * Math.sin(now / 80) : 1;
+      const glow = Math.max(0.25, spec.glow) * flicker;
+      // halo behind the swarm
+      const halo = ctx.createRadialGradient(mid, mid, 0, mid, mid, w * 0.5);
+      halo.addColorStop(0, rgba(accent, 0.1 * glow)); halo.addColorStop(1, rgba(accent, 0));
+      ctx.fillStyle = halo; ctx.fillRect(0, 0, w, w);
+      ctx.globalCompositeOperation = 'lighter';
+      for (let n = 0; n < N; n++) {
+        const k = cl[n], s = seed[n];
+        let tx = hx[n] * swell + offX, ty = hy[n] * swell + offY, tz = hz[n];
+        if (split > 0) {
+          const fx = ccx[k] + (hx[n] - cx0[k]) * 0.42, fy = ccy[k] + (hy[n] - cy0[k]) * 0.42;
+          tx += (fx - tx) * split; ty += (fy - ty) * split; tz += (ccz[k] - tz) * split;
+        }
+        const amp = shimmer + split * 0.03;
+        tx += Math.sin(sec * 1.7 + s) * amp; ty += Math.cos(sec * 1.3 + s * 1.3) * amp; tz += Math.sin(sec + s * 0.7) * amp;
+        if (!o.reduced) for (let step = 0; step < steps; step++) {
+          vx[n] = (vx[n] + (tx - x[n]) * spring + (kick ? (Math.random() - 0.5) * kick : 0)) * damp;
+          vy[n] = (vy[n] + (ty - y[n]) * spring + (kick ? (Math.random() - 0.5) * kick : 0)) * damp;
+          vz[n] = (vz[n] + (tz - z[n]) * spring) * damp;
+          x[n] += vx[n]; y[n] += vy[n]; z[n] += vz[n];
+        }
+        // rotate toward the gaze, then perspective
+        let X = x[n] * ct + z[n] * st, Z = -x[n] * st + z[n] * ct, Y = y[n];
+        [Y, Z] = [Y * cp - Z * sp, Y * sp + Z * cp];
+        const p = 2.4 / (2.4 - Z), sx = mid + X * W * p, sy = mid + Y * W * p;
+        const L = lum[n], speed = Math.abs(vx[n]) + Math.abs(vy[n]);
+        let a = (0.3 + 0.9 * L) * glow + Math.min(0.3, speed * 6);
+        if (spec.voice && L > 0.6) a += level * 0.7;
+        const r = cr[n] + (accent[0] - cr[n]) * mix, g = cg[n] + (accent[1] - cg[n]) * mix, b = cb[n] + (accent[2] - cb[n]) * mix;
+        ctx.fillStyle = `rgba(${r | 0},${g | 0},${b | 0},${Math.min(1, a).toFixed(3)})`;
+        const size = (L > 0.7 ? 2.6 : 1.6) * dpr * p * (w / dpr > 400 ? 1.25 : 1);
+        ctx.fillRect(sx - size / 2, sy - size / 2, size, size);
+      }
+      ctx.globalCompositeOperation = 'source-over';
+    }
+    return { draw };
+  }
+
   let counter = 0;
 
   function create(host, options = {}) {
@@ -218,7 +348,16 @@
       artStack.prepend(el);
       el.src = art.base + file;
     }
-    if (options.art !== false) artAssets().then((index) => { art = index; showArt(); });
+    let swarm = null;
+    const swarmOpts = { snapped: false };
+    if (options.art !== false) artAssets().then((index) => {
+      art = index; showArt();
+      if (!options.static && options.swarm !== false && index.files.has('base.png')) {
+        loadSwarm(index.base + 'base.png', compact ? 1300 : 3200)
+          .then((s) => { swarm = s; root.classList.add('jv-swarm-mode'); resize(); })
+          .catch(() => {});                       // stays on the still art
+      }
+    });
     const canvas = root.querySelector('canvas');
     const ctx = canvas.getContext('2d');
     const eyes = [...root.querySelectorAll('.jv-pupil')];
@@ -295,6 +434,11 @@
       const w = canvas.width, cx = w / 2, cy = w / 2;
       const R = w * (compact ? 0.36 : 0.34);
       const color = mixColor(spec.color, VIOLET, spec.mix);
+      if (swarm) {
+        Object.assign(swarmOpts, { spec, state, t, gaze, level, color, dpr, reduced: reducedMotion() });
+        swarm.draw(ctx, w, now, swarmOpts);
+        return;
+      }
       ctx.clearRect(0, 0, w, w);
 
       // breathing / expansion / disruption
@@ -393,7 +537,7 @@
       // stillness: when calm and nobody is moving, draw rarely
       const idle = (state === 'calm' || state === 'offline') && now - lastPointerMove > 3000;
       frame++;
-      if (reducedMotion() || (idle && frame % 6)) return;
+      if (reducedMotion() || (!swarm && idle && frame % 6)) return;
       draw(now);
     }
 

@@ -3,7 +3,16 @@
 Read this first. Then `JARVIS_ROADMAP.md` (Phase 3) and `ARCHITECTURE.md`
 section 4b (autonomous design).
 
-## START HERE: art-mode session handoff (2026-11-16, latest)
+## Latest (2026-11-16): nanobot swarm face is live
+
+`base.png` (version 1) is in place and the presence face is now a live particle
+swarm built from it (see DEVLOG). The Higgsfield project connector is still on
+the old account; generation works through the owner's Chrome (Claude in Chrome)
+on the new account, 6.5 credits per 2K image. Never buy add-ons ("Unlimited").
+Owner's next wishes: a Tony Stark style HUD dashboard and a far more capable
+JARVIS (delegate hard work to Claude Code at `~/.local/bin/claude`).
+
+## Earlier: art-mode session handoff
 
 The previous session hit its usage limit. Exact state:
 
