@@ -2,6 +2,34 @@
 
 Newest entries first. Record what changed, why, and what was verified.
 
+## 2026-11-16 — JARVIS Desktop: floating orb, double clap, auto-start
+
+### Built
+- `desktop/JARVISDesktop.swift`: a native AppKit app (no Dock icon) showing a
+  floating, draggable orb on all Spaces. It starts the JARVIS server if it is
+  not running, listens to the microphone for a double clap, then records until
+  the speaker stops, sends the audio to `/api/voice/transcribe`, requires the
+  word "Jarvis" (a click skips that), sends the request to `/api/chat`, shows
+  the reply and speaks it via `/api/voice/speak`. "Jarvis" alone gets "Yes,
+  sir?" and a follow-up listen. Right-click menu: open, mute, quit.
+- Clap detector: 10 ms frames; onset needs peak at least 0.12, at least six
+  times the recent level, and a zero-crossing rate of at least 0.12
+  (noise-like); it must fade to a quarter within 120 ms; two such claps 120 to
+  700 ms apart; 1.5 s cooldown. `--test-clap file.wav` runs it on a recording.
+- `jarvis/desktop.py` and `python3 -m jarvis desktop build|install|uninstall|status`:
+  compiles with `swiftc` (Command Line Tools, no install), writes Info.plist
+  (microphone reason, project paths), signs ad hoc, and installs a LaunchAgent
+  (`local.jarvis.desktop`) that opens the app at login.
+
+### Verified
+- 233 tests passing (227 existing, 6 new): packaging; the bundle builds and
+  verifies; the detector triggers on a double clap (loud and soft) and not on a
+  single clap, slow claps, knocks, silence or speech, including speech saying
+  "clap clap".
+- Installed on the owner's Mac: the app is running and started the server
+  itself (voice endpoints available). Not verified here: real hand claps and
+  the microphone permission prompt, which the owner must allow.
+
 ## 2026-11-16 — Phase 3.5: voice
 
 ### Built

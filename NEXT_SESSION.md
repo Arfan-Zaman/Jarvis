@@ -5,13 +5,17 @@ section 4b (autonomous design).
 
 ## Where things stand (2026-11-16)
 
-- Phases 1 and 2 and steps 3.1 to 3.5 complete. 227 tests passing.
+- Phases 1 and 2 and steps 3.1 to 3.5 and JARVIS Desktop complete. 233 tests passing.
 - JARVIS runs on Qwen 3.5 9B in Ollama; talks and acts, remembers, acts on its
   own within the hard lines, uses the web with sources, and now has a voice
   (push-to-talk with whisper.cpp; spoken replies with the macOS voice Daniel).
 - Installed with approval: Ollama + qwen3.5:9b, whisper.cpp + ggml-small.en
   (`data/models`). yt-dlp was already present. Claude Code 2.1 is at
   `~/.local/bin/claude`.
+- JARVIS Desktop (`desktop/JARVISDesktop.swift`) is installed as a login item
+  (`local.jarvis.desktop`): floating orb, double clap then "Jarvis", it starts
+  the server itself. Ask the owner whether real claps are detected reliably;
+  thresholds are in `ClapDetector`. The HUD work should reuse the orb's states.
 - Reference videos (four reels) are in `data/media/reels` with transcripts and
   contact sheets; the roadmap's Phase 3 list is derived from them.
 - Remote `origin` is GitHub; push only when the owner asks.

@@ -41,3 +41,6 @@ node_modules/
 
 # --- JARVIS workspace: things JARVIS creates and runs for you (Phase 3) ---
 /workspace/
+
+# --- Built desktop app (rebuild with: python3 -m jarvis desktop build) ---
+/desktop/build/

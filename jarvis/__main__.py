@@ -146,6 +146,24 @@ def cmd_goal(config, args) -> int:
     return 0 if report["verified_complete"] else 1
 
 
+def cmd_desktop(config, args) -> int:
+    from . import desktop
+    if args.action == "build":
+        print(f"Built {desktop.build(config)}")
+    elif args.action == "install":
+        app = desktop.install(config)
+        print(f"Installed {app}")
+        print("JARVIS Desktop is starting and will start automatically at every login.")
+        print("macOS will ask once for microphone access: choose Allow.")
+        print("To remove it: python3 -m jarvis desktop uninstall")
+    elif args.action == "uninstall":
+        done = desktop.uninstall(config)
+        print("\n".join(done) if done else "JARVIS Desktop was not installed.")
+    else:
+        print(json.dumps(desktop.status(config), indent=2))
+    return 0
+
+
 def cmd_restore(config, args) -> int:
     setup_logging(config, console=False)
     if _running_pid(config):
@@ -187,6 +205,9 @@ def main(argv: list[str] | None = None) -> int:
     goal = commands.add_parser("goal", help="plan and carry out a goal (needs an AI model)")
     goal.add_argument("goal", help="what you want done, in plain language")
     goal.set_defaults(run=cmd_goal)
+    desktop_cmd = commands.add_parser("desktop", help="the floating desktop orb (double clap, then say Jarvis)")
+    desktop_cmd.add_argument("action", choices=["build", "install", "uninstall", "status"])
+    desktop_cmd.set_defaults(run=cmd_desktop)
     restore = commands.add_parser("restore", help="replace the database with a backup")
     restore.add_argument("name", help="backup file name, as shown by `backups`")
     restore.add_argument("--yes", action="store_true", help="skip the typed confirmation")

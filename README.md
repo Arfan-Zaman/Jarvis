@@ -100,6 +100,42 @@ call Sam tomorrow" (task created with the correct date), an ambiguous request
 that asked which business, a task list, saving a preference, and declining to
 send email. Replies take 2 to 30 seconds; the first after a restart is slowest.
 
+## JARVIS Desktop: double clap, then "Jarvis…"
+
+A small Mac app shows JARVIS as a glowing orb floating on your desktop, on
+every Space. It starts by itself when you log in and starts the JARVIS server,
+so no command is needed.
+
+1. **Clap twice.** You hear a chime and the orb turns pink.
+2. **Say "Jarvis" and your request**, for example "Jarvis, remind me to call
+   the bank tomorrow". Saying only "Jarvis" gets "Yes, sir?", and it listens
+   for the request.
+3. JARVIS answers in the bubble beside the orb, speaks the answer, and carries
+   out the request with the same safety rules as chat.
+
+Also: **click** the orb to talk without clapping; click it while it speaks to
+stop it. **Drag** it anywhere (the position is remembered). **Right-click** for
+Open JARVIS, turning clap listening off and on, and Quit. Say "go to sleep" to
+end. Orb colours: violet is ready, pink is listening, a fast spin is thinking,
+cyan is speaking, grey is muted, red is offline.
+
+```bash
+python3 -m jarvis desktop install     # build, start now, start at every login
+python3 -m jarvis desktop uninstall   # stop it and remove the login item
+python3 -m jarvis desktop status
+```
+
+- macOS asks once for microphone access (choose Allow). While clap listening
+  is on, macOS shows its orange microphone dot.
+- The microphone is analysed on the Mac only to find claps. Speech is recorded
+  only after a double clap or a click, and goes only to the local JARVIS server.
+- The clap detector looks for a loud, very short, noise-like sound twice,
+  120 to 700 milliseconds apart. Speech, music, knocks and single or slow claps
+  are ignored (tested). Real rooms differ, so tell JARVIS if it misses claps or
+  wakes by mistake, and the thresholds can be tuned.
+- The only file outside `~/JARVIS` is the login item
+  `~/Library/LaunchAgents/local.jarvis.desktop.plist`.
+
 ## Voice
 
 In Chat, click the **microphone**, speak, and click it again. JARVIS writes
@@ -359,7 +395,7 @@ cd ~/JARVIS
 python3 -m unittest discover -s tests
 ```
 
-227 tests cover database initialisation, memory create/retrieve/delete, task
+233 tests cover database initialisation, memory create/retrieve/delete, task
 creation and completion, project creation, experience storage, configuration
 loading, safety checks, AI provider reporting, backup and restore, the web
 API, the tool registry, tool execution, permissions, the run log, and the
@@ -369,7 +405,9 @@ recovery), and the conversation (routing, truthful reporting, follow-up
 questions, approvals in chat), and memory (index sync, ranking, the
 remember and offer-to-remember flows, citations), autonomy levels, and the web
 tools (against a fake local server, so tests never use the internet), and
-voice (including a real speak-then-hear round trip on this Mac). The automated tests use a scripted stand-in, so they never need
+voice (including a real speak-then-hear round trip on this Mac), and the
+desktop app (it is compiled, signed and run against test recordings of claps,
+knocks and speech). The automated tests use a scripted stand-in, so they never need
 Ollama. Each test uses its own temporary database and never touches `data/`.
 
 ## Backup and recovery
@@ -400,7 +438,8 @@ Ollama. Each test uses its own temporary database and never touches `data/`.
 - Without a search key, web search is limited to Wikipedia and instant answers,
   so some factual questions fail (honestly) and news is not available.
 - Web answers take 20 to 60 seconds with the local model.
-- Voice is push-to-talk; there is no wake word yet. Speech recognition is
+- In the browser, voice is push-to-talk. Hands-free use is through JARVIS
+  Desktop (double clap, then "Jarvis"). Speech recognition is
   English only with the current model.
 - Memory search matches words and word forms, not meaning: "car" will not find
   "vehicle". Near-duplicates worded differently can both be stored.
