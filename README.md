@@ -131,8 +131,10 @@ python3 -m jarvis desktop status
   only after a double clap or a click, and goes only to the local JARVIS server.
 - The clap detector looks for a loud, very short, noise-like sound twice,
   120 to 700 milliseconds apart. Speech, music, knocks and single or slow claps
-  are ignored (tested). Real rooms differ, so tell JARVIS if it misses claps or
-  wakes by mistake, and the thresholds can be tuned.
+  are ignored (tested). It was tuned on real claps from this Mac's microphone.
+  Every loud sound and the decision about it is logged in
+  `data/logs/desktop.log`, which is what to check if it misses claps or wakes
+  by mistake.
 - The only file outside `~/JARVIS` is the login item
   `~/Library/LaunchAgents/local.jarvis.desktop.plist`.
 
@@ -395,7 +397,7 @@ cd ~/JARVIS
 python3 -m unittest discover -s tests
 ```
 
-233 tests cover database initialisation, memory create/retrieve/delete, task
+234 tests cover database initialisation, memory create/retrieve/delete, task
 creation and completion, project creation, experience storage, configuration
 loading, safety checks, AI provider reporting, backup and restore, the web
 API, the tool registry, tool execution, permissions, the run log, and the

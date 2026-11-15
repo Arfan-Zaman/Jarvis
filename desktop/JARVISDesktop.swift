@@ -42,12 +42,16 @@ final class ClapDetector {
     private var lastTrigger = -1_000_000
     var onClap: ((Double) -> Void)?
     var onDoubleClap: ((Double) -> Void)?
+    var onDebug: ((String) -> Void)?   // why a loud sound was or was not taken as a clap
 
-    // Tunables (frames are 10 ms).
-    let minPeak: Float = 0.12          // a clap is loud...
-    let onsetRatio: Float = 6          // ...far above the room noise...
-    let minZeroCrossings: Float = 0.12 // ...noise-like, not a voiced sound...
-    let maxClapFrames = 12             // ...and short: gone within 120 ms
+    // Tunables (frames are 10 ms). Tuned on real claps recorded by the MacBook Pro
+    // microphone (2026-11-16): peak 0.09-0.30, 22-95x the room level, faded in 10-20 ms,
+    // and duller than expected (zero-crossing rate only 0.04-0.10), so "brightness" is
+    // used only to reject deep thuds such as a knock on a desk or door.
+    let minPeak: Float = 0.06          // a clap is loud...
+    let onsetRatio: Float = 12         // ...very sudden compared with the room...
+    let minBrightness: Float = 0.004   // ...not a deep thud...
+    let maxClapFrames = 6              // ...and short: faded within 60 ms
     let minGap = 12, maxGap = 70       // two claps 120-700 ms apart
     let cooldown = 150                 // 1.5 s before another trigger
 
@@ -67,20 +71,32 @@ final class ClapDetector {
     }
 
     private func analyse(_ chunk: ArraySlice<Float>) {
-        var sum: Float = 0, peak: Float = 0, crossings = 0
+        var sum: Float = 0, peak: Float = 0, crossings = 0, change: Float = 0
         var previous = chunk.first ?? 0
         for sample in chunk {
             sum += sample * sample
             peak = max(peak, abs(sample))
             if (sample >= 0) != (previous >= 0) { crossings += 1 }
+            change += (sample - previous) * (sample - previous)
             previous = sample
         }
         let rms = (sum / Float(chunk.count)).squareRoot()
         let zcr = Float(crossings) / Float(chunk.count)
+        let brightness = sum > 0 ? change / sum : 0   // high for crisp sounds, tiny for deep thuds
         let baseline = recent.isEmpty ? floorLevel : max(recent.reduce(0, +) / Float(recent.count), floorLevel)
 
+        let time = Double(frame) * Double(frameSize) / sampleRate
+        if !inClap && peak >= 0.04, let onDebug {
+            var why: [String] = []
+            if peak < minPeak { why.append("too quiet") }
+            if rms < baseline * onsetRatio { why.append("not sudden enough") }
+            if brightness < minBrightness { why.append("deep thud") }
+            onDebug(String(format: "t=%.2f peak=%.3f rms=%.4f sudden=%.1fx zcr=%.2f bright=%.4f %@",
+                           time, peak, rms, rms / max(baseline, 0.0001), zcr, brightness,
+                           why.isEmpty ? "-> onset" : "rejected: " + why.joined(separator: ", ")))
+        }
         if !inClap {
-            if peak >= minPeak && rms >= baseline * onsetRatio && zcr >= minZeroCrossings {
+            if peak >= minPeak && rms >= baseline * onsetRatio && brightness >= minBrightness {
                 inClap = true
                 clapStart = frame
                 clapPeakRMS = rms
@@ -92,9 +108,11 @@ final class ClapDetector {
             let length = frame - clapStart
             if rms < clapPeakRMS * 0.25 {                // faded: it was short and sharp
                 inClap = false
+                onDebug?(String(format: "   faded after %d ms -> clap", length * 10))
                 if length <= maxClapFrames { register(clapStart) } else { claps.removeAll() }
             } else if length > maxClapFrames {           // sustained: speech, music, a door...
                 inClap = false
+                onDebug?(String(format: "   still loud after %d ms -> not a clap", length * 10))
                 claps.removeAll()
             }
         }
@@ -108,6 +126,7 @@ final class ClapDetector {
     private func register(_ start: Int) {
         let seconds = Double(start) * Double(frameSize) / sampleRate
         onClap?(seconds)
+        if let previous = claps.last { onDebug?(String(format: "   gap to previous clap: %d ms", (start - previous) * 10)) }
         claps = claps.filter { start - $0 <= maxGap }
         if let previous = claps.last, start - previous >= minGap, start - lastTrigger >= cooldown {
             lastTrigger = start
@@ -116,6 +135,25 @@ final class ClapDetector {
             return
         }
         claps.append(start)
+    }
+}
+
+// MARK: - Diagnostic log (data/logs/desktop.log)
+
+enum DesktopLog {
+    static let url = URL(fileURLWithPath: Settings.root + "/data/logs/desktop.log")
+    static let queue = DispatchQueue(label: "jarvis.log")
+    static func write(_ line: String) {
+        let stamp = ISO8601DateFormatter().string(from: Date())
+        queue.async {
+            let text = "\(stamp) \(line)\n"
+            try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            if let handle = try? FileHandle(forWritingTo: url) {
+                handle.seekToEndOfFile(); handle.write(text.data(using: .utf8)!); try? handle.close()
+            } else {
+                try? text.data(using: .utf8)!.write(to: url)
+            }
+        }
     }
 }
 
@@ -451,6 +489,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, AVAudioPlayerDelegate 
         let allowed = await withCheckedContinuation { (done: CheckedContinuation<Bool, Never>) in
             AVCaptureDevice.requestAccess(for: .audio) { done.resume(returning: $0) }
         }
+        DesktopLog.write("microphone permission: \(allowed ? "allowed" : "DENIED")")
         guard allowed else {
             setState(.muted)
             say("I need microphone access to hear your claps. Allow JARVIS in System Settings, Privacy & Security, Microphone. You can still click me.", speak: false, linger: 30)
@@ -459,7 +498,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, AVAudioPlayerDelegate 
         let input = engine.inputNode
         let format = input.inputFormat(forBus: 0)
         let detector = ClapDetector(sampleRate: format.sampleRate)
-        detector.onDoubleClap = { [weak self] _ in DispatchQueue.main.async { self?.wake() } }
+        detector.onDoubleClap = { [weak self] _ in
+            DesktopLog.write("DOUBLE CLAP -> waking")
+            DispatchQueue.main.async { self?.wake() }
+        }
+        detector.onDebug = { DesktopLog.write($0) }
+        DesktopLog.write(String(format: "microphone started: %.0f Hz, %d channel(s)", format.sampleRate, format.channelCount))
         self.detector = detector
         input.removeTap(onBus: 0)
         input.installTap(onBus: 0, bufferSize: 1024, format: format) { [weak self] buffer, _ in
@@ -523,6 +567,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, AVAudioPlayerDelegate 
         Task { @MainActor in
             do {
                 let text = try await api.transcribe(wav)
+                DesktopLog.write("heard: \(text)")
                 guard let request = request(from: text) else {
                     setState(.idle); say(text.isEmpty ? "I didn't catch that." : "I heard “\(text)”, but not my name.", speak: false, linger: 5)
                     return
@@ -595,6 +640,7 @@ if arguments.count >= 3, arguments[1] == "--test-clap" {
     var clapCount = 0
     detector.onClap = { _ in clapCount += 1 }
     detector.onDoubleClap = { print(String(format: "DOUBLE_CLAP %.2f", $0)) }
+    if arguments.contains("--verbose") { detector.onDebug = { print($0) } }
     let samples = Array(UnsafeBufferPointer(start: buffer.floatChannelData![0], count: Int(buffer.frameLength)))
     stride(from: 0, to: samples.count, by: 1024).forEach { detector.process(Array(samples[$0..<min($0 + 1024, samples.count)])) }
     print("CLAPS \(clapCount)")

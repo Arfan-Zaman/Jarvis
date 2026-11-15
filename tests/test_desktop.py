@@ -24,13 +24,18 @@ def write_wav(path, samples):
         w.writeframes(b"".join(struct.pack("<h", int(max(-1, min(1, s)) * 32767)) for s in samples))
 
 
-def recording(seconds, claps=(), knocks=()):
+def recording(seconds, claps=(), knocks=(), dull=()):
     random.seed(7)
     samples = [random.gauss(0, 0.004) for _ in range(int(RATE * seconds))]
     for at in claps:
         start = int(at * RATE)
         for i in range(int(0.06 * RATE)):
             samples[start + i] += random.uniform(-1, 1) * 0.7 * math.exp(-i / (0.012 * RATE))
+    for at in dull:            # like real claps on the MacBook microphone: duller and quieter
+        start, y = int(at * RATE), 0.0
+        for i in range(int(0.05 * RATE)):
+            y += 0.12 * (random.uniform(-1, 1) - y)
+            samples[start + i] += y * 1.0 * math.exp(-i / (0.006 * RATE))
     for at in knocks:
         start = int(at * RATE)
         for i in range(int(0.08 * RATE)):
@@ -88,6 +93,11 @@ class ClapDetectorTests(unittest.TestCase):
 
     def test_double_clap_triggers(self):
         self.assertEqual(self.detect(recording(3, claps=(1.0, 1.35))), (1, 2))
+
+    def test_dull_real_style_double_clap_triggers(self):
+        # Real claps recorded on 2026-11-16 were much duller than textbook claps.
+        self.assertEqual(self.detect(recording(4, dull=(1.0, 1.45))), (1, 2))
+        self.assertEqual(self.detect(recording(4, dull=(1.0,))), (0, 1))
 
     def test_single_and_slow_claps_do_not(self):
         self.assertEqual(self.detect(recording(3, claps=(1.0,))), (0, 1))

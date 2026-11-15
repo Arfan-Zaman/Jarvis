@@ -2,6 +2,20 @@
 
 Newest entries first. Record what changed, why, and what was verified.
 
+## 2026-11-16 — Clap detector retuned on real claps
+
+- The owner reported missed claps. The new diagnostic log
+  (`data/logs/desktop.log`: every loud sound with its peak, suddenness,
+  zero-crossing rate, brightness and the reason for the decision) showed all
+  three real double claps were heard: peak 0.09-0.30, 22-95x the room level,
+  faded within 10-20 ms, pairs about 450 ms apart. All were rejected as "not
+  clap-like" because the MacBook Pro microphone makes claps dull (zero-crossing
+  rate 0.04-0.10, against the 0.12 required).
+- New rule: peak at least 0.06, at least 12x the room level, faded within 60 ms,
+  and a "brightness" check that only rejects deep thuds. Tests added with dull,
+  real-style claps; single and slow claps, knocks and speech are still ignored.
+- The log stays on so future tuning uses real data.
+
 ## 2026-11-16 — JARVIS Desktop: floating orb, double clap, auto-start
 
 ### Built
