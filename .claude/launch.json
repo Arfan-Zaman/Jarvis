@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "jarvis",
+      "runtimeExecutable": "sh",
+      "runtimeArgs": ["-c", "JARVIS_PORT=${PORT:-8765} exec python3 -m jarvis serve"],
+      "port": 8765
+    }
+  ]
+}

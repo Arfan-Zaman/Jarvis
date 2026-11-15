@@ -1,0 +1,70 @@
+# JARVIS development log
+
+Newest entries first. Record what changed, why, and what was verified.
+
+## 2026-11-15 — Milestone 1: core foundation
+
+### Environment at the time
+- macOS 26.6.2, Apple M5, 16 GB memory, 258 GB free disk.
+- Python 3.14.7 (Miniconda), SQLite 3.53.2, Git 2.50.1, Node 24.16.0 (unused).
+- Nothing was installed for this milestone.
+
+### Decisions
+- **Standard library only.** The web server, database access, configuration,
+  and tests all use what ships with Python. No virtual environment is needed
+  and there is nothing to break on upgrade. Revisit only when a feature
+  genuinely needs a dependency.
+- **SQLite, one short-lived connection per operation**, WAL mode, foreign keys
+  enforced. Simple and safe with the threaded web server.
+- **Schema migrations** are an append-only list in `jarvis/db.py`, tracked with
+  SQLite's `user_version`.
+- **One generic store** (`stores/base.py`) gives every knowledge table the same
+  metadata, validation, search, archive and delete behaviour.
+- **Everything goes through the orchestrator.** The web API and command line
+  never touch a store directly, so the safety layer and audit trail cannot be
+  bypassed by accident.
+- **Two-step approvals** for high-impact actions: request, human approves,
+  then execute. Approvals are fingerprinted to the exact action, expire, and
+  are single-use.
+- **Archive is the default way to remove something.** Permanent deletion is
+  classed as destructive and needs approval.
+- **No fake AI.** With no provider, chat stores a `system` message, never an
+  `assistant` one.
+- **Loopback only.** The config rejects non-local hosts, and the server rejects
+  foreign `Host` and `Origin` headers.
+- **Seed data** is limited to the two business workspaces and the core agent,
+  created once and never re-created if the user removes them.
+
+### Built
+Core orchestrator, AI provider abstraction, memory, experience/learning, task
+manager, project manager, safety/permission layer, configuration manager,
+logging, backup/recovery, the SQLite data model, the local web interface, and
+the command line.
+
+### Verified
+- `python3 -m unittest discover -s tests`: 90 tests, all passing.
+- Browser check against a throwaway database: dashboard, saving a memory, the
+  permanent-delete confirmation, adding and completing a task, chat with no
+  provider, the System page, and phone-width layout on all seven pages. No
+  console errors.
+- Command line check: serve, stop, status, backup, backups, restore (confirmed,
+  cancelled, and invalid name).
+
+### Fixed along the way
+- A pre-restore backup could prune the very backup being restored. Pruning is
+  now skipped for that backup, with a test.
+- Forms lost their default values after saving.
+- The page overflowed sideways at phone width.
+- A slow page load could overwrite a newer one after quick navigation.
+- A startup event was being logged by every command, not only by the server.
+
+### Known gaps
+- Ollama adapter tested only against a simulated server.
+- The Claude Code preview launcher refused to start the server from
+  `.claude/launch.json` (it reported the port as in use when it was not), so
+  the browser check ran the server from a shell instead. The launch entry is
+  kept but unverified.
+- See "Current limitations" in the README.
+
+### Next
+Milestone 2: connect one local model (see README).

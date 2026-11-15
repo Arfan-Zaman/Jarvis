@@ -1,0 +1,40 @@
+# --- JARVIS runtime data (never commit: database, logs, backups, pid file) ---
+/data/
+
+# --- Secrets and local configuration ---
+.env
+.env.*
+!.env.example
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# --- SQLite side files, wherever they appear ---
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+
+# --- Node (not used yet, reserved) ---
+node_modules/
+
+# --- Editors and OS ---
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# --- Claude Code local settings ---
+.claude/settings.local.json

@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>JARVIS</title>
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+  <div class="backdrop" aria-hidden="true"></div>
+
+  <div class="shell">
+    <aside class="sidebar glass">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true"></span>
+        <div>
+          <div class="brand-name">JARVIS</div>
+          <div class="brand-sub" id="brand-version">core</div>
+        </div>
+      </div>
+
+      <nav class="nav" aria-label="Sections">
+        <a href="#dashboard" data-view="dashboard">Dashboard</a>
+        <a href="#chat" data-view="chat">Chat</a>
+        <a href="#memory" data-view="memory">Memory</a>
+        <a href="#tasks" data-view="tasks">Tasks</a>
+        <a href="#projects" data-view="projects">Projects</a>
+        <a href="#experiences" data-view="experiences">Experiences</a>
+        <a href="#system" data-view="system">System <span class="badge" id="approval-badge" hidden></span></a>
+      </nav>
+
+      <div class="ai-pill" id="ai-pill" title="">
+        <span class="dot" id="ai-dot"></span>
+        <span id="ai-label">Checking AI…</span>
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <h1 id="view-title">Dashboard</h1>
+        <p id="view-subtitle"></p>
+      </header>
+      <section id="view" aria-live="polite"></section>
+    </main>
+  </div>
+
+  <div class="toasts" id="toasts" role="status" aria-live="polite"></div>
+
+  <dialog id="confirm" class="glass">
+    <h2 id="confirm-title">Confirm</h2>
+    <p id="confirm-text"></p>
+    <p class="muted" id="confirm-note"></p>
+    <textarea id="confirm-input" hidden></textarea>
+    <div class="row end">
+      <button type="button" class="btn" id="confirm-cancel">Cancel</button>
+      <button type="button" class="btn danger" id="confirm-ok">Confirm</button>
+    </div>
+  </dialog>
+
+  <script src="/static/app.js" defer></script>
+</body>
+</html>

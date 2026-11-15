@@ -1,0 +1,10 @@
+[project]
+name = "jarvis"
+version = "0.1.0"
+description = "JARVIS - a local, modular personal assistant core."
+requires-python = ">=3.11"
+# Deliberately empty: the core runs on the Python standard library only.
+dependencies = []
+
+[tool.jarvis]
+# JARVIS is run in place with `python3 -m jarvis`; it does not need installing.
