@@ -187,6 +187,32 @@ def _learn_now(app: Jarvis, req: Request):
     return {"started": True}
 
 
+@route("GET", "/api/self-review")
+def _selfreview_status(app: Jarvis, req: Request):
+    """Weekly self-review: on or off, the last pass, and proposal branches waiting for the owner."""
+    return app.selfreview.status()
+
+
+@route("POST", "/api/self-review/run")
+def _selfreview_now(app: Jarvis, req: Request):
+    """Start a self-review pass now, in the background; poll GET /api/self-review."""
+    import threading
+    threading.Thread(target=app.selfreview.once, name="jarvis-selfreview-now", daemon=True).start()
+    return {"started": True}
+
+
+@route("POST", r"/api/self-review/(jarvis(?:/|%2F)self-review-[0-9-]+)/(approve|reject)")
+def _selfreview_decide(app: Jarvis, req: Request):
+    # Owner action: requests to this server come from the human at the keyboard. No tool exposes this.
+    from urllib.parse import unquote
+    branch = unquote(req.params[0])
+    try:
+        result = app.selfreview.approve(branch) if req.params[1] == "approve" else app.selfreview.reject(branch)
+    except ValueError as exc:
+        raise ValidationError(str(exc)) from None
+    return (200 if result.get("ok") else 409), result
+
+
 @route("GET", "/api/live")
 def _live(app: Jarvis, req: Request):
     """JARVIS's current state for the face and core, derived from real runs."""

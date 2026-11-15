@@ -66,6 +66,8 @@ class Jarvis:
         self.engine = Engine(self)
         from .learner import Learner
         self.learner = Learner(self)
+        from .selfreview import SelfReview
+        self.selfreview = SelfReview(self)
         self.voice = Voice(self.config)
         self.conversation = Conversation(self)
         self.started_at = time.time()
