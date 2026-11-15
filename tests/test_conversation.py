@@ -62,6 +62,8 @@ class AnswerTests(ConversationCase):
         for tool in self.app.tools.list():
             self.assertIn(tool["description"], prompt)
         self.assertIn("Never say you have done", prompt)
+        self.assertIn("Reason first; resolve always", prompt)
+        self.assertIn("Do not simply agree", prompt)
         self.assertNotIn("browse the web", prompt)                     # it can, since Phase 3.4
         self.assertIn("search the web", prompt)
         self.assertEqual(system_prompt(self.app.tools.list()), prompt)
@@ -80,7 +82,7 @@ class ActTests(ConversationCase):
         self.scripted([act("Add a task to call Sam tomorrow"), plan(("Create the task", "tasks.create")),
                        inputs(title="Call Sam"), ACHIEVED])
         reply, _ = self.say("Remind me to call Sam tomorrow")
-        self.assertEqual(reply["content"], "Done. I added the task “Call Sam”.")
+        self.assertEqual(reply["content"], "Completed. I added the task “Call Sam”.")
         self.assertTrue(reply["run_id"])
         run = self.app.runs.get(reply["run_id"])
         self.assertEqual((run["goal"], run["status"]), ("Add a task to call Sam tomorrow", "completed"))
@@ -93,7 +95,7 @@ class ActTests(ConversationCase):
                        inputs(title="Order oil"), inputs(content="The gate code is on the fridge"), ACHIEVED])
         reply, _ = self.say("Add a task to order oil and remember the gate code is on the fridge")
         self.assertEqual(reply["content"],
-                         "Done. I added the task “Order oil” and noted “The gate code is on the fridge”.")
+                         "Completed. I added the task “Order oil” and noted “The gate code is on the fridge”.")
 
     def test_refining_a_new_task_is_reported_as_one_change(self):
         self.scripted([act("Add a task to call Sam tomorrow"),
@@ -101,7 +103,7 @@ class ActTests(ConversationCase):
                        inputs(title="Call Sam"), inputs(id=1, due_at="2030-01-02"), inputs(content="Sam likes calls."),
                        ACHIEVED])
         reply, _ = self.say("Remind me to call Sam tomorrow")
-        self.assertEqual(reply["content"], "Done. I added the task “Call Sam” and noted “Sam likes calls”.")
+        self.assertEqual(reply["content"], "Completed. I added the task “Call Sam” and noted “Sam likes calls”.")
 
     def test_the_model_is_told_the_date_and_project_names(self):
         self.scripted([act("List my tasks"), plan(("List", "tasks.list")), inputs(), ACHIEVED, "None yet."])
@@ -136,15 +138,15 @@ class ActTests(ConversationCase):
         self.scripted([act("Add a task to project 999"), plan(("Create", "tasks.create")),
                        inputs(title="x", project_id=999), inputs(title="x", project_id=998)])
         reply, _ = self.say("Add a task to project 999")
-        self.assertTrue(reply["content"].startswith("I couldn't complete that."))
-        self.assertIn("Nothing was changed.", reply["content"])
-        self.assertNotIn("Done", reply["content"])
+        self.assertTrue(reply["content"].startswith("The operation failed."))
+        self.assertIn("Nothing was changed, and I have not marked it as complete.", reply["content"])
+        self.assertNotIn("Completed", reply["content"])
         self.assertEqual(self.app.runs.get(reply["run_id"])["status"], "failed")
 
     def test_engine_refusing_to_start_becomes_a_notice(self):
         self.scripted([act("Add a task"), plan(("x", "nope.tool")), plan(("x", "nope.tool"))])
         reply, _ = self.say("Add a task")
-        self.assertIn("I couldn't complete that", reply["content"])
+        self.assertIn("The operation failed", reply["content"])
 
 
 class FollowUpTests(ConversationCase):
@@ -154,12 +156,12 @@ class FollowUpTests(ConversationCase):
                        plan(("Create", "tasks.create")), inputs(title="Follow up the customer", project_id=2),
                        ACHIEVED])
         reply, conversation = self.say("Add a task for the business to follow up the customer")
-        self.assertEqual(reply["content"], "Before I go on: Which business: Monsoor Motors or Aureus Detailing?")
+        self.assertEqual(reply["content"], "One decision is needed before I proceed: Which business: Monsoor Motors or Aureus Detailing?")
         self.assertEqual(self.app.runs.get(reply["run_id"])["status"], "blocked")
 
         prompts_before = len(self.model.prompts)
         answer, _ = self.say("Aureus Detailing", conversation)
-        self.assertEqual(answer["content"], "Done. I added the task “Follow up the customer”.")
+        self.assertEqual(answer["content"], "Completed. I added the task “Follow up the customer”.")
         self.assertEqual(answer["run_id"], reply["run_id"])           # same action, continued
         # The answer went straight to the paused action: no new routing call.
         self.assertEqual(json.loads(self.model.prompts[prompts_before][1].content)["request"], "PLAN")

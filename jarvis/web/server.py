@@ -173,6 +173,12 @@ def _tool_execute(app: Jarvis, req: Request):
     return (202 if result["status"] == "approval_required" else 200), result
 
 
+@route("GET", "/api/live")
+def _live(app: Jarvis, req: Request):
+    """JARVIS's current state for the face and core, derived from real runs."""
+    return app.engine.live()
+
+
 @route("GET", "/api/runs")
 def _runs(app: Jarvis, req: Request):
     return {"items": app.runs.list(limit=_int(req.query.get("limit", 50), "limit"),

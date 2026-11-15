@@ -164,6 +164,54 @@ class Engine:
                                details={"run_id": run_id})
         return self.report(run_id)
 
+    # Presence states, derived only from stored runs (never simulated).
+    RECENT_SECONDS = 8
+
+    def live(self) -> dict:
+        """What JARVIS is doing right now, for the visual identity.
+
+        calm, analysing, planning, executing, concerned (a step just failed),
+        resolute (retrying after a failure), approval, awaiting (needs an answer),
+        success, failure. Success and failure are shown only for a few seconds.
+        """
+        from datetime import datetime, timezone
+        runs = self.app.runs.list(limit=1, kind="goal")
+        idle = {"state": "calm", "run_id": None, "goal": None, "step": None, "activity": []}
+        if not runs:
+            return idle
+        run = self.app.runs.get(runs[0]["id"])
+        executions = [e for e in run["steps"] if e["plan_id"] is not None]
+        activity = [{"tool": e["tool"], "status": e["status"], "error": e["error"],
+                     "description": next((s["description"] for s in run["plan"] if s["id"] == e["plan_id"]), e["tool"])}
+                    for e in executions[-6:]]
+        current = next((s for s in run["plan"] if s["status"] == "running"), None)
+        base = {"run_id": run["id"], "goal": run["goal"], "activity": activity,
+                "plan": [{"position": s["position"], "description": s["description"], "tool": s["tool"],
+                          "status": s["status"]} for s in run["plan"]],
+                "step": {"position": current["position"], "description": current["description"],
+                         "tool": current["tool"]} if current else None}
+        status = run["status"]
+        if status == "running":
+            failed_last = bool(executions) and executions[-1]["status"] == "failed"
+            if current:
+                state = "resolute" if failed_last and current["attempts"] > 1 else "executing"
+            elif failed_last:
+                state = "concerned"
+            else:
+                state = "planning" if run["plan"] else "analysing"
+            return {**base, "state": state}
+        if status in ("waiting_approval", "blocked"):
+            return {**base, "state": "approval" if status == "waiting_approval" else "awaiting",
+                    "detail": run["error"]}
+        finished = run.get("finished_at")
+        if finished and status in ("completed", "failed"):
+            age = (datetime.now(timezone.utc) - datetime.fromisoformat(finished)).total_seconds()
+            if age <= self.RECENT_SECONDS:
+                verified = self.report(run["id"])["verified_complete"]
+                state = "success" if status == "completed" and verified else "failure"
+                return {**base, "state": state, "detail": run["error"]}
+        return {**idle, "last_run": run["id"]}
+
     def report(self, run_id: int) -> dict:
         """What actually happened, taken from the stored plan and run log."""
         run = self._goal_run(run_id)

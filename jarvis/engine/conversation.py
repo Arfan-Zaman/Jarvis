@@ -31,6 +31,7 @@ import re
 from ..common import JarvisError, now_local
 from ..logging_setup import get_logger
 from ..providers import ChatMessage, ProviderError
+from . import persona
 from .context import ContextBuilder
 from .engine import parse_json
 
@@ -82,8 +83,9 @@ Keep any web address the owner gave, exactly as written, in the goal.
 JARVIS's tools:
 """
 
-ANSWER_FROM_DATA = """You are JARVIS. The owner asked something and JARVIS looked it up in its own
-database. Answer the owner's message using ONLY the results below. Be brief and natural.
+ANSWER_FROM_DATA = """You are JARVIS, the owner's executive intelligence: calm, precise, natural, never robotic.
+The owner asked something and you looked it up. Answer using ONLY the results below. Lead with the
+answer; be brief.
 If the results do not contain the answer, say you don't have that information.
 Do not mention tools, JSON or databases. Do not claim to have changed anything.
 
@@ -105,9 +107,7 @@ def system_prompt(tools: list[dict], memories: list[dict] | None = None) -> str:
                  "Treat 'unverified' ones with care. If your reply relies on any of them, end it with a "
                  "final line exactly like [memory: 3, 7] listing their numbers. Otherwise add nothing.")
     return (
-        "You are JARVIS, a private assistant running entirely on the owner's Mac. "
-        "Be calm, concise and precise, with a light touch of dry wit when it fits. "
-        "Speak naturally; never mention JSON, tools or prompts.\n\n"
+        persona.CHARACTER + "\nNever mention JSON, tools or prompts.\n\n"
         f"Actions JARVIS can carry out when the owner asks:\n{abilities}\n\n"
         f"It is now {now_local()} (the owner's local time).\n"
         "JARVIS can search the web and read web pages (through actions), and the owner can talk to it by voice. "
@@ -159,14 +159,14 @@ class Conversation:
         if pending:
             if CANCEL.match(text):
                 self.app.engine.cancel(pending)
-                return self._say(conversation_id, "Understood. I've dropped that request.", pending)
+                return self._say(conversation_id, persona.DROPPED, pending)
             return self._act(conversation_id, text, resume=pending)
 
         offer = self._pending_offer(conversation_id)
         if offer and YES.match(text):
             return self._remember(conversation_id, offer["fact"], offer["category"])
         if offer and NO.match(text):
-            return self._say(conversation_id, "Understood. I won't keep that.", None)
+            return self._say(conversation_id, persona.WONT_KEEP, None)
 
         decision = self._route(conversation_id)
         if decision.get("mode") == "act":
@@ -258,8 +258,8 @@ class Conversation:
             return self.app.conversations.add_message(
                 conversation_id, "system", f"I couldn't save that: {result['error']}")
         saved = result["output"]
-        text = (f"I already had that: {_quote(saved['content'], 200)}." if saved.get("duplicate")
-                else f"Noted. I'll remember {_quote(saved['content'], 200)}.")
+        text = (persona.ALREADY_KNOWN.format(fact=_quote(saved['content'], 200)) if saved.get("duplicate")
+                else persona.REMEMBERED.format(fact=_quote(saved['content'], 200)))
         status = self.app.provider.status()
         return self.app.conversations.add_message(
             conversation_id, "assistant", text, status.name, status.model,
@@ -299,23 +299,22 @@ class Conversation:
         did = f"I {_join(changes)}." if changes else ""
         status = report["status"]
 
+        prefix = f"{did} " if did else ""
         if status == "completed":
             if changes:
-                return f"Done. {did}"
-            answer = self._answer_from_data(conversation_id, done) or "Done. Nothing needed changing."
+                return persona.COMPLETED.format(did=did)
+            answer = self._answer_from_data(conversation_id, done) or persona.COMPLETED_NOTHING_CHANGED
             return answer + self._sources(done)
         if status == "blocked":
-            return (f"{did} " if did else "") + f"Before I go on: {report['question']}"
+            return persona.NEEDS_INFORMATION.format(did=prefix, question=report["question"])
         if status == "waiting_approval":
             approval = report.get("approval") or {}
-            return ((f"{did} " if did else "")
-                    + f"This next step needs your approval: {approval.get('summary', 'an action')}. "
-                      "Approve or deny it on the System page, then press Continue.")
+            return persona.NEEDS_APPROVAL.format(did=prefix, summary=approval.get("summary", "an action"))
         if status == "cancelled":
-            return "That request was cancelled."
-        reason = report.get("error") or "it did not finish"
-        return (f"I couldn't complete that. {reason}"
-                + (f" What I did manage: {did[2:] if did.startswith('I ') else did}" if did else " Nothing was changed."))
+            return persona.CANCELLED
+        reason = report.get("error") or "It did not finish."
+        return persona.FAILED.format(reason=reason) + (
+            persona.FAILED_PARTIAL.format(did=did) if did else persona.FAILED_NOTHING_CHANGED)
 
     @staticmethod
     def _sources(steps: list[dict]) -> str:

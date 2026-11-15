@@ -113,12 +113,12 @@ class ChatMemoryTests(JarvisTestCase):
         self.scripted([{"mode": "remember", "fact": "I prefer short answers", "category": "preference"},
                        {"mode": "remember", "fact": "I prefer short answers.", "category": "preference"}])
         reply, conversation = self.say("Remember that I prefer short answers")
-        self.assertEqual(reply["content"], "Noted. I'll remember “I prefer short answers”.")
+        self.assertEqual(reply["content"], "Understood. I'll remember “I prefer short answers”.")
         memory = self.app.list("memories")[0]
         self.assertEqual((memory["content"], memory["category"], memory["source"], memory["verification_status"]),
                          ("I prefer short answers", "preference", "user:chat", "user_provided"))
         again, _ = self.say("Remember I prefer short answers", conversation)
-        self.assertIn("already had that", again["content"])
+        self.assertIn("already have that", again["content"])
         self.assertEqual(len(self.app.list("memories")), 1)
         self.assertEqual(len(self.model.prompts), 2)                       # no engine run needed
 
@@ -143,7 +143,7 @@ class ChatMemoryTests(JarvisTestCase):
         self.assertEqual(self.app.list("memories"), [])                    # nothing saved yet
         self.assertIn("that question is asked separately", self.model.prompts[1][0].content)
         saved, _ = self.say("Yes please", conversation)
-        self.assertEqual(saved["content"], "Noted. I'll remember “Call me Arfan”.")
+        self.assertEqual(saved["content"], "Understood. I'll remember “Call me Arfan”.")
         memory = self.app.list("memories")[0]
         self.assertEqual((memory["category"], memory["verification_status"]), ("personal", "user_provided"))
         self.assertEqual(len(self.model.prompts), 2)                       # "yes" needed no model call

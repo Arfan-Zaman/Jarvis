@@ -20,27 +20,34 @@ section 4b (autonomous design).
   contact sheets; the roadmap's Phase 3 list is derived from them.
 - Remote `origin` is GitHub; push only when the owner asks.
 
-## Exact next task: step 3.6, the living interface (HUD)
+## In progress: visual identity and character (owner's spec, 2026-11-16)
 
-No installs needed.
+The owner supplied a full spec ("JARVIS - VISUAL IDENTITY + CHARACTER SYSTEM")
+and a reference board: a dark faceted obsidian mask with slanted hot-pink sensor
+eyes, a sidebar, real stat cards, a command bar, state cards (idle, listening,
+analysing, planning, executing, success, concerned, resolute, warning, error,
+critical), tool activity and a personality panel. **Push to GitHub after every
+step** (owner's standing instruction) and keep this file current.
 
-1. An arc-reactor status ring (SVG + CSS, no libraries) in the sidebar and,
-   larger, on the Chat page, with states: online, listening, transcribing,
-   thinking, working, speaking, offline. Each state is driven by real events
-   (recording started, request in flight, run executing, audio playing,
-   server unreachable), never decorative animation alone.
-2. Show the active model under the ring (from `/api/status`).
-3. Live action cards: while a chat request runs an action, poll
-   `/api/runs/<id>` (or a new lightweight `/api/runs/active`) and show the
-   current step ("Searching the web…", "Reading python.org…", "Adding a
-   task…") until it finishes; the run must exist server-side before the card
-   appears (start runs asynchronously or expose the active run id).
-4. Respect `prefers-reduced-motion`; keep the existing colours and layout.
-5. Tests: the active-run endpoint, state mapping, no claims without a run.
-6. Verify in the browser at desktop and phone widths.
-7. Update README, DEVLOG, ARCHITECTURE, ROADMAP and this file. Commit.
+Done:
+1. `jarvis/engine/persona.py`: the character (calm executive intelligence,
+   challenges weak ideas, never pretends) used by chat and look-up answers;
+   fixed outcome phrases ("Completed.", "The operation failed. ... I have not
+   marked it as complete.").
+2. `Engine.live()` and `GET /api/live`: presence state from real runs only
+   (calm, analysing, planning, executing, concerned, resolute, approval,
+   awaiting, success, failure).
 
-Then 3.7 (sandboxed code runner) and 3.8 (skills built once with Claude Code).
+Next steps, in order:
+3. `jarvis/web/static/identity.js` + `identity.css`: original faceted face
+   (SVG), sensor eyes (aperture, gaze follows the cursor), neural core (canvas),
+   state machine; a Presence home page laid out like the reference with real
+   numbers only; a clearly labelled simulated preview of all states.
+4. Desktop: show the identity in the floating panel (WKWebView of the
+   presence page in desktop mode); wake on the spoken name "Jarvis" (speech
+   segments transcribed locally; clap still works).
+5. Voice: automatically use the most natural installed English voice
+   (Premium/Enhanced) if present.
 
 ## Rules for the session
 
