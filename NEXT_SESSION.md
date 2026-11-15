@@ -1,56 +1,49 @@
 # Next session handoff
 
-Read this first. Then `ARCHITECTURE.md` sections 4.2a to 4.4 for the design.
+Read this first. Then `ARCHITECTURE.md` section 4 and `JARVIS_ROADMAP.md`.
 
 ## Where things stand (2026-11-15)
 
-- Phase 1 and Phase 2.1 are complete and committed on `main`. 114 tests passing.
-- JARVIS has 11 tools, one execution engine, and a run log. See README "Tools".
-- No AI model connected. Nothing installed. No remote.
-- The live database in `data/` upgrades from schema v1 to v2 (with a
-  `pre-upgrade-v1` backup) the next time JARVIS starts.
+- Phase 1, 2.1 and 2.2 complete and committed on `main`. 149 tests passing.
+- The reasoning engine plans and runs goals through the tools, but has only
+  been run with a scripted stand-in. No real AI model is connected.
+- Remote `origin` is https://github.com/Arfan-Zaman/Jarvis.git. Nothing has
+  been pushed; push only when the owner asks.
+- The live database upgrades to schema v3 (with a `pre-upgrade-v2` backup) the
+  next time JARVIS starts.
 
-## Exact next task: roadmap step 2.2, the reasoning engine
+## Exact next task: roadmap step 2.3, connect one local model
 
-Build the loop that turns a goal into tool calls. No installs, no real model:
-test it with a scripted stand-in provider.
+**Needs the owner's approval first** (decision D1): installing Ollama and
+downloading one small model, roughly 2 to 5 GB. Ask before installing.
 
-1. Create `jarvis/engine/engine.py` with `Engine.run(goal, actor, allowed)`:
-   open a run with `kind="goal"`, then loop: build the prompt (goal, tool specs
-   from `app.tools.list()`, steps so far), ask `app.provider.generate`, parse
-   one JSON step: `{"tool": name, "inputs": {...}}` or `{"final": "text"}`.
-2. Execute tool steps with `app.tools.execute(..., run_id=run_id)`; feed the
-   structured result back into the next prompt.
-3. Invalid model output: retry once, then fail the run with a clear error.
-4. Limits: maximum steps, maximum tool failures. Hitting one fails the run.
-5. `approval_required`: set the run to `waiting_approval` and stop. Add
-   `Engine.resume(run_id, approval_id)` to continue from that step.
-6. The report is built from the stored `run_steps` (what succeeded, failed,
-   was refused), not from the model's text. The model's final text is included
-   and labelled as the model's words.
-7. With no provider available, refuse to start and say so. Never fake a run.
-8. Expose `app.engine`, add `POST /api/runs` (start) and
-   `POST /api/runs/<id>/resume`.
-9. Tests with a scripted provider: single-step goal, multi-step goal, bad
-   output then recovery, bad output twice, step limit, failing tool, approval
-   pause and resume, allow-list respected, no provider, report matches the log.
-10. Run all tests, update README, DEVLOG, ARCHITECTURE, NEXT_SESSION, commit.
+1. Confirm free disk space and memory, then propose one small instruction-
+   following model that fits in 16 GB and is good at JSON output. Get approval.
+2. Install Ollama (official installer or Homebrew) and pull that one model.
+   Do not set Ollama to start at login unless the owner agrees.
+3. Set `JARVIS_AI_PROVIDER=ollama` and `JARVIS_AI_MODEL=<model>` in `.env`.
+4. Verify `OllamaProvider` against the real server: status, chat, errors.
+   Ask Ollama for JSON output (`"format": "json"`) when the engine calls it.
+5. Run three real goals end to end (one-step task, multi-step with a project,
+   one that should block for information). Record what worked and failed.
+6. Tune `PROTOCOL` in `jarvis/engine/engine.py` only where the real model
+   misbehaves. Keep all existing tests passing; add tests for any changes.
+7. Update README, DEVLOG, ARCHITECTURE, ROADMAP and this file. Commit.
 
-Then step 2.3 (connect a real local model), which needs the owner's approval
-to install Ollama and download one model.
+If the owner does not approve the install, do step 2.4 instead (full-text
+memory search and the context builder); it needs no installs.
 
 ## Rules for the session
 
-- Standard library only. No installs until step 2.3 and the owner's approval.
-- Everything stays in `~/JARVIS`.
+- No paid APIs. No installs or downloads without the owner's approval.
+- Everything stays in `~/JARVIS`, except the Ollama install the owner approves.
 - All actions go through `app.tools.execute`; the engine never calls stores.
 - Never report something as working unless a test or a real run showed it.
-- Do not start step 2.3 or later without being asked.
 
 ## Prompt to paste
 
-> Continue JARVIS. Read NEXT_SESSION.md and ARCHITECTURE.md, then implement
-> roadmap step 2.2 (the reasoning engine, tested with a scripted stand-in
-> model) exactly as described. Standard library only, no installs, preserve
-> existing tests, run all tests, update the docs, and commit. Be
-> token-efficient and give me a short plain-language report.
+> Continue JARVIS. Read NEXT_SESSION.md, ARCHITECTURE.md and
+> JARVIS_ROADMAP.md, then do roadmap step 2.3: recommend one small local model
+> for my Mac, and once I approve, install Ollama and that model, connect it,
+> and run real goals end to end. Preserve existing tests, update the docs and
+> commit. Do not push. Keep the report short and in plain language.

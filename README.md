@@ -2,7 +2,8 @@
 
 A local, modular personal assistant core. Milestone 1 is a small, stable
 foundation: persistent data, a safety layer, backups, and a local web
-interface. Phase 2.1 adds controlled tools and a run log. It has **no AI model connected yet** and says so wherever that
+interface. Phase 2.1 added controlled tools and a run log; Phase 2.2 adds a
+reasoning engine that plans and carries out goals using those tools. It has **no AI model connected yet** and says so wherever that
 matters.
 
 - Runs entirely on this Mac. Nothing is sent anywhere.
@@ -28,6 +29,8 @@ pages were also exercised by hand in a browser.
 | Logging | Rotating log file at `data/logs/jarvis.log` |
 | Backup / recovery | Consistent online backups, verification, pruning, approved restore |
 | Tools | 11 built-in tools with input rules and permission levels; discoverable and executable through one engine |
+| Reasoning engine | Takes a goal, plans steps, runs each through the tool engine, checks results, stops for approval or missing information, and reports only what the log proves. Needs an AI model to plan, so it is tested with a scripted stand-in |
+| Goals page | Submit a goal, see its plan, each step's status and the verified result; answer questions, continue or cancel |
 | Run log | Every tool execution is recorded with time, inputs, result or error, and can be retrieved |
 | Web interface | Dashboard, Chat, Memory, Tasks, Projects, Experiences, System status |
 
@@ -66,8 +69,34 @@ python3 -m jarvis backup          # back up now
 python3 -m jarvis backups         # list backups
 python3 -m jarvis restore <name>  # restore a backup (asks for confirmation)
 python3 -m jarvis tools           # list the tools JARVIS can execute
+python3 -m jarvis goal "Add a task to call the supplier"   # plan and run a goal (needs a model)
 python3 -m jarvis tool tasks.create '{"title": "Example"}'   # execute one tool
 ```
+
+## Goals and the reasoning engine
+
+You give JARVIS a goal in plain language. It works in four stages:
+
+1. **Plan.** The model proposes a short list of steps, each using one
+   registered tool. The plan is checked (real tools only, within the step
+   limit) and stored before anything runs.
+2. **Act.** For each step the model supplies the tool's inputs, and the engine
+   runs it through the same permission-checked tool engine as everything else.
+3. **Check.** A failed step gets one corrected attempt. A refused step stops
+   the goal. A sensitive step pauses for your approval. If the model needs
+   information, the goal stops with its question.
+4. **Report.** Built from the run log, not from what the model says. A goal
+   is "verified" only if every planned step has a recorded success.
+
+Relevant memories and lessons are shown to the model as context. Each
+finished or failed goal is saved once as an experience. Limits on plan
+length, tool failures and model calls (see `.env.example`) prevent runaway
+loops. A goal interrupted by a crash or shutdown can be continued without
+repeating finished steps.
+
+**Current state:** the engine is built and tested with a scripted stand-in
+model. No real model is connected, so on your Mac the Goals page and the
+`goal` command say so and do nothing.
 
 ## Tools
 
@@ -83,7 +112,7 @@ the safety layer and written to the run log.
 | `tasks.list` | read | List or search tasks |
 | `memory.search` | read | Retrieve stored memories |
 | `tasks.create`, `tasks.update`, `tasks.complete` | write | Change tasks |
-| `memory.save` | write | Save a memory, recording who saved it |
+| `memory.save` | write | Save a memory, recording who saved it; an identical memory is not stored twice |
 | `experience.record` | write | Record an outcome and lesson |
 
 - **Read** tools run automatically. **Write** tools run unless read-only mode
@@ -122,13 +151,16 @@ JARVIS/
 │   │   ├── events.py      append-only audit trail
 │   │   ├── runs.py        run log (runs and their steps)
 │   │   └── settings.py    runtime settings
+│   ├── engine/
+│   │   └── engine.py      reasoning engine: plan, act, check, report
 │   ├── tools/
 │   │   ├── registry.py    tool registry and execution engine
 │   │   └── builtin.py     the built-in tools
 │   ├── providers/
 │   │   ├── base.py        AI provider interface
 │   │   ├── registry.py    provider selection
-│   │   └── ollama.py      adapter for a local Ollama server
+│   │   ├── ollama.py      adapter for a local Ollama server
+│   │   └── scripted.py    scripted stand-in model, for tests only
 │   └── web/
 │       ├── server.py      local JSON API and static file server
 │       └── static/        index.html, app.css, app.js
@@ -142,7 +174,8 @@ JARVIS/
 ### Database tables
 
 `memories`, `experiences`, `tasks`, `projects`, `agents`, `conversations`,
-`messages`, `system_events`, `settings`, `approvals`, `runs`, `run_steps`.
+`messages`, `system_events`, `settings`, `approvals`, `runs`, `run_steps`,
+`run_plan`.
 
 To change the schema, append a migration to `MIGRATIONS` in `jarvis/db.py`.
 Existing databases upgrade automatically on the next start, after a
@@ -167,6 +200,9 @@ Copy `.env.example` to `.env` and edit. Every setting has a safe default, so
 | `JARVIS_APPROVAL_TTL_MINUTES` | `15` | How long a pending approval stays valid |
 | `JARVIS_BACKUP_ON_START` | `true` | Back up each time the server starts |
 | `JARVIS_BACKUP_KEEP` | `14` | Number of backups to keep |
+| `JARVIS_ENGINE_MAX_STEPS` | `12` | Most steps one goal's plan may have |
+| `JARVIS_ENGINE_MAX_FAILURES` | `3` | Tool failures tolerated in one goal |
+| `JARVIS_ENGINE_MAX_MODEL_CALLS` | `40` | Most model calls for one goal |
 
 ## Safety model
 
@@ -210,10 +246,12 @@ cd ~/JARVIS
 python3 -m unittest discover -s tests
 ```
 
-114 tests cover database initialisation, memory create/retrieve/delete, task
+149 tests cover database initialisation, memory create/retrieve/delete, task
 creation and completion, project creation, experience storage, configuration
 loading, safety checks, AI provider reporting, backup and restore, the web
-API, the tool registry, tool execution, permissions and the run log. Each test uses its own temporary database and never touches `data/`.
+API, the tool registry, tool execution, permissions, the run log, and the
+reasoning engine (planning, failures, invalid plans, missing information,
+approvals, limits, false completion claims, interruption recovery). Each test uses its own temporary database and never touches `data/`.
 
 ## Backup and recovery
 
@@ -237,8 +275,10 @@ API, the tool registry, tool execution, permissions and the run log. Each test u
 
 ## Current limitations
 
-- No AI model is connected, so chat cannot answer, and nothing decides which
-  tool to use: tools run only when a person or a program calls them.
+- No AI model is connected, so chat cannot answer and goals cannot run. The
+  reasoning engine has only been run with a scripted stand-in.
+- Context recall is keyword matching on the goal's words, not meaning-based.
+- Goals run while you wait; there is no background execution.
 - Tools can be executed from the command line and the API. The web interface
   shows tools and their history but has no form to run one.
 - The Ollama adapter is untested against real Ollama. MLX is not implemented.
@@ -255,7 +295,6 @@ API, the tool registry, tool execution, permissions and the run log. Each test u
 
 ## Next recommended milestone
 
-**Phase 2.2: the reasoning engine.** A loop that takes a goal, asks a model for
-the next tool call, executes it through the tool engine, and reports only what
-the run log shows was done. It is built and tested with a scripted stand-in
-model, so it needs no installs. See `NEXT_SESSION.md`.
+**Phase 2.3: connect one local model.** Install Ollama and one small model
+(your approval needed), verify the adapter against it, and run real goals and
+chat through the engine. See `NEXT_SESSION.md`.

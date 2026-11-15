@@ -16,7 +16,7 @@ See `JARVIS_ROADMAP.md` for sequence and `NEXT_SESSION.md` for the next task.
    download needs a stated reason.
 7. **Claude Code builds JARVIS; it is not JARVIS's brain.**
 
-## 2. What exists today (Phase 1 and Phase 2.1, complete and tested)
+## 2. What exists today (Phase 1, 2.1 and 2.2, complete and tested)
 
 ```
 Web interface / command line
@@ -41,11 +41,12 @@ Web interface / command line
 | Web interface and API | `jarvis/web/` | Working |
 | Tool registry and execution engine | `jarvis/tools/registry.py` | Working (Phase 2.1) |
 | Built-in tools (11) | `jarvis/tools/builtin.py` | Working (Phase 2.1) |
-| Run log | `jarvis/stores/runs.py` | Working, schema v2 |
-| Tests | `tests/` | 114 passing |
+| Run log and plans | `jarvis/stores/runs.py` | Working, schema v3 |
+| Reasoning engine | `jarvis/engine/engine.py` | Working with a scripted stand-in; no real model yet |
+| Tests | `tests/` | 149 passing |
 
 Tables: memories, experiences, tasks, projects, agents, conversations,
-messages, system_events, settings, approvals, runs, run_steps.
+messages, system_events, settings, approvals, runs, run_steps, run_plan.
 
 ## 3. Decisions to settle before adding intelligence
 
@@ -90,9 +91,9 @@ messages, system_events, settings, approvals, runs, run_steps.
 
 | Module | Job |
 |---|---|
-| `engine/engine.py` | The loop: build context, ask the model for the next step, validate it, run the tool, record the result, repeat until finished or a limit is hit |
+| `engine/engine.py` | **Built.** The loop: build context, ask the model for the next step, validate it, run the tool, record the result, repeat until finished or a limit is hit |
 | `engine/context.py` | Chooses what the model sees: relevant memories, lessons, project facts and recent conversation, within a size budget. Every item keeps its source and confidence |
-| `engine/planner.py` | Turns a goal into a short list of steps stored as tasks, so plans are visible and editable |
+| `engine/planner.py` | Not separate: planning is part of `engine.py`. Later (step 2.5) plans may also become visible tasks. Turns a goal into a short list of steps stored as tasks, so plans are visible and editable |
 | `tools/registry.py` | **Built.** The catalogue of capabilities and the single execution path. Each tool has a name, description, input rules, a safety category and a function |
 | `tools/builtin.py` | **Built.** First tools, wrapping what already works: search and save memory, create and complete tasks, record experience, list projects |
 | `providers/router.py` | Picks the provider: local by default, cloud only if allowed and approved. Reports clearly when none is available |
@@ -103,6 +104,7 @@ messages, system_events, settings, approvals, runs, run_steps.
 |---|---|
 | `runs` | **Built (schema v2).** One row per piece of work: kind (`tool` or `goal`), goal, agent, status (`running`, `waiting_approval`, `completed`, `failed`, `cancelled`), result, timestamps |
 | `run_steps` | **Built (schema v2).** Each step in a run: what the model proposed, the tool called, inputs, output or error, status. This is the transparent activity log and the resume point |
+| `run_plan` | **Built (schema v3).** The stored plan: one row per step with status, inputs, attempts, approval and note |
 | `memories_fts` | Not built (step 2.4). Full-text index over memories and experiences |
 
 The existing `tasks`, `agents`, `approvals` and `system_events` tables are
@@ -125,6 +127,19 @@ reused unchanged.
 
 The reasoning engine (step 2.2) will call exactly this, passing its own
 `run_id` so all steps of one goal sit in one run.
+
+### 4.2b How a goal runs (built)
+
+`Engine.start(goal)` → PLAN (model returns `{"plan": [...]}` or `{"blocked": question}`;
+validated against the allowed tools and the step limit, then stored) → for each
+step: ACTION (model returns `{"inputs": {...}}`, validated against the tool's
+schema) → `ToolRegistry.execute(..., actor="jarvis-core", run_id, plan_id)` →
+CHECK (success: next step; failure: one corrected attempt; refused: stop;
+approval needed: pause) → REPORT from `run_plan` and `run_steps`.
+
+`Engine.resume(run_id, answer)` continues an `interrupted`, `waiting_approval`
+or `blocked` run. `Engine.cancel` ends one. Limits:
+`JARVIS_ENGINE_MAX_STEPS`, `_MAX_FAILURES`, `_MAX_MODEL_CALLS`.
 
 ### 4.3 How one request flows
 

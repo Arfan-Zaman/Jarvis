@@ -139,6 +139,13 @@ def cmd_tool(config, args) -> int:
     return 0 if result["ok"] else 1
 
 
+def cmd_goal(config, args) -> int:
+    setup_logging(config, console=False)
+    report = Jarvis(config).start().engine.start(args.goal)
+    print(json.dumps(report, indent=2))
+    return 0 if report["verified_complete"] else 1
+
+
 def cmd_restore(config, args) -> int:
     setup_logging(config, console=False)
     if _running_pid(config):
@@ -177,6 +184,9 @@ def main(argv: list[str] | None = None) -> int:
     tool.add_argument("name", help="tool name, as shown by `tools`")
     tool.add_argument("inputs", nargs="?", default="{}", help="inputs as JSON")
     tool.set_defaults(run=cmd_tool)
+    goal = commands.add_parser("goal", help="plan and carry out a goal (needs an AI model)")
+    goal.add_argument("goal", help="what you want done, in plain language")
+    goal.set_defaults(run=cmd_goal)
     restore = commands.add_parser("restore", help="replace the database with a backup")
     restore.add_argument("name", help="backup file name, as shown by `backups`")
     restore.add_argument("--yes", action="store_true", help="skip the typed confirmation")

@@ -95,8 +95,16 @@ def memory_search(app, inputs, actor):
 
 
 def memory_save(app, inputs, actor):
+    # The same fact is not stored twice: an identical active memory is returned instead.
+    wanted = " ".join(inputs["content"].split()).lower()
+    # Search by the longest word so spacing and case differences still find the match.
+    key = max(wanted.split(), key=len) if wanted.split() else wanted
+    for existing in app.memory.list(query=key, limit=200):
+        if " ".join(existing["content"].split()).lower() == wanted \
+                and existing["project_id"] == inputs.get("project_id"):
+            return {**existing, "duplicate": True}
     # Anything not saved by the owner is recorded as unverified with its true source.
-    return app.create("memories", {"source": actor, **inputs}, actor)
+    return {**app.create("memories", {"source": actor, **inputs}, actor), "duplicate": False}
 
 
 def experience_record(app, inputs, actor):

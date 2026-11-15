@@ -37,6 +37,9 @@ DEFAULTS = {
     "JARVIS_APPROVAL_TTL_MINUTES": "15",
     "JARVIS_BACKUP_ON_START": "true",
     "JARVIS_BACKUP_KEEP": "14",
+    "JARVIS_ENGINE_MAX_STEPS": "12",
+    "JARVIS_ENGINE_MAX_FAILURES": "3",
+    "JARVIS_ENGINE_MAX_MODEL_CALLS": "40",
 }
 
 
@@ -61,6 +64,9 @@ class Config:
     approval_ttl_minutes: int
     backup_on_start: bool
     backup_keep: int
+    engine_max_steps: int = 12
+    engine_max_failures: int = 3
+    engine_max_model_calls: int = 40
 
     @property
     def db_path(self) -> Path:
@@ -175,4 +181,7 @@ def load_config(
         approval_ttl_minutes=_integer("JARVIS_APPROVAL_TTL_MINUTES", get("JARVIS_APPROVAL_TTL_MINUTES"), 1, 1440),
         backup_on_start=_boolean("JARVIS_BACKUP_ON_START", get("JARVIS_BACKUP_ON_START")),
         backup_keep=_integer("JARVIS_BACKUP_KEEP", get("JARVIS_BACKUP_KEEP"), 1, 1000),
+        engine_max_steps=_integer("JARVIS_ENGINE_MAX_STEPS", get("JARVIS_ENGINE_MAX_STEPS"), 1, 50),
+        engine_max_failures=_integer("JARVIS_ENGINE_MAX_FAILURES", get("JARVIS_ENGINE_MAX_FAILURES"), 1, 20),
+        engine_max_model_calls=_integer("JARVIS_ENGINE_MAX_MODEL_CALLS", get("JARVIS_ENGINE_MAX_MODEL_CALLS"), 1, 500),
     )

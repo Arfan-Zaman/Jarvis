@@ -116,7 +116,7 @@ class ToolRegistry:
     # --- execution ---------------------------------------------------------
     def execute(self, name: str, inputs: dict | None = None, *, actor: str = "user",
                 approval_id: int | None = None, run_id: int | None = None,
-                allowed: list[str] | None = None) -> dict:
+                allowed: list[str] | None = None, plan_id: int | None = None) -> dict:
         """Run a tool and return a structured result. Never raises for tool failure.
 
         `allowed` restricts the caller to a list of tool names (for agents).
@@ -160,7 +160,7 @@ class ToolRegistry:
         step = runs.add_step(
             run["id"], tool=str(name), category=category, actor=actor, inputs=recorded_inputs, output=output,
             error=error, status=status, approval_id=approval["id"] if approval else approval_id,
-            started_at=started_at, duration_ms=duration_ms)
+            started_at=started_at, duration_ms=duration_ms, plan_id=plan_id)
         if run["kind"] == "tool":           # single-call runs follow their one tool
             runs.set_status(run["id"], {"succeeded": "completed", "waiting_approval": "waiting_approval"}
                             .get(status, "failed"), result=output, error=error)

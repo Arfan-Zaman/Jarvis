@@ -357,6 +357,66 @@ views.chat = {
   },
 };
 
+views.goals = {
+  title: 'Goals',
+  subtitle: 'Give JARVIS a goal; it plans, acts through its tools, and reports what was verified',
+  async render(root) {
+    const status = await api('GET', '/api/status');
+    const connected = status.ai.configured && status.ai.available;
+    const list = h('div', { class: 'stack' });
+    const tone = { completed: 'ok', failed: 'bad', blocked: 'warn', waiting_approval: 'pink', cancelled: null, interrupted: 'warn', running: 'violet', pending: null };
+    const control = (path, body) => act(async () => { await api('POST', path, body || {}); await reload(); refreshChrome(); });
+
+    const card = (report) => h('div', { class: 'glass panel' },
+      h('div', { class: 'row between' }, h('div', { class: 'title grow wrap' }, report.goal),
+        chip(label(report.status), tone[report.status]), report.verified_complete ? chip('verified', 'ok') : null),
+      h('p', { class: 'wrap' }, report.summary),
+      report.plan.length ? h('div', { class: 'list' }, report.plan.map((step) => h('div', { class: 'item' },
+        h('div', { class: 'grow' }, h('div', null, `${step.position}. ${step.description}`),
+          step.note ? h('div', { class: 'muted small wrap' }, step.note) : null),
+        chip(step.tool), chip(label(step.status), tone[step.status])))) : null,
+      report.model_summary ? h('p', { class: 'muted small wrap' }, `Model's own summary (not verified): ${report.model_summary}`) : null,
+      h('div', { class: 'row end' },
+        h('span', { class: 'muted small grow' }, `Run #${report.run_id} · ${when(report.created_at)}`),
+        report.status === 'blocked' ? h('button', { class: 'btn sm primary', onclick: act(async () => {
+          const answer = await dialog({ title: 'JARVIS needs information', text: report.question, okLabel: 'Send and continue', input: 'Your answer…' });
+          if (answer) await control(`/api/runs/${report.run_id}/resume`, { answer })();
+        }) }, 'Answer') : null,
+        ['waiting_approval', 'interrupted'].includes(report.status)
+          ? h('button', { class: 'btn sm primary', onclick: control(`/api/runs/${report.run_id}/resume`) }, 'Continue') : null,
+        report.status === 'waiting_approval' ? h('a', { class: 'btn sm', href: '#system' }, 'Review approval') : null,
+        ['blocked', 'waiting_approval', 'interrupted'].includes(report.status)
+          ? h('button', { class: 'btn sm', onclick: control(`/api/runs/${report.run_id}/cancel`) }, 'Cancel') : null));
+
+    const reload = act(async () => {
+      const { items } = await api('GET', '/api/runs?kind=goal&limit=15');
+      const runs = await Promise.all(items.map((run) => api('GET', `/api/runs/${run.id}`)));
+      list.replaceChildren(...(runs.length ? runs.map((run) => card(run.report))
+        : [h('div', { class: 'glass panel empty' }, 'No goals have been run yet.')]));
+    });
+
+    const goal = h('textarea', { name: 'goal', required: true, placeholder: 'For example: add a high-priority task to review this week\'s open jobs' });
+    const submit = h('button', { class: 'btn primary', type: 'submit', disabled: !connected }, 'Run goal');
+    const entry = h('form', { class: 'form' }, h('label', { class: 'field' }, 'Goal', goal), h('div', { class: 'row end' }, submit));
+    entry.addEventListener('submit', act(async (event) => {
+      event.preventDefault();
+      submit.disabled = true;
+      try {
+        await api('POST', '/api/runs', { goal: goal.value });
+        goal.value = '';
+        await reload();
+        refreshChrome();
+      } finally { submit.disabled = !connected; }
+    }));
+
+    root.append(h('div', { class: 'stack' },
+      connected ? null : h('div', { class: 'banner' }, h('div', null, h('strong', null, 'Goals need an AI model'),
+        h('span', { class: 'muted' }, 'The reasoning engine is built, but no model is connected to do the planning, so goals cannot run yet.'))),
+      h('div', { class: 'glass panel' }, h('h2', null, 'New goal'), entry), list));
+    await reload();
+  },
+};
+
 views.memory = {
   title: 'Memory',
   subtitle: 'Facts and notes JARVIS retains, with their provenance',

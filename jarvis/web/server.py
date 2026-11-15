@@ -162,12 +162,30 @@ def _tool_execute(app: Jarvis, req: Request):
 
 @route("GET", "/api/runs")
 def _runs(app: Jarvis, req: Request):
-    return {"items": app.runs.list(limit=_int(req.query.get("limit", 50), "limit"), status=req.query.get("status"))}
+    return {"items": app.runs.list(limit=_int(req.query.get("limit", 50), "limit"),
+                                   status=req.query.get("status"), kind=req.query.get("kind"))}
+
+
+@route("POST", "/api/runs")
+def _run_start(app: Jarvis, req: Request):
+    """Submit a goal. Runs until it completes, fails, is blocked or needs approval."""
+    return 201, app.engine.start(req.body.get("goal", ""))
 
 
 @route("GET", r"/api/runs/(\d+)")
 def _run(app: Jarvis, req: Request):
-    return app.runs.get(int(req.params[0]))
+    run = app.runs.get(int(req.params[0]))
+    if run["kind"] == "goal":
+        run["report"] = app.engine.report(run["id"])
+    return run
+
+
+@route("POST", r"/api/runs/(\d+)/(resume|cancel)")
+def _run_control(app: Jarvis, req: Request):
+    run_id = int(req.params[0])
+    if req.params[1] == "cancel":
+        return app.engine.cancel(run_id)
+    return app.engine.resume(run_id, answer=req.body.get("answer"))
 
 
 @route("GET", "/api/executions")

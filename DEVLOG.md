@@ -2,6 +2,47 @@
 
 Newest entries first. Record what changed, why, and what was verified.
 
+## 2026-11-15 — Phase 2.2: reasoning engine
+
+### Built
+- `jarvis/engine/engine.py`: plan, act, check, report. Model output is one JSON
+  object per request (`plan`, `inputs`, `blocked`, `summary`); unusable output
+  gets one retry, then the run fails.
+- Every action goes through `ToolRegistry.execute` with actor `jarvis-core`
+  and the run's allow-list. The engine has no other way to act.
+- Run states: running, waiting_approval, blocked, completed, failed,
+  cancelled, interrupted. Plan step states: pending, running, completed,
+  failed, blocked.
+- Limits (configurable): plan length, tool failures, model calls.
+- Resume after approval, after an answer to a question, or after an
+  interruption, without repeating finished steps.
+- Schema v3: `run_plan` table, `runs.context`, `run_steps.plan_id`, and the
+  `blocked` state (the `runs` table is rebuilt to change its CHECK constraint).
+- `ScriptedProvider`: a stand-in that replays prepared replies, used only in
+  tests and not selectable through configuration.
+- Context: memories and lessons matching the goal's key words are shown to the
+  model with their confidence and source.
+- Each finished or failed goal is recorded once as an experience;
+  `memory.save` returns an existing identical memory instead of a duplicate.
+- API `POST /api/runs`, `/api/runs/<id>/resume|cancel`; CLI `goal`; Goals page.
+- GitHub repository added as remote `origin`. Nothing pushed.
+
+### Decisions
+- "Verified complete" means every planned step has a recorded successful
+  execution. The model's summary is stored and shown, labelled as unverified.
+- A refused step ends the goal rather than retrying: refusal is a permission
+  decision, not an error to work around.
+- Engine bookkeeping (recording the experience) is a run step but not a plan
+  step, so it cannot make or break verification.
+
+### Verified
+- 149 tests passing (114 existing, 35 new).
+- Throwaway database: Goals page renders with a clear "no model" banner and a
+  disabled button; `goal` command reports no model. No console errors.
+
+### Not done
+- Never run against a real model.
+
 ## 2026-11-15 — Phase 2.1: tools, execution engine, run log
 
 ### Built

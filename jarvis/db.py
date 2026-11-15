@@ -180,6 +180,49 @@ MIGRATIONS: list[str] = [
     CREATE INDEX idx_run_steps_run   ON run_steps(run_id, position);
     CREATE INDEX idx_run_steps_tool  ON run_steps(tool, id);
     """,
+    # --- version 3: goal runs: plans, context, and a 'blocked' state ---------
+    # SQLite cannot change a CHECK constraint in place, so `runs` is rebuilt.
+    """
+    CREATE TABLE runs_new (
+        id          INTEGER PRIMARY KEY,
+        kind        TEXT NOT NULL DEFAULT 'tool' CHECK (kind IN ('tool','goal')),
+        goal        TEXT NOT NULL,
+        actor       TEXT NOT NULL DEFAULT 'user',
+        agent_id    INTEGER REFERENCES agents(id) ON DELETE SET NULL,
+        status      TEXT NOT NULL DEFAULT 'running'
+                    CHECK (status IN ('running','waiting_approval','blocked','completed','failed',
+                                      'cancelled','interrupted')),
+        result      TEXT,
+        error       TEXT,
+        context     TEXT,
+        created_at  TEXT NOT NULL,
+        updated_at  TEXT NOT NULL,
+        finished_at TEXT
+    );
+    INSERT INTO runs_new (id, kind, goal, actor, agent_id, status, result, error, created_at, updated_at, finished_at)
+        SELECT id, kind, goal, actor, agent_id, status, result, error, created_at, updated_at, finished_at FROM runs;
+    DROP TABLE runs;
+    ALTER TABLE runs_new RENAME TO runs;
+    CREATE INDEX idx_runs_status ON runs(status, id);
+
+    ALTER TABLE run_steps ADD COLUMN plan_id INTEGER;
+
+    CREATE TABLE run_plan (
+        id          INTEGER PRIMARY KEY,
+        run_id      INTEGER NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
+        position    INTEGER NOT NULL,
+        description TEXT NOT NULL,
+        tool        TEXT NOT NULL,
+        status      TEXT NOT NULL DEFAULT 'pending'
+                    CHECK (status IN ('pending','running','completed','failed','blocked')),
+        inputs      TEXT,
+        attempts    INTEGER NOT NULL DEFAULT 0,
+        approval_id INTEGER,
+        note        TEXT,
+        updated_at  TEXT NOT NULL
+    );
+    CREATE INDEX idx_run_plan_run ON run_plan(run_id, position);
+    """,
 ]
 
 SCHEMA_VERSION = len(MIGRATIONS)

@@ -15,6 +15,7 @@ from .backup import BackupManager
 from .common import NotFoundError, ValidationError, utcnow
 from .config import Config, load_config
 from .db import SCHEMA_VERSION, Database
+from .engine import Engine
 from .logging_setup import get_logger
 from .providers import AIProvider, ChatMessage, ProviderError, build_provider
 from .safety import ActionCategory, SafetyLayer
@@ -63,6 +64,7 @@ class Jarvis:
         self.runs = RunStore(self.db)
         self.tools = ToolRegistry(self)
         register_builtin(self.tools)
+        self.engine = Engine(self)
         self.started_at = time.time()
         # Record kinds reachable through the generic API below.
         self.stores = {
