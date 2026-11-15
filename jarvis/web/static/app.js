@@ -335,11 +335,23 @@ views.chat = {
       const text = input.value.trim();
       if (!text) return;
       send.disabled = true;
+      // Show the message and a thinking indicator at once; the first reply after a restart
+      // can take ~20 seconds while the model loads.
+      messages.querySelector('.empty')?.remove();
+      messages.append(bubble({ role: 'user', content: text }),
+        h('div', { class: 'msg assistant thinking' }, h('div', { class: 'who' }, 'JARVIS'),
+          h('div', null, 'Thinking…'),
+          h('div', { class: 'muted small' }, 'The first reply after JARVIS starts can take up to 30 seconds.')));
+      messages.scrollTop = messages.scrollHeight;
+      input.value = '';
       try {
         const result = await api('POST', '/api/chat', { message: text, conversation_id: state.conversationId });
         state.conversationId = result.conversation.id;
-        input.value = '';
         await openThread();
+      } catch (error) {
+        messages.querySelector('.thinking')?.remove();
+        input.value = text;                        // give the message back so it can be resent
+        throw error;
       } finally {
         send.disabled = false;
         input.focus();
