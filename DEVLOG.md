@@ -15,6 +15,13 @@ Newest entries first. Record what changed, why, and what was verified.
   and a "brightness" check that only rejects deep thuds. Tests added with dull,
   real-style claps; single and slow claps, knocks and speech are still ignored.
 - The log stays on so future tuning uses real data.
+- Second real test: both double claps detected. One request was lost because
+  "Jarvis" was said before recording began, so the transcript lacked the name;
+  the other because the speech (rms 0.015-0.02) was below the fixed 0.016
+  "speaking" threshold. Fixes: a 1.5 s pre-roll is prepended to each recording;
+  speech is judged against the measured room level (5x, minimum 0.005); 8 s to
+  start speaking; the name is optional after a double clap (the clap is the
+  call). Recording outcomes are logged.
 
 ## 2026-11-16 — JARVIS Desktop: floating orb, double clap, auto-start
 

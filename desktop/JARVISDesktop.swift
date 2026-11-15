@@ -33,6 +33,7 @@ final class ClapDetector {
     let frameSize: Int
     private var pending: [Float] = []
     private var floorLevel: Float = 0.003
+    var noiseLevel: Float { floorLevel }
     private var recent: [Float] = []          // RMS of the last frames, before the current one
     private var inClap = false
     private var clapStart = 0
@@ -170,9 +171,10 @@ final class UtteranceRecorder {
 
     init(sampleRate: Double, noise: Float) {
         self.sampleRate = sampleRate
-        self.noise = max(noise, 0.002)
+        self.noise = max(noise, 0.0005)
         frameSize = max(64, Int(sampleRate * 0.01))
     }
+    var summary: String { String(format: "%.1f s recorded, %d speech frames, noise %.4f", Double(samples.count) / sampleRate, speechFrames, noise) }
 
     func add(_ chunk: [Float]) -> Outcome {
         samples.append(contentsOf: chunk)
@@ -183,10 +185,11 @@ final class UtteranceRecorder {
             pending.removeFirst(frameSize)
             let rms = (slice.reduce(0) { $0 + $1 * $1 } / Float(frameSize)).squareRoot()
             frames += 1
-            if rms > max(noise * 4, 0.01) { speechFrames += 1; silenceFrames = 0 } else { silenceFrames += 1 }
+            // Speech: clearly above the measured room level (real speech here: rms 0.015-0.02).
+            if rms > max(noise * 5, 0.005) { speechFrames += 1; silenceFrames = 0 } else { silenceFrames += 1 }
             if speechFrames >= 5 { started = true }
             if started && silenceFrames >= 120 { outcome = .finished }           // 1.2 s of quiet
-            if !started && frames >= 600 { outcome = .nothingSaid }              // 6 s without speech
+            if !started && frames >= 800 { outcome = .nothingSaid }              // 8 s without speech
             if frames >= 1500 { outcome = started ? .finished : .nothingSaid }   // 15 s at most
             if outcome != .listening { break }
         }
@@ -386,6 +389,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, AVAudioPlayerDelegate 
     private let audioQueue = DispatchQueue(label: "jarvis.audio")
     private var detector: ClapDetector?
     private var recorder: UtteranceRecorder?
+    private var preRoll: [Float] = []         // the last 1.5 s, so words said right after the claps are kept
     private var player: AVAudioPlayer?
     private let api = JarvisAPI()
     private let server = ServerManager()
@@ -528,14 +532,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, AVAudioPlayerDelegate 
             case .listening: break
             case .finished:
                 self.recorder = nil
+                DesktopLog.write("recording finished: \(recorder.summary)")
                 let wav = recorder.wav()
                 DispatchQueue.main.async { self.heard(wav) }
             case .nothingSaid:
                 self.recorder = nil
+                DesktopLog.write("nothing said: \(recorder.summary)")
                 DispatchQueue.main.async { self.setState(.idle); self.say("I'll be here.", speak: false, linger: 4) }
             }
             return
         }
+        let keep = Int((detector?.sampleRate ?? 48000) * 1.5)
+        preRoll.append(contentsOf: samples)
+        if preRoll.count > keep { preRoll.removeFirst(preRoll.count - keep) }
         let current = DispatchQueue.main.sync { state }
         if current == .idle { detector?.process(samples) }
     }
@@ -555,10 +564,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, AVAudioPlayerDelegate 
         player?.stop()
         NSSound(named: "Tink")?.play()
         setState(.listening)
-        say(followUp ? "Listening…" : "Listening… say “Jarvis” and your request.", speak: false, linger: 15)
+        say("Listening…", speak: false, linger: 15)
         let rate = engine.inputNode.inputFormat(forBus: 0).sampleRate
         if !engine.isRunning { try? engine.start() }
-        audioQueue.async { self.recorder = UtteranceRecorder(sampleRate: rate, noise: 0.004) }
+        let fromClap = !followUp
+        audioQueue.async {
+            let recorder = UtteranceRecorder(sampleRate: rate, noise: self.detector?.noiseLevel ?? 0.002)
+            if fromClap { _ = recorder.add(self.preRoll) }      // anything said straight after the claps
+            self.preRoll.removeAll()
+            self.recorder = recorder
+        }
     }
 
     private func heard(_ wav: Data) {
@@ -569,7 +584,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, AVAudioPlayerDelegate 
                 let text = try await api.transcribe(wav)
                 DesktopLog.write("heard: \(text)")
                 guard let request = request(from: text) else {
-                    setState(.idle); say(text.isEmpty ? "I didn't catch that." : "I heard “\(text)”, but not my name.", speak: false, linger: 5)
+                    setState(.idle); say("I didn't catch that.", speak: false, linger: 5)
                     return
                 }
                 if request.isEmpty {                          // just "Jarvis"
@@ -595,12 +610,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, AVAudioPlayerDelegate 
         }
     }
 
-    /// The request after "Jarvis", "" if only the name was said, nil if the name was not said.
+    /// The request with "Jarvis" removed; "" if only the name was said; nil if nothing was said.
+    /// A double clap already means "I'm talking to JARVIS", so the name is optional: whisper
+    /// sometimes misses it when it is said quickly right after the claps.
     private func request(from text: String) -> String? {
-        let cleaned = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        if followUp { return cleaned.isEmpty ? nil : cleaned }
-        let pattern = #"(?i)\b(jarvis|jarvas|jervis|javis|jarviss)\b[\s,.!?:;-]*"#
-        guard let range = cleaned.range(of: pattern, options: .regularExpression) else { return nil }
+        let cleaned = text.trimmingCharacters(in: .whitespacesAndNewlines.union(.punctuationCharacters))
+        if cleaned.isEmpty { return nil }
+        let pattern = #"(?i)^.*?\b(jarvis|jarvas|jervis|javis|jarviss|travis|charvis)\b[\s,.!?:;-]*"#
+        guard let range = cleaned.range(of: pattern, options: .regularExpression) else { return cleaned }
         return String(cleaned[range.upperBound...]).trimmingCharacters(in: .whitespacesAndNewlines.union(.punctuationCharacters))
     }
 

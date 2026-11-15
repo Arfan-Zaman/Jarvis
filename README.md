@@ -107,9 +107,11 @@ every Space. It starts by itself when you log in and starts the JARVIS server,
 so no command is needed.
 
 1. **Clap twice.** You hear a chime and the orb turns pink.
-2. **Say "Jarvis" and your request**, for example "Jarvis, remind me to call
-   the bank tomorrow". Saying only "Jarvis" gets "Yes, sir?", and it listens
-   for the request.
+2. **Say your request**, with or without "Jarvis" ("Jarvis, remind me to call
+   the bank tomorrow"). The double clap already means you are talking to it,
+   and the last 1.5 seconds before listening starts are kept, so words said
+   straight after the claps are not lost. Saying only "Jarvis" gets "Yes,
+   sir?", and it listens for the request.
 3. JARVIS answers in the bubble beside the orb, speaks the answer, and carries
    out the request with the same safety rules as chat.
 
