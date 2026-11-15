@@ -144,6 +144,38 @@ def _chat(app: Jarvis, req: Request):
     return app.chat(req.body.get("message", ""), conversation_id)
 
 
+# --- tools and run log ----------------------------------------------------
+@route("GET", "/api/tools")
+def _tools(app: Jarvis, req: Request):
+    return {"items": app.tools.list(req.query.get("permission"))}
+
+
+@route("POST", r"/api/tools/([a-z0-9_.]+)/execute")
+def _tool_execute(app: Jarvis, req: Request):
+    approval, run = req.body.get("approval_id"), req.body.get("run_id")
+    result = app.tools.execute(
+        req.params[0], req.body.get("inputs"),
+        approval_id=_int(approval, "approval_id") if approval is not None else None,
+        run_id=_int(run, "run_id") if run is not None else None)
+    return (202 if result["status"] == "approval_required" else 200), result
+
+
+@route("GET", "/api/runs")
+def _runs(app: Jarvis, req: Request):
+    return {"items": app.runs.list(limit=_int(req.query.get("limit", 50), "limit"), status=req.query.get("status"))}
+
+
+@route("GET", r"/api/runs/(\d+)")
+def _run(app: Jarvis, req: Request):
+    return app.runs.get(int(req.params[0]))
+
+
+@route("GET", "/api/executions")
+def _executions(app: Jarvis, req: Request):
+    return {"items": app.runs.history(limit=_int(req.query.get("limit", 50), "limit"),
+                                      tool=req.query.get("tool"), status=req.query.get("status"))}
+
+
 # --- system ---------------------------------------------------------------
 @route("GET", "/api/agents")
 def _agents(app: Jarvis, req: Request):

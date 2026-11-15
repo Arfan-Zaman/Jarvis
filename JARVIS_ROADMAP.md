@@ -10,8 +10,8 @@ Business environments: Monsoor Motors, Aureus Detailing.
 
 | Phase | Name | Status |
 |---|---|---|
-| 1 | Foundation | **Complete** (committed `926ee32`, 90 tests passing) |
-| 2 | Intelligence Core | **Designed, not started** |
+| 1 | Foundation | **Complete** |
+| 2 | Intelligence Core | **In progress**: step 2.1 complete (114 tests passing); 2.2 is next |
 | 3 | Autonomous workforce | Not started |
 | 4 | Personal interface (voice) | Not started |
 | 5 | Business intelligence | Not started |
@@ -32,7 +32,7 @@ steps with its tools, ask for approval when needed, and report truthfully.
 
 | Step | What gets built | Needs install? | Done when |
 |---|---|---|---|
-| 2.1 | Tool registry, run log (`runs`, `run_steps`), built-in tools | No | Tools run through the safety layer; every call is logged; tests pass |
+| 2.1 | **Done.** Tool registry, run log (`runs`, `run_steps`), built-in tools | No | Tools run through the safety layer; every call is logged; tests pass |
 | 2.2 | Reasoning engine loop, tested with a scripted stand-in model | No | A scripted run completes, pauses for approval, fails honestly, and resumes; tests pass |
 | 2.3 | Connect one local model (Ollama) | **Yes, owner decision D1** | Chat answers for real; adapter verified against real Ollama |
 | 2.4 | Contextual memory: full-text search and context builder | No | Answers draw on stored memories and lessons, with sources shown |

@@ -142,10 +142,50 @@ MIGRATIONS: list[str] = [
     CREATE INDEX idx_events_category    ON system_events(category, id);
     CREATE INDEX idx_approvals_status   ON approvals(status);
     """,
+    # --- version 2: run log for tool execution -------------------------------
+    """
+    CREATE TABLE runs (
+        id          INTEGER PRIMARY KEY,
+        kind        TEXT NOT NULL DEFAULT 'tool' CHECK (kind IN ('tool','goal')),
+        goal        TEXT NOT NULL,
+        actor       TEXT NOT NULL DEFAULT 'user',
+        agent_id    INTEGER REFERENCES agents(id) ON DELETE SET NULL,
+        status      TEXT NOT NULL DEFAULT 'running'
+                    CHECK (status IN ('running','waiting_approval','completed','failed','cancelled','interrupted')),
+        result      TEXT,
+        error       TEXT,
+        created_at  TEXT NOT NULL,
+        updated_at  TEXT NOT NULL,
+        finished_at TEXT
+    );
+
+    CREATE TABLE run_steps (
+        id          INTEGER PRIMARY KEY,
+        run_id      INTEGER NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
+        position    INTEGER NOT NULL,
+        tool        TEXT NOT NULL,
+        category    TEXT,
+        actor       TEXT NOT NULL,
+        input       TEXT,
+        output      TEXT,
+        error       TEXT,
+        status      TEXT NOT NULL CHECK (status IN ('succeeded','failed','refused','waiting_approval')),
+        approval_id INTEGER,
+        started_at  TEXT NOT NULL,
+        finished_at TEXT NOT NULL,
+        duration_ms INTEGER NOT NULL DEFAULT 0
+    );
+
+    CREATE INDEX idx_runs_status     ON runs(status, id);
+    CREATE INDEX idx_run_steps_run   ON run_steps(run_id, position);
+    CREATE INDEX idx_run_steps_tool  ON run_steps(tool, id);
+    """,
 ]
 
 SCHEMA_VERSION = len(MIGRATIONS)
 
+# Tables every JARVIS database has had since version 1. Used to recognise a
+# backup, so it must not grow: older backups have to stay restorable.
 REQUIRED_TABLES = (
     "memories", "experiences", "tasks", "projects", "agents",
     "conversations", "messages", "system_events", "settings", "approvals",

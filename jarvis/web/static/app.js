@@ -494,9 +494,11 @@ views.system = {
   title: 'System status',
   subtitle: 'Health, safety, backups and the audit trail',
   async render(root) {
-    const [status, approvals, backups, agents, events] = await Promise.all([
+    const [status, approvals, backups, agents, events, tools, executions] = await Promise.all([
       api('GET', '/api/status'), api('GET', '/api/approvals?status=pending'), api('GET', '/api/backups'),
-      api('GET', '/api/agents'), api('GET', '/api/events?limit=60')]);
+      api('GET', '/api/agents'), api('GET', '/api/events?limit=60'), api('GET', '/api/tools'),
+      api('GET', '/api/executions?limit=25')]);
+    const stepTone = { succeeded: 'ok', failed: 'bad', refused: 'bad', waiting_approval: 'warn' };
     const kv = (pairs) => h('dl', { class: 'kv' }, pairs.map(([key, value]) => [h('dt', null, key), h('dd', null, value)]));
     const rerender = () => show('system');
 
@@ -549,6 +551,19 @@ views.system = {
         h('div', { class: 'list' }, agents.items.map((agent) => h('div', { class: 'item' },
           h('div', { class: 'grow' }, h('div', { class: 'title mono' }, agent.name), h('div', { class: 'muted small' }, agent.description)),
           chip(agent.kind, 'violet'), chip(agent.status, agent.status === 'active' ? 'ok' : null))))),
+      h('div', { class: 'glass panel' }, h('h2', null, `Tools (${tools.items.length})`),
+        h('div', { class: 'list' }, tools.items.map((tool) => h('div', { class: 'item' },
+          h('div', { class: 'grow' }, h('div', { class: 'title mono' }, tool.name), h('div', { class: 'muted small' }, tool.description)),
+          chip(label(tool.permission), tool.requires_approval ? 'pink' : tool.permission === 'write' ? 'violet' : 'ok'))))),
+      h('div', { class: 'glass panel' }, h('h2', null, 'Recent tool executions'),
+        executions.items.length
+          ? h('div', { class: 'scroll-x' }, h('table', null,
+            h('tr', null, ['When', 'Tool', 'Result', 'Actor', 'Time', 'Error'].map((name) => h('th', null, name))),
+            executions.items.map((step) => h('tr', null,
+              h('td', { class: 'muted small' }, when(step.started_at)), h('td', { class: 'mono' }, step.tool),
+              h('td', null, chip(label(step.status), stepTone[step.status])), h('td', { class: 'muted' }, step.actor),
+              h('td', { class: 'muted small' }, `${step.duration_ms} ms`), h('td', { class: 'wrap' }, step.error || '')))))
+          : h('div', { class: 'empty' }, 'No tools have been executed yet.')),
       h('div', { class: 'glass panel' }, h('h2', null, 'Audit trail and system events'), eventTable(events.items))));
   },
 };

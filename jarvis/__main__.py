@@ -119,6 +119,26 @@ def cmd_backups(config, args) -> int:
     return 0
 
 
+def cmd_tools(config, args) -> int:
+    setup_logging(config, console=False)
+    for tool in Jarvis(config).start().tools.list():
+        approval = "  (needs approval)" if tool["requires_approval"] else ""
+        print(f"{tool['name']:<20} {tool['permission']:<6} {tool['description']}{approval}")
+    return 0
+
+
+def cmd_tool(config, args) -> int:
+    setup_logging(config, console=False)
+    try:
+        inputs = json.loads(args.inputs)
+    except ValueError:
+        print("Error: inputs must be JSON, for example '{\"title\": \"Call the supplier\"}'", file=sys.stderr)
+        return 1
+    result = Jarvis(config).start().tools.execute(args.name, inputs)
+    print(json.dumps(result, indent=2))
+    return 0 if result["ok"] else 1
+
+
 def cmd_restore(config, args) -> int:
     setup_logging(config, console=False)
     if _running_pid(config):
@@ -152,6 +172,11 @@ def main(argv: list[str] | None = None) -> int:
     backup.add_argument("--label", default="manual")
     backup.set_defaults(run=cmd_backup)
     commands.add_parser("backups", help="list backups").set_defaults(run=cmd_backups)
+    commands.add_parser("tools", help="list the tools JARVIS can execute").set_defaults(run=cmd_tools)
+    tool = commands.add_parser("tool", help="execute one tool")
+    tool.add_argument("name", help="tool name, as shown by `tools`")
+    tool.add_argument("inputs", nargs="?", default="{}", help="inputs as JSON")
+    tool.set_defaults(run=cmd_tool)
     restore = commands.add_parser("restore", help="replace the database with a backup")
     restore.add_argument("name", help="backup file name, as shown by `backups`")
     restore.add_argument("--yes", action="store_true", help="skip the typed confirmation")

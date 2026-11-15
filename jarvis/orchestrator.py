@@ -18,6 +18,8 @@ from .db import SCHEMA_VERSION, Database
 from .logging_setup import get_logger
 from .providers import AIProvider, ChatMessage, ProviderError, build_provider
 from .safety import ActionCategory, SafetyLayer
+from .stores.runs import RunStore
+from .tools import ToolRegistry, register_builtin
 from .stores import (
     AgentStore, ConversationStore, EventLog, ExperienceStore,
     MemoryStore, ProjectStore, SettingsStore, TaskStore,
@@ -58,6 +60,9 @@ class Jarvis:
         self.conversations = ConversationStore(self.db)
         self.backups = BackupManager(self.db, self.config, self.events)
         self.provider = provider or build_provider(self.config)
+        self.runs = RunStore(self.db)
+        self.tools = ToolRegistry(self)
+        register_builtin(self.tools)
         self.started_at = time.time()
         # Record kinds reachable through the generic API below.
         self.stores = {
@@ -72,15 +77,28 @@ class Jarvis:
     def start(self) -> "Jarvis":
         """Prepare the database. Safe to call on every launch."""
         self.config.data_dir.mkdir(parents=True, exist_ok=True)
+        self._backup_before_upgrade()
         self.db.initialize()
         self._seed()
         return self
+
+    def _backup_before_upgrade(self) -> None:
+        """Take a safety copy before an existing database is migrated."""
+        if not self.config.db_path.exists():
+            return
+        version = self.db.version()
+        if 0 < version < SCHEMA_VERSION:
+            self.backups.create(f"pre-upgrade-v{version}", prune=False)
 
     def announce_startup(self) -> None:
         """Record that the long-running server came up (not every CLI call)."""
         self.events.record("system", "startup",
                            f"JARVIS {__version__} started (schema v{self.db.version()})",
                            details={"ai_provider": self.provider.status().to_dict()})
+        interrupted = self.runs.mark_interrupted()
+        if interrupted:
+            self.events.record("system", "runs.interrupted",
+                               f"{interrupted} run(s) were in progress when JARVIS last stopped", level="warning")
 
     def _seed(self) -> None:
         """One-time creation of the initial records."""
@@ -273,6 +291,8 @@ class Jarvis:
             "conversations": self.conversations.count(),
             "agents": self.agents.count(),
             "events": self.events.count(),
+            "tools": len(self.tools.names()),
+            "tool_executions": self.runs.count_steps(),
             "pending_approvals": len(self.safety.list_approvals("pending")),
         }
 

@@ -16,7 +16,7 @@ See `JARVIS_ROADMAP.md` for sequence and `NEXT_SESSION.md` for the next task.
    download needs a stated reason.
 7. **Claude Code builds JARVIS; it is not JARVIS's brain.**
 
-## 2. What exists today (Phase 1, complete and tested)
+## 2. What exists today (Phase 1 and Phase 2.1, complete and tested)
 
 ```
 Web interface / command line
@@ -39,10 +39,13 @@ Web interface / command line
 | Backup and recovery | `jarvis/backup.py` | Working |
 | Config and logging | `jarvis/config.py`, `logging_setup.py` | Working |
 | Web interface and API | `jarvis/web/` | Working |
-| Tests | `tests/` | 90 passing |
+| Tool registry and execution engine | `jarvis/tools/registry.py` | Working (Phase 2.1) |
+| Built-in tools (11) | `jarvis/tools/builtin.py` | Working (Phase 2.1) |
+| Run log | `jarvis/stores/runs.py` | Working, schema v2 |
+| Tests | `tests/` | 114 passing |
 
 Tables: memories, experiences, tasks, projects, agents, conversations,
-messages, system_events, settings, approvals.
+messages, system_events, settings, approvals, runs, run_steps.
 
 ## 3. Decisions to settle before adding intelligence
 
@@ -90,20 +93,38 @@ messages, system_events, settings, approvals.
 | `engine/engine.py` | The loop: build context, ask the model for the next step, validate it, run the tool, record the result, repeat until finished or a limit is hit |
 | `engine/context.py` | Chooses what the model sees: relevant memories, lessons, project facts and recent conversation, within a size budget. Every item keeps its source and confidence |
 | `engine/planner.py` | Turns a goal into a short list of steps stored as tasks, so plans are visible and editable |
-| `tools/registry.py` | The catalogue of capabilities. Each tool has a name, description, input rules, a safety category and a function |
-| `tools/builtin.py` | First tools, wrapping what already works: search and save memory, create and complete tasks, record experience, list projects |
+| `tools/registry.py` | **Built.** The catalogue of capabilities and the single execution path. Each tool has a name, description, input rules, a safety category and a function |
+| `tools/builtin.py` | **Built.** First tools, wrapping what already works: search and save memory, create and complete tasks, record experience, list projects |
 | `providers/router.py` | Picks the provider: local by default, cloud only if allowed and approved. Reports clearly when none is available |
 
-### 4.2 New tables (schema v2, added as one migration)
+### 4.2 New tables
 
 | Table | Purpose |
 |---|---|
-| `runs` | One row per piece of work: goal, agent, status (`running`, `waiting_approval`, `completed`, `failed`, `cancelled`), result, timestamps |
-| `run_steps` | Each step in a run: what the model proposed, the tool called, inputs, output or error, status. This is the transparent activity log and the resume point |
-| `memories_fts` | Full-text index over memories and experiences |
+| `runs` | **Built (schema v2).** One row per piece of work: kind (`tool` or `goal`), goal, agent, status (`running`, `waiting_approval`, `completed`, `failed`, `cancelled`), result, timestamps |
+| `run_steps` | **Built (schema v2).** Each step in a run: what the model proposed, the tool called, inputs, output or error, status. This is the transparent activity log and the resume point |
+| `memories_fts` | Not built (step 2.4). Full-text index over memories and experiences |
 
 The existing `tasks`, `agents`, `approvals` and `system_events` tables are
 reused unchanged.
+
+### 4.2a How a tool executes (built)
+
+`ToolRegistry.execute(name, inputs, actor, approval_id, run_id, allowed)`:
+
+1. Unknown tool: refused.
+2. Caller's allow-list (`allowed`), if given: refused when the tool is not on it.
+   This is how a future agent is limited to its own tools.
+3. Inputs are checked against the tool's schema.
+4. The safety layer decides by the tool's category.
+5. The handler runs; any error is caught.
+6. A `run_steps` row is written whatever the outcome.
+7. A structured result is returned: `ok`, `status` (`succeeded`, `failed`,
+   `refused`, `approval_required`), `output`, `error`, `approval`, `run_id`,
+   `step_id`, `duration_ms`.
+
+The reasoning engine (step 2.2) will call exactly this, passing its own
+`run_id` so all steps of one goal sit in one run.
 
 ### 4.3 How one request flows
 
@@ -154,4 +175,4 @@ called by JARVIS at runtime.
 ## 6. Dependencies
 
 Phase 2 adds **no Python packages**. The only new software is Ollama plus one
-model (decision D1). Steps 2.1 and 2.2 of the roadmap need neither.
+model (decision D1). Step 2.1 is built without it and step 2.2 does not need it.

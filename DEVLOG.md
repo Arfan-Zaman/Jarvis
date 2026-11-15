@@ -2,6 +2,44 @@
 
 Newest entries first. Record what changed, why, and what was verified.
 
+## 2026-11-15 — Phase 2.1: tools, execution engine, run log
+
+### Built
+- `jarvis/tools/registry.py`: `Tool` and `ToolRegistry`. One `execute` path:
+  find tool, check allow-list, validate inputs, ask the safety layer, run,
+  record, return a structured result. It never raises for a failed tool.
+- `jarvis/tools/builtin.py`: 11 tools (6 read, 5 write) wrapping existing
+  orchestrator methods, so validation and audit still apply.
+- `jarvis/stores/runs.py` and schema v2: `runs` and `run_steps`.
+- API: `/api/tools`, `/api/tools/<name>/execute`, `/api/runs`, `/api/executions`.
+- Command line: `tools` and `tool`. System page: tools and recent executions.
+
+### Decisions
+- A tool's permission level is its existing safety category, so there is one
+  permission system, not two.
+- A direct tool call creates its own single-step run, so nothing executes
+  without a log entry. Goal runs (Phase 2.2) will hold many steps.
+- Memories saved by a tool record the real caller as the source and default to
+  "unverified".
+- An existing database is backed up (`pre-upgrade-v1`) before migrating.
+- `REQUIRED_TABLES` stays at the version 1 set so older backups remain
+  restorable.
+- No destructive built-in tools yet; the approval path is tested with
+  test-only tools.
+
+### Verified
+- 114 tests passing (90 existing, 24 new): registration, discovery, each
+  built-in tool, invalid inputs, unknown tools, allow-list, crash containment,
+  read-only mode, approval flow for all four sensitive categories, run log
+  contents and retrieval, restart survival, interrupted runs, v1 upgrade, API.
+- Real run on a throwaway database: CLI tool calls (success, bad input,
+  unknown tool) and the System page panels. No console errors.
+
+### Not done
+- The live database in `data/` is still schema v1. It upgrades, with a backup,
+  the next time JARVIS starts.
+- No model, so nothing chooses tools yet.
+
 ## 2026-11-15 — Milestone 1: core foundation
 
 ### Environment at the time

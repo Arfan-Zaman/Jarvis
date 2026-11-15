@@ -2,7 +2,7 @@
 
 A local, modular personal assistant core. Milestone 1 is a small, stable
 foundation: persistent data, a safety layer, backups, and a local web
-interface. It has **no AI model connected yet** and says so wherever that
+interface. Phase 2.1 adds controlled tools and a run log. It has **no AI model connected yet** and says so wherever that
 matters.
 
 - Runs entirely on this Mac. Nothing is sent anywhere.
@@ -27,6 +27,8 @@ pages were also exercised by hand in a browser.
 | Configuration | `.env` file with validation, plus runtime settings in the database |
 | Logging | Rotating log file at `data/logs/jarvis.log` |
 | Backup / recovery | Consistent online backups, verification, pruning, approved restore |
+| Tools | 11 built-in tools with input rules and permission levels; discoverable and executable through one engine |
+| Run log | Every tool execution is recorded with time, inputs, result or error, and can be retrieved |
 | Web interface | Dashboard, Chat, Memory, Tasks, Projects, Experiences, System status |
 
 Every stored knowledge item carries: creation time, update time, source,
@@ -63,7 +65,38 @@ python3 -m jarvis init            # create or upgrade the database without start
 python3 -m jarvis backup          # back up now
 python3 -m jarvis backups         # list backups
 python3 -m jarvis restore <name>  # restore a backup (asks for confirmation)
+python3 -m jarvis tools           # list the tools JARVIS can execute
+python3 -m jarvis tool tasks.create '{"title": "Example"}'   # execute one tool
 ```
+
+## Tools
+
+A tool is a named capability with a description, input rules and a permission
+level. Tools are the only way JARVIS acts, and every execution is checked by
+the safety layer and written to the run log.
+
+| Tool | Permission | What it does |
+|---|---|---|
+| `jarvis.info` | read | What JARVIS is, what it holds, which tools it has |
+| `system.health` | read | Database integrity, backups, safety mode, AI connection |
+| `projects.list`, `projects.get` | read | Read project information |
+| `tasks.list` | read | List or search tasks |
+| `memory.search` | read | Retrieve stored memories |
+| `tasks.create`, `tasks.update`, `tasks.complete` | write | Change tasks |
+| `memory.save` | write | Save a memory, recording who saved it |
+| `experience.record` | write | Record an outcome and lesson |
+
+- **Read** tools run automatically. **Write** tools run unless read-only mode
+  is on, and are audited. Tools in a sensitive category (destructive, external,
+  financial, system) stop and wait for the owner's approval; none of the
+  built-in tools are in those categories yet.
+- Unknown tools, tools outside a caller's allow-list, and invalid inputs are
+  refused or failed without side effects. A tool that crashes is contained.
+- There is no shell or run-any-code tool, by design.
+- The System page lists the tools and recent executions. Executions are also
+  available at `/api/executions` and `/api/runs`.
+- To add a tool, write a handler and register a `Tool` in
+  `jarvis/tools/builtin.py`.
 
 ## Project structure
 
@@ -87,7 +120,11 @@ JARVIS/
 │   │   ├── records.py     memory, experience, task, project, agent stores
 │   │   ├── conversations.py
 │   │   ├── events.py      append-only audit trail
+│   │   ├── runs.py        run log (runs and their steps)
 │   │   └── settings.py    runtime settings
+│   ├── tools/
+│   │   ├── registry.py    tool registry and execution engine
+│   │   └── builtin.py     the built-in tools
 │   ├── providers/
 │   │   ├── base.py        AI provider interface
 │   │   ├── registry.py    provider selection
@@ -105,10 +142,11 @@ JARVIS/
 ### Database tables
 
 `memories`, `experiences`, `tasks`, `projects`, `agents`, `conversations`,
-`messages`, `system_events`, `settings`, `approvals`.
+`messages`, `system_events`, `settings`, `approvals`, `runs`, `run_steps`.
 
 To change the schema, append a migration to `MIGRATIONS` in `jarvis/db.py`.
-Existing databases upgrade automatically on the next start.
+Existing databases upgrade automatically on the next start, after a
+`pre-upgrade` backup is taken.
 
 ## Configuration
 
@@ -172,10 +210,10 @@ cd ~/JARVIS
 python3 -m unittest discover -s tests
 ```
 
-90 tests cover database initialisation, memory create/retrieve/delete, task
+114 tests cover database initialisation, memory create/retrieve/delete, task
 creation and completion, project creation, experience storage, configuration
-loading, safety checks, AI provider reporting, backup and restore, and the web
-API. Each test uses its own temporary database and never touches `data/`.
+loading, safety checks, AI provider reporting, backup and restore, the web
+API, the tool registry, tool execution, permissions and the run log. Each test uses its own temporary database and never touches `data/`.
 
 ## Backup and recovery
 
@@ -199,7 +237,10 @@ API. Each test uses its own temporary database and never touches `data/`.
 
 ## Current limitations
 
-- No AI model is connected, so chat cannot answer.
+- No AI model is connected, so chat cannot answer, and nothing decides which
+  tool to use: tools run only when a person or a program calls them.
+- Tools can be executed from the command line and the API. The web interface
+  shows tools and their history but has no form to run one.
 - The Ollama adapter is untested against real Ollama. MLX is not implemented.
 - Memory and experience search is plain keyword matching, not semantic.
 - No login. The server accepts connections from this Mac only and rejects
@@ -214,8 +255,7 @@ API. Each test uses its own temporary database and never touches `data/`.
 
 ## Next recommended milestone
 
-**Milestone 2: connect one local model.** Install Ollama and one small model,
-verify the existing adapter against it, then let chat draw on stored memories
-and lessons as context. This is the smallest step that makes JARVIS
-conversational, and it exercises the provider interface before anything larger
-is built on it.
+**Phase 2.2: the reasoning engine.** A loop that takes a goal, asks a model for
+the next tool call, executes it through the tool engine, and reports only what
+the run log shows was done. It is built and tested with a scripted stand-in
+model, so it needs no installs. See `NEXT_SESSION.md`.
