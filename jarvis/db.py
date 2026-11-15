@@ -228,6 +228,40 @@ MIGRATIONS: list[str] = [
     ALTER TABLE messages ADD COLUMN run_id INTEGER REFERENCES runs(id) ON DELETE SET NULL;
     CREATE INDEX idx_messages_run ON messages(run_id);
     """,
+    # --- version 5: full-text knowledge index and memory-aware chat messages ---
+    """
+    CREATE VIRTUAL TABLE knowledge_fts USING fts5(
+        kind UNINDEXED, ref_id UNINDEXED, body, tokenize = 'porter unicode61'
+    );
+    INSERT INTO knowledge_fts (kind, ref_id, body)
+        SELECT 'memory', id, content || ' ' || category FROM memories;
+    INSERT INTO knowledge_fts (kind, ref_id, body)
+        SELECT 'experience', id, title || ' ' || description || ' ' || lesson || ' ' || category FROM experiences;
+
+    CREATE TRIGGER memories_fts_insert AFTER INSERT ON memories BEGIN
+        INSERT INTO knowledge_fts (kind, ref_id, body) VALUES ('memory', new.id, new.content || ' ' || new.category);
+    END;
+    CREATE TRIGGER memories_fts_update AFTER UPDATE OF content, category ON memories BEGIN
+        DELETE FROM knowledge_fts WHERE kind = 'memory' AND ref_id = old.id;
+        INSERT INTO knowledge_fts (kind, ref_id, body) VALUES ('memory', new.id, new.content || ' ' || new.category);
+    END;
+    CREATE TRIGGER memories_fts_delete AFTER DELETE ON memories BEGIN
+        DELETE FROM knowledge_fts WHERE kind = 'memory' AND ref_id = old.id;
+    END;
+    CREATE TRIGGER experiences_fts_insert AFTER INSERT ON experiences BEGIN
+        INSERT INTO knowledge_fts (kind, ref_id, body) VALUES ('experience', new.id, new.title || ' ' || new.description || ' ' || new.lesson || ' ' || new.category);
+    END;
+    CREATE TRIGGER experiences_fts_update AFTER UPDATE OF title, description, lesson, category ON experiences BEGIN
+        DELETE FROM knowledge_fts WHERE kind = 'experience' AND ref_id = old.id;
+        INSERT INTO knowledge_fts (kind, ref_id, body) VALUES ('experience', new.id, new.title || ' ' || new.description || ' ' || new.lesson || ' ' || new.category);
+    END;
+    CREATE TRIGGER experiences_fts_delete AFTER DELETE ON experiences BEGIN
+        DELETE FROM knowledge_fts WHERE kind = 'experience' AND ref_id = old.id;
+    END;
+
+    ALTER TABLE messages ADD COLUMN memory_refs TEXT;
+    ALTER TABLE messages ADD COLUMN memory_offer TEXT;
+    """,
 ]
 
 SCHEMA_VERSION = len(MIGRATIONS)

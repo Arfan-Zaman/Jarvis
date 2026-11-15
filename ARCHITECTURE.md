@@ -16,7 +16,7 @@ See `JARVIS_ROADMAP.md` for sequence and `NEXT_SESSION.md` for the next task.
    download needs a stated reason.
 7. **Claude Code builds JARVIS; it is not JARVIS's brain.**
 
-## 2. What exists today (Phases 1 and 2, step 3.1; complete and tested)
+## 2. What exists today (Phases 1 and 2, steps 3.1 and 3.2; complete and tested)
 
 ```
 Web interface / command line
@@ -45,7 +45,8 @@ Web interface / command line
 | Reasoning engine | `jarvis/engine/engine.py` | Working with the real local model |
 | Local model | Ollama + `qwen3.5:9b` | Connected and verified |
 | Conversation (talk or act) | `jarvis/engine/conversation.py` | Working with the real local model (3.1) |
-| Tests | `tests/` | 174 passing |
+| Memory context (full-text, ranked) | `jarvis/engine/context.py` | Working (3.2) |
+| Tests | `tests/` | 192 passing |
 
 Tables: memories, experiences, tasks, projects, agents, conversations,
 messages, system_events, settings, approvals, runs, run_steps, run_plan.
@@ -107,7 +108,7 @@ messages, system_events, settings, approvals, runs, run_steps, run_plan.
 | `runs` | **Built (schema v2).** One row per piece of work: kind (`tool` or `goal`), goal, agent, status (`running`, `waiting_approval`, `completed`, `failed`, `cancelled`), result, timestamps |
 | `run_steps` | **Built (schema v2).** Each step in a run: what the model proposed, the tool called, inputs, output or error, status. This is the transparent activity log and the resume point |
 | `run_plan` | **Built (schema v3).** The stored plan: one row per step with status, inputs, attempts, approval and note |
-| `memories_fts` | Not built (step 2.4). Full-text index over memories and experiences |
+| `knowledge_fts` | **Built (schema v5).** FTS5 index over memories and experiences, synced by triggers. Was planned as `memories_fts`. Full-text index over memories and experiences |
 
 The existing `tasks`, `agents`, `approvals` and `system_events` tables are
 reused unchanged.
@@ -154,6 +155,15 @@ built from the tool list and the current date) or `act` (restated goal →
 `Engine.start`). Act replies are composed from `run_steps` in fixed wording;
 look-ups with no changes are phrased by the model from the tool outputs only.
 The reply is stored with `messages.run_id` (schema v4).
+
+### 4.2d Memory of the owner (built, step 3.2)
+
+`ContextBuilder.build(text)` = personal/preference memories (always) + FTS5
+matches ranked by `bm25 × trust` (verification, confidence), within a size
+budget, plus matching lessons. Chat answers list them with ids and may cite
+them (`[memory: …]` → `messages.memory_refs`). Saving: explicit "remember" in
+the owner's own words saves at once; otherwise the reply carries
+`messages.memory_offer` and only a following "yes" saves it.
 
 ### 4.3 How one request flows
 

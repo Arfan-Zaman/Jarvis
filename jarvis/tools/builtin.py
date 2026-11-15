@@ -90,17 +90,26 @@ def tasks_complete(app, inputs, actor):
 
 
 def memory_search(app, inputs, actor):
+    from ..engine.context import ContextBuilder, fts_query
+    if inputs.get("query") and fts_query(inputs["query"]):
+        # Ranked full-text search: finds "prefers" for "preference", trusted facts first.
+        return ContextBuilder(app).search_memories(
+            inputs["query"], limit=inputs.get("limit", 20), category=inputs.get("category"),
+            project_id=inputs.get("project_id"), include_global=False)
     return app.list("memories", query=inputs.get("query"), limit=inputs.get("limit", 20),
                     **_filters(inputs, "category", "project_id"))
 
 
 def memory_save(app, inputs, actor):
     # The same fact is not stored twice: an identical active memory is returned instead.
-    wanted = " ".join(inputs["content"].split()).lower()
+    def same(value: str) -> str:   # ignore spacing, case and closing punctuation
+        return " ".join(value.split()).lower().rstrip(".!? ")
+
+    wanted = same(inputs["content"])
     # Search by the longest word so spacing and case differences still find the match.
     key = max(wanted.split(), key=len) if wanted.split() else wanted
-    for existing in app.memory.list(query=key, limit=200):
-        if " ".join(existing["content"].split()).lower() == wanted \
+    for existing in app.memory.list(query=key.strip(".,!?"), limit=200):
+        if same(existing["content"]) == wanted \
                 and existing["project_id"] == inputs.get("project_id"):
             return {**existing, "duplicate": True}
     # Anything not saved by the owner is recorded as unverified with its true source.

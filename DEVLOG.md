@@ -2,6 +2,37 @@
 
 Newest entries first. Record what changed, why, and what was verified.
 
+## 2026-11-16 — Phase 3.2: memory of you
+
+### Built
+- Schema v5: `knowledge_fts` (FTS5, porter stemming) over memories and
+  experiences, kept in sync by triggers and back-filled on upgrade;
+  `messages.memory_refs` and `messages.memory_offer`.
+- `jarvis/engine/context.py`: ranked search (bm25 weighted by verification and
+  confidence), personal facts always included, size budget, project scope.
+- Chat answers get "What you know about the owner" with ids; the reply's
+  `[memory: …]` marker becomes "From memory" chips (only ids actually supplied).
+- REMEMBER mode saves at once as `user:chat`, `user_provided`. Passing personal
+  facts become an offer; "yes" saves, "no" declines, moving on drops it.
+- Goals (`Engine._recall`) and `memory.search` use the index.
+
+### Found with the real model, then fixed
+1. It saved passing remarks, and even a bare "Yes"/"No", without asking. Now an
+   immediate save requires the owner's own words ("remember", "note that",
+   "don't forget"…), checked in code; otherwise it can only offer.
+2. Facts were written as "The user prefers…". The router asks for first person.
+3. While offering, it claimed "I have noted / logged / flagged that". Plain
+   statements now get "Understood." plus the offer; for questions, sentences
+   claiming something was kept are removed.
+4. It refused general advice (dinner ideas) as if that needed the web. The chat
+   prompt now allows general knowledge and suggestions.
+5. A trailing full stop defeated duplicate detection. Fixed.
+
+### Verified
+- 192 tests passing (174 existing, 18 new).
+- Real model: remember, offer then yes, offer then no; a new conversation
+  used and cited the saved facts.
+
 ## 2026-11-16 — Phase 3.1: one conversation that thinks and acts
 
 ### Built

@@ -27,22 +27,19 @@ refuses to start rather than pretend.
 from __future__ import annotations
 
 import json
-import re
 
 from ..common import JarvisError, NotFoundError, ValidationError, now_local, text
 from ..logging_setup import get_logger
 from ..providers import ChatMessage, ProviderError
 from ..safety import ActionCategory
 from ..tools.registry import ToolRegistry
+from .context import ContextBuilder
 
 log = get_logger("engine")
 
 ENGINE_ACTOR = "jarvis-core"     # steps chosen by the model are attributed to JARVIS, not the owner
 RESUMABLE = ("interrupted", "waiting_approval", "blocked")
 ATTEMPTS_PER_STEP = 2
-_STOP_WORDS = frozenset("about after again also been before being could does doing from have into just like "
-                        "make more most need only other over please should some such than that their them then "
-                        "there these they this those what when where which will with would your".split())
 
 PROTOCOL = """You are the planning component of JARVIS. You do not act directly: you choose
 from the listed tools and JARVIS executes them and shows you the results.
@@ -230,18 +227,10 @@ class Engine:
                                 + status.detail)
 
     def _recall(self, goal: str, allowed) -> dict:
-        """Read-only context: stored memories and lessons that mention the goal's key words."""
+        """Read-only context: the most relevant memories and lessons (full-text ranked)."""
         if allowed is not None and "memory.search" not in allowed:
             return {"memories": [], "lessons": []}
-        words = [w for w in dict.fromkeys(re.findall(r"[a-z0-9]{4,}", goal.lower())) if w not in _STOP_WORDS][:6]
-        memories, lessons = {}, {}
-        for word in words:
-            for item in self.app.memory.list(query=word, limit=3):
-                memories.setdefault(item["id"], {key: item[key] for key in (
-                    "id", "content", "category", "source", "confidence", "verification_status")})
-            for item in self.app.experiences.lessons(word, limit=2):
-                lessons.setdefault(item["id"], {key: item[key] for key in ("id", "title", "outcome", "lesson")})
-        return {"memories": list(memories.values())[:5], "lessons": list(lessons.values())[:3]}
+        return ContextBuilder(self.app).build(goal)
 
     def _tools(self, allowed) -> list[dict]:
         return [tool for tool in self.app.tools.list() if allowed is None or tool["name"] in allowed]

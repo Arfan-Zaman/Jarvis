@@ -6,7 +6,7 @@ interface. Phase 2.1 added controlled tools and a run log; Phase 2.2 adds a
 reasoning engine that plans and carries out goals using those tools. Phase 2.3
 connects a local AI model (Qwen 3.5 9B through Ollama), so JARVIS can now chat
 and carry out goals for real, entirely on this Mac. Phase 3.1 makes chat one
-conversation that both talks and acts.
+conversation that both talks and acts; Phase 3.2 gives it a memory of you.
 
 - Runs entirely on this Mac. Nothing is sent anywhere.
 - Python standard library only. The one outside program is Ollama, which runs
@@ -97,6 +97,25 @@ Real conversation, Qwen 3.5 9B: a greeting, "15% of 240" (36), "remind me to
 call Sam tomorrow" (task created with the correct date), an ambiguous request
 that asked which business, a task list, saving a preference, and declining to
 send email. Replies take 2 to 30 seconds; the first after a restart is slowest.
+
+## Memory of you
+
+- Every chat answer is given the most relevant things JARVIS knows, found with
+  a full-text index (word forms match: "preferences" finds "prefer"). Facts
+  you confirmed outrank guesses; archived ones are ignored. Personal facts and
+  preferences are always included, whatever the topic.
+- When an answer relies on a stored fact, the reply shows **From memory** with
+  that fact.
+- Say "remember …" (or "note that…", "don't forget…") and it is saved at
+  once as owner-provided.
+- Mention a lasting fact in passing ("call me Arfan", "I work late on
+  Thursdays") and JARVIS asks **"Shall I remember that?"**. It saves only if
+  you answer yes. Nothing is stored silently: this is enforced in code, not left
+  to the model.
+- Goals use the same ranked memory and lessons.
+
+Real model: preferences given in one conversation were used and cited in a new
+conversation ("You prefer short answers, and I should call you Arfan.").
 
 ## Goals and the reasoning engine
 
@@ -293,14 +312,15 @@ cd ~/JARVIS
 python3 -m unittest discover -s tests
 ```
 
-174 tests cover database initialisation, memory create/retrieve/delete, task
+192 tests cover database initialisation, memory create/retrieve/delete, task
 creation and completion, project creation, experience storage, configuration
 loading, safety checks, AI provider reporting, backup and restore, the web
 API, the tool registry, tool execution, permissions, the run log, and the
 reasoning engine (planning, failures, invalid plans, missing information,
 approvals, limits, false completion claims, goal review, interruption
 recovery), and the conversation (routing, truthful reporting, follow-up
-questions, approvals in chat). The automated tests use a scripted stand-in, so they never need
+questions, approvals in chat), and memory (index sync, ranking, the
+remember and offer-to-remember flows, citations). The automated tests use a scripted stand-in, so they never need
 Ollama. Each test uses its own temporary database and never touches `data/`.
 
 ## Backup and recovery
@@ -328,8 +348,9 @@ Ollama. Each test uses its own temporary database and never touches `data/`.
 - The model is small and local: it handles simple goals well but can still
   make poor plans on complex ones. The review step and the run log catch
   failures, but they are not perfect.
-- Memory is used only when JARVIS decides to look something up; it does not
-  yet bring relevant memories into every reply (Phase 3.2).
+- Memory search matches words and word forms, not meaning: "car" will not find
+  "vehicle". Near-duplicates worded differently can both be stored.
+- The model sometimes cites a memory it did not really need.
 - Routing can occasionally misjudge whether you wanted an action. When unsure
   it answers rather than acts.
 - Context recall is keyword matching on the goal's words, not meaning-based.
@@ -350,7 +371,6 @@ Ollama. Each test uses its own temporary database and never touches `data/`.
 
 ## Next recommended milestone
 
-**Phase 3.2: memory of you.** JARVIS brings the most relevant things it knows
-about you into every reply, cites them, and offers "Shall I remember that?"
-for personal facts and preferences, saving only with your yes. No installs.
-See `NEXT_SESSION.md`.
+**Phase 3.3: personality and self-knowledge**, then **3.4 everyday tools**
+(time, calculations, notes, reminders with times, reading files from a JARVIS
+inbox folder). No installs. See `JARVIS_ROADMAP.md` and `NEXT_SESSION.md`.

@@ -318,6 +318,11 @@ views.chat = {
       h('div', { class: 'who' }, message.role === 'assistant' ? `JARVIS · ${message.model || message.provider || ''}`
         : message.role === 'system' ? 'System notice' : 'You'),
       h('div', { class: 'wrap' }, message.content),
+      message.memory_refs && message.memory_refs.length
+        ? h('div', { class: 'meta' }, chip('From memory', 'violet'),
+          message.memory_refs.map((ref) => h('span', { class: 'chip', title: ref.content },
+            ref.content.length > 48 ? ref.content.slice(0, 47) + '…' : ref.content)))
+        : null,
       message.run_id ? actionCard(message.run_id) : null);
 
     const showMessages = (list) => {
