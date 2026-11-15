@@ -2,6 +2,24 @@
 
 Newest entries first. Record what changed, why, and what was verified.
 
+## 2026-11-16 — Free full-web learning through Claude Code
+
+- Owner wanted a free-for-life search. SearXNG was rejected: it scrapes Google
+  and Bing and ships `curl_cffi` to disguise requests as a browser, i.e. it
+  works around bot detection, which JARVIS does not do. Marginalia's free API
+  did not respond. Chosen: Claude Code's own web search, already paid for by
+  the owner's plan and allowed.
+- New read-only tool `claude.research` (WebSearch + WebFetch only, Haiku,
+  `JARVIS_RESEARCH_MODEL`): returns short facts each with its source URL.
+  Learning uses it first and falls back to basic search
+  (`JARVIS_LEARN_SOURCE=web` forces basic).
+- All Claude tools now run with `--setting-sources project`: the owner's
+  personal plugins and hooks (context-mode blocked WebFetch) are not loaded.
+- Optional `JARVIS_SEARXNG_URL` search support stays in `web.py` for an
+  owner-run instance limited to engines with official APIs.
+- Real pass: "top 10 most reliable used cars Australia 2024", 3 sourced facts
+  from CarsGuide in 36 s (~3 US cents of plan usage per pass). 248 tests pass.
+
 ## 2026-11-16 — Continuous learning
 
 - `jarvis/learner.py`: while the server runs, every 30 minutes when idle

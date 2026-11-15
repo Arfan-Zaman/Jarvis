@@ -41,6 +41,7 @@ DEFAULTS = {
     "JARVIS_ENGINE_MAX_FAILURES": "3",
     "JARVIS_ENGINE_MAX_MODEL_CALLS": "40",
     "JARVIS_BRAVE_API_KEY": "",
+    "JARVIS_SEARXNG_URL": "",
     "JARVIS_WHISPER_MODEL": "data/models/ggml-small.en.bin",
     "JARVIS_VOICE": "Daniel",
     "JARVIS_VOICE_RATE": "185",
@@ -72,6 +73,7 @@ class Config:
     engine_max_failures: int = 3
     engine_max_model_calls: int = 40
     brave_api_key: str = ""
+    searxng_url: str = ""
     whisper_model: Path = Path("data/models/ggml-small.en.bin")
     voice_name: str = "Daniel"
     voice_rate: int = 185
@@ -211,6 +213,7 @@ def load_config(
         engine_max_failures=_integer("JARVIS_ENGINE_MAX_FAILURES", get("JARVIS_ENGINE_MAX_FAILURES"), 1, 20),
         engine_max_model_calls=_integer("JARVIS_ENGINE_MAX_MODEL_CALLS", get("JARVIS_ENGINE_MAX_MODEL_CALLS"), 1, 500),
         brave_api_key=get("JARVIS_BRAVE_API_KEY").strip(),
+        searxng_url=get("JARVIS_SEARXNG_URL").strip().rstrip("/"),
         whisper_model=_path(root, get("JARVIS_WHISPER_MODEL")),
         voice_name=_voice(get("JARVIS_VOICE")),
         voice_rate=_integer("JARVIS_VOICE_RATE", get("JARVIS_VOICE_RATE"), 90, 360),

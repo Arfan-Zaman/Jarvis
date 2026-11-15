@@ -68,6 +68,18 @@ class ClaudeToolTests(unittest.TestCase):
         self.assertNotIn("Bash", cmd[cmd.index("--disallowedTools") + 1].split(","))
         self.assertEqual(kw["cwd"], self.tmp.name)
 
+    def test_research_is_read_only_and_keeps_sourced_facts(self):
+        calls = []
+        result = json.dumps({"facts": [{"fact": "Dealers hold about half of used-car sales.", "url": "https://a.example/x"},
+                                       {"fact": "No source here at all, so it is dropped.", "url": ""}]})
+        def runner(cmd, **kw):
+            calls.append(cmd); return done(json.dumps({"result": "Here: " + result, "total_cost_usd": 0.01}))
+        out = claude.claude_research(FakeApp, {"query": "used cars"}, "jarvis:learn", runner=runner)
+        cmd = calls[0]
+        self.assertEqual(cmd[cmd.index("--allowedTools") + 1], "WebSearch,WebFetch")
+        self.assertIn("Bash", cmd[cmd.index("--disallowedTools") + 1])
+        self.assertEqual(out["facts"], [{"fact": "Dealers hold about half of used-car sales.", "url": "https://a.example/x"}])
+
     def test_errors_are_reported(self):
         with self.assertRaises(JarvisError):
             self.run_tool({"task": "x"}, "not json", code=1)

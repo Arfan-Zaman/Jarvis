@@ -12,7 +12,7 @@ from jarvis.web import create_server
 from support import JarvisTestCase
 
 EXPECTED_TOOLS = {
-    "claude.work": "workspace", "claude.operate": "system",
+    "claude.work": "workspace", "claude.operate": "system", "claude.research": "web_read",
     "jarvis.info": "read", "system.health": "read", "projects.list": "read", "projects.get": "read",
     "tasks.list": "read", "memory.search": "read",
     "tasks.create": "write", "tasks.update": "write", "tasks.complete": "write",

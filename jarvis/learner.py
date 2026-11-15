@@ -45,6 +45,14 @@ def enabled() -> bool:
     return os.environ.get("JARVIS_LEARN", "1") != "0"
 
 
+def use_claude(app) -> bool:
+    """Learn through Claude Code's web search when it is available (JARVIS_LEARN_SOURCE=web turns it off)."""
+    if os.environ.get("JARVIS_LEARN_SOURCE", "claude") == "web" or "claude.research" not in app.tools.names():
+        return False
+    from .tools.claude import claude_binary
+    return bool(claude_binary())
+
+
 def interval_seconds() -> int:
     try:
         return max(5, int(os.environ.get("JARVIS_LEARN_MINUTES", "30"))) * 60
@@ -103,10 +111,16 @@ class Learner:
         started = time.monotonic()
         try:
             choice = self.pick()
-            found = self.app.tools.execute("web.search", {"query": choice["query"], "limit": 5}, actor=ACTOR)
+            deep = self.research(choice) if use_claude(self.app) else None
+            if deep is not None:                      # full-web research through Claude Code
+                saved, read = deep
+                found = {"ok": False}
+            else:
+                found = self.app.tools.execute("web.search", {"query": choice["query"], "limit": 5}, actor=ACTOR)
             results = ((found.get("output") or {}).get("results") or []) if found["ok"] else []
-            saved, read = [], []
-            for result in results[:3]:
+            if deep is None:
+                saved, read = [], []
+            for result in (results[:3] if deep is None else []):
                 if len(read) >= 2:
                     break
                 url = result.get("url") or result.get("link")
@@ -148,6 +162,24 @@ class Learner:
         outcome["at"] = time.strftime("%Y-%m-%dT%H:%M:%S")
         self.app.settings.set(STATUS_KEY, outcome, category="learning", source="jarvis")
         return outcome
+
+    def research(self, choice: dict):
+        """Learn through Claude Code's web search. Returns (saved ids, pages) or None to fall back."""
+        found = self.app.tools.execute("claude.research", {"query": choice["query"], "why": choice["why"],
+                                                           "count": 3}, actor=ACTOR)
+        if not found["ok"]:
+            log.info("Claude research unavailable, using basic search: %s", found["error"])
+            return None
+        saved, read = [], []
+        for item in (found["output"] or {}).get("facts", [])[:3]:
+            result = self.app.tools.execute("memory.save", {
+                "content": f"{item['fact']} (source: {item['url']})", "category": "learned",
+                "verification_status": "unverified", "confidence": 0.65}, actor=ACTOR)
+            if result["ok"] and not (result["output"] or {}).get("duplicate"):
+                saved.append(result["output"]["id"])
+            if item["url"] not in read:
+                read.append(item["url"])
+        return saved, read
 
     # --- background loop ---------------------------------------------------
     def idle(self) -> bool:

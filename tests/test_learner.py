@@ -1,5 +1,6 @@
 """Continuous learning: one pass, with the model scripted and the web faked (no network)."""
 
+import os
 from unittest import mock
 
 from jarvis.providers.scripted import ScriptedProvider
@@ -12,6 +13,7 @@ PAGE = "Dealers in Australia must give a statutory warranty on used cars under c
 class LearnerTests(JarvisTestCase):
     def setUp(self):
         super().setUp()
+        os.environ["JARVIS_LEARN_SOURCE"] = "web"      # these tests cover the basic-search path
         self.model = ScriptedProvider([
             {"query": "used car warranty rules Australia", "why": "The owner sells used cars."},
             {"facts": ["Licensed dealers must give a statutory warranty on some used cars.", "tiny"]},
@@ -31,6 +33,7 @@ class LearnerTests(JarvisTestCase):
             self.app.tools._tools[name] = tool.__class__(tool.name, tool.description, tool.category, fake, tool.inputs)
 
     def tearDown(self):
+        os.environ.pop("JARVIS_LEARN_SOURCE", None)
         for p in self.patches:
             p.stop()
         super().tearDown()

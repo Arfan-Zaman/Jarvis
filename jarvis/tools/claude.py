@@ -7,7 +7,8 @@ back as JARVIS's own. The hard lines still hold:
 - no shell: Bash is disallowed, so Claude Code cannot run commands;
 - files: only inside JARVIS's workspace (`workspace/`), and only when the
   caller asks for `write_files`; otherwise it can only read and search the web;
-- no MCP servers or plugins (they could spend money or message people);
+- no MCP servers, plugins or the owner's personal hooks (`--setting-sources project`):
+  they could spend money, message people, or block tools;
 - no saved session; a hard time limit.
 
 It runs through `ToolRegistry.execute` like every other tool, so it is logged,
@@ -56,7 +57,7 @@ def command(binary: str, task: str, write_files: bool, shell: bool = False) -> l
             "--permission-mode", "acceptEdits" if write_files or shell else "default",
             "--allowedTools", ",".join(allowed),
             "--disallowedTools", ",".join(never + ([] if write_files or shell else WRITE_TOOLS)),
-            "--strict-mcp-config", "--mcp-config", '{"mcpServers":{}}',
+            "--strict-mcp-config", "--mcp-config", '{"mcpServers":{}}', "--setting-sources", "project",
             "--no-session-persistence",
             "--append-system-prompt", BRIEF.format(files=files)]
 
@@ -92,7 +93,59 @@ def claude_operate(app, inputs, actor, runner=subprocess.run):
     return claude_work(app, inputs, actor, runner=runner, shell=True)
 
 
+RESEARCH = ("Search the web for: {query}\nWhy it matters to the owner: {why}\n"
+            "Read the best sources. Reply with ONLY one JSON object: "
+            '{{"facts": [{{"fact": "...", "url": "..."}}]}} with up to {count} durable, specific, useful '
+            "facts, each with the exact URL of the page it came from. No facts you did not read.")
+
+
+def claude_research(app, inputs, actor, runner=subprocess.run):
+    """Full-web research through Claude Code's own web search (the owner's plan; no key, no
+    scraping). Read-only: web search and page reading only, on the small fast model."""
+    binary = claude_binary()
+    if not binary:
+        raise JarvisError("Claude Code is not installed")
+    query = inputs["query"].strip()
+    if not query:
+        raise ValidationError("claude.research: 'query' is empty")
+    prompt = RESEARCH.format(query=query, why=inputs.get("why", "general usefulness"), count=inputs.get("count", 3))
+    cmd = [binary, "-p", prompt, "--output-format", "json", "--model", os.environ.get("JARVIS_RESEARCH_MODEL", "haiku"),
+           "--allowedTools", "WebSearch,WebFetch", "--disallowedTools", ",".join(NEVER + WRITE_TOOLS + ["Read", "Grep", "Glob"]),
+           "--strict-mcp-config", "--mcp-config", '{"mcpServers":{}}', "--setting-sources", "project", "--no-session-persistence"]
+    workspace = Path(app.config.workspace_dir)
+    workspace.mkdir(parents=True, exist_ok=True)
+    env = {k: v for k, v in os.environ.items() if not k.startswith("CLAUDE_CODE_")}
+    try:
+        done = runner(cmd, cwd=str(workspace), capture_output=True, text=True, timeout=300, env=env,
+                      stdin=subprocess.DEVNULL)
+    except subprocess.TimeoutExpired:
+        raise JarvisError("Claude Code research did not finish within 5 minutes") from None
+    try:
+        reply = json.loads(done.stdout)
+    except (json.JSONDecodeError, TypeError):
+        raise JarvisError(f"Claude Code research failed (exit {done.returncode})") from None
+    if reply.get("is_error") or done.returncode:
+        raise JarvisError(f"Claude Code reported an error: {str(reply.get('result') or reply)[:300]}")
+    text = reply.get("result", "")
+    start, end = text.find("{"), text.rfind("}")
+    try:
+        facts = json.loads(text[start:end + 1]).get("facts", []) if start >= 0 else []
+    except json.JSONDecodeError:
+        facts = []
+    clean = [{"fact": str(f.get("fact", "")).strip()[:400], "url": str(f.get("url", "")).strip()}
+             for f in facts if isinstance(f, dict) and str(f.get("url", "")).startswith(("http://", "https://"))]
+    return {"query": query, "facts": [f for f in clean if len(f["fact"]) >= 15], "cost_usd": reply.get("total_cost_usd")}
+
+
 def register_claude(registry: ToolRegistry) -> None:
+    registry.register(Tool(
+        "claude.research",
+        "Research a question on the whole live web through Claude Code's web search and return "
+        "short facts, each with its source URL. Read-only.",
+        ActionCategory.WEB_READ, claude_research,
+        {"query": {"type": "string", "description": "What to research.", "required": True},
+         "why": {"type": "string", "description": "Why it matters, to focus the research."},
+         "count": {"type": "integer", "description": "How many facts (1 to 5)."}}))
     registry.register(Tool(
         "claude.operate",
         "Hand a job to Claude Code with full power inside JARVIS's workspace folder: it can run "

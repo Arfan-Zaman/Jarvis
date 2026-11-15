@@ -1,8 +1,9 @@
 """Internet tools: search and read the public web (permission level `web_read`).
 
 Search uses services that permit automated use without a key: Wikipedia's
-search API and DuckDuckGo's instant-answer API. A full web-search provider
-(Brave Search) is used too when the owner sets `JARVIS_BRAVE_API_KEY`.
+search API and DuckDuckGo's instant-answer API. Full web search comes from
+the owner's own SearXNG (free, self-hosted, no key or quota) when
+`JARVIS_SEARXNG_URL` is set, and from Brave Search when `JARVIS_BRAVE_API_KEY` is set.
 DuckDuckGo's HTML results page is deliberately NOT used: it challenges
 automated clients, and JARVIS does not try to get around bot detection.
 
@@ -169,8 +170,17 @@ def _brave(query: str, limit: int, key: str = "") -> list[dict]:
             for item in (data.get("web") or {}).get("results", [])]
 
 
-def providers(key: str = "") -> list[tuple[str, callable]]:
-    chosen = [("brave", lambda query, limit: _brave(query, limit, key))] if key else []
+def _searxng(query: str, limit: int, base: str = "") -> list[dict]:
+    """The owner's own SearXNG: it asks several search engines and merges the results."""
+    data = _json(f"{base}/search?{urllib.parse.urlencode({'q': query, 'format': 'json', 'language': 'en'})}")
+    return [{"title": item.get("title", ""), "url": item.get("url", ""),
+             "snippet": _plain(item.get("content", "")), "source": "searxng"}
+            for item in data.get("results", [])[:limit] if item.get("url", "").startswith(("http://", "https://"))]
+
+
+def providers(key: str = "", searxng: str = "") -> list[tuple[str, callable]]:
+    chosen = [("searxng", lambda query, limit: _searxng(query, limit, searxng))] if searxng else []
+    chosen += [("brave", lambda query, limit: _brave(query, limit, key))] if key else []
     return chosen + [("wikipedia", _wikipedia), ("duckduckgo", _duckduckgo)]
 
 
@@ -182,7 +192,8 @@ def web_search(app, inputs, actor):
     limit = max(1, min(inputs.get("limit", 5), 10))
     results, used, errors, seen = [], [], [], set()
     key = app.config.brave_api_key or os.environ.get("JARVIS_BRAVE_API_KEY", "").strip()
-    for name, search in providers(key):
+    searxng = getattr(app.config, "searxng_url", "") or os.environ.get("JARVIS_SEARXNG_URL", "").strip().rstrip("/")
+    for name, search in providers(key, searxng):
         try:
             found = search(query, limit)
         except JarvisError as exc:
@@ -196,7 +207,7 @@ def web_search(app, inputs, actor):
     if not used:
         raise WebError("every search service failed: " + "; ".join(errors))
     return {"query": query, "results": results[:limit * 2], "searched": used, "errors": errors,
-            "note": None if any(p == "brave" for p in used) else
+            "note": None if any(p in ("brave", "searxng") for p in used) else
             "Searched Wikipedia and DuckDuckGo instant answers only (no full web search configured)."}
 
 
