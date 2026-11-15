@@ -1006,7 +1006,20 @@ async function show(name) {
   $('#view').replaceWith(root);
 }
 
-const route = async () => { await show(location.hash.replace('#', '') || 'presence'); window.scrollTo(0, 0); };
+// A small live JARVIS in every page header, following the real run state.
+let headerOrb = null;
+function startHeaderOrb() {
+  const host = document.getElementById('topbar-orb');
+  if (!host || headerOrb || !window.JarvisIdentity) return;
+  headerOrb = JarvisIdentity.create(host, { compact: true });
+  headerOrb.setState('calm');
+  setInterval(async () => {
+    if (document.hidden || document.body.classList.contains('presence-mode')) return;
+    try { const [s] = JarvisIdentity.fromLive(await api('GET', '/api/live')); headerOrb.setState(s); } catch (e) { /* next tick */ }
+  }, 3000);
+}
+
+const route = async () => { startHeaderOrb(); await show(location.hash.replace('#', '') || 'presence'); window.scrollTo(0, 0); };
 window.addEventListener('hashchange', route);
 route();
 refreshChrome();

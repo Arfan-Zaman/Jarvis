@@ -2,6 +2,17 @@
 
 Newest entries first. Record what changed, why, and what was verified.
 
+## 2026-11-16 — HUD on every page
+
+- `hud.css` (loaded last) reskins every page through the shared parts:
+  obsidian room with a faint scan grid, panels framed by magenta corner
+  brackets, readout rules after headings, instrument-style numbers, magenta
+  controls and focus, chat replies as a lit edge, hairline lists and tables.
+- A small live JARVIS (compact swarm) sits in each page header and follows
+  `/api/live`; hidden on the Presence page.
+- Checked Dashboard, Chat, Tasks and System in Chrome with real clicks; no
+  console errors; 243 tests pass.
+
 ## 2026-11-16 — 3D face (WebGL) and HUD Presence page
 
 - The swarm now renders with WebGL (no library): soft glowing sprites,
