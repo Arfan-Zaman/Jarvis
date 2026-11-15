@@ -14,7 +14,7 @@ Business-specific work (Monsoor Motors, Aureus Detailing) comes later.**
 |---|---|---|
 | 1 | Foundation | **Complete** |
 | 2 | Intelligence Core: tools, reasoning engine, local model | **Complete** (2.1 to 2.3; 155 tests passing) |
-| 3 | A real JARVIS: one conversation that thinks, remembers and acts | **In progress**: 3.1 and 3.2 done (192 tests passing); 3.3 next |
+| 3 | A real JARVIS: autonomous, learning, connected | **In progress**: 3.1 and 3.2 done (192 tests passing); 3.3 next |
 | 4 | Voice | Not started |
 | 5 | Autonomous workforce (specialist agents) | Not started |
 | 6 | Business intelligence | Later, by owner's choice |
@@ -34,21 +34,45 @@ configuration, logging, AI provider interface, tests.
 | 2.2 | Reasoning engine: plan, act, check, report; approvals; limits; resume |
 | 2.3 | Local model (Qwen 3.5 9B in Ollama); goal review; honest chat |
 
-## Phase 3: A real JARVIS (next)
+## Phase 3: A real JARVIS
 
-What makes it feel like JARVIS rather than a form-filling app: you talk to it
-naturally, it knows who you are and what you said before, it does things when
-you ask, it tells you plainly what it did, and it speaks up with useful
-information.
+### Done
+| Step | What was built |
+|---|---|
+| 3.1 | One conversation that thinks and acts; truthful reports from the run log |
+| 3.2 | Memory of you: ranked full-text memory in every answer, citations |
 
+### Owner's decisions (2026-11-16)
+1. **Claude Code, learn once.** When the local model cannot do a kind of task,
+   JARVIS hands it to Claude Code (the owner's existing plan; no API key, no
+   extra cost). The working result is saved as a JARVIS skill, so the next task
+   of that kind runs locally without Claude.
+2. **Autonomy: act, ask only for big risks.** JARVIS works on its own:
+   researching online, reading files, writing and running code in its own
+   workspace, creating skills and automations. It still asks before deleting
+   the owner's files, sending email or messages, spending money, or changing
+   anything outside its workspace.
+3. **Memory: automatic, reviewable.** JARVIS saves useful facts and decisions
+   by itself; the Memory page lets the owner see and delete anything. This
+   replaces "Shall I remember that?".
+4. **Self-improvement with a safety net.** Skills and instructions improve
+   automatically. Core code changes are kept only if every test passes, and
+   every change is committed to Git so it can be undone.
+
+### Next: the autonomous JARVIS (built in this order)
 | Step | What gets built | Needs install? | Done when |
 |---|---|---|---|
-| 3.1 | **Done.** **One conversation that thinks and acts.** Chat decides for itself whether to just answer or to carry out an action through the reasoning engine, then replies in natural language based on what actually happened. Goals page stays as the detailed view | No | "Remind me to call Sam tomorrow" in chat creates the task and says so truthfully; "What's 15% of 240?" just answers; refusals and approvals appear in the conversation |
-| 3.2 | **Done.** **Memory of you.** Full-text memory search; a context builder that gives the model the most relevant facts with their sources; conversation history carried forward; JARVIS proposes "Shall I remember that?" for personal facts and preferences, saved only with your yes | No | Tell it a preference once, and later answers use it, citing that it came from memory |
-| 3.3 | **Personality and self-knowledge.** A consistent JARVIS voice (calm, concise, a little dry, addresses you as you prefer); accurate knowledge of its own abilities, generated from the live tool list | No | Asked "what can you do?", it answers from its real tool list; tone is consistent across chat and reports |
-| 3.4 | **Everyday tools.** Date and time, calculations, unit conversion, notes, reminders with due times, reading files you place in a JARVIS inbox folder | No | Each tool tested; reading is confined to the inbox folder |
-| 3.5 | **Proactive briefings.** "Good morning" summary on request and on the dashboard: due and overdue reminders, open tasks, what JARVIS did since last time, anything waiting for approval | No | Briefing reflects real data only and says "nothing due" when that is true |
-| 3.6 | **Web knowledge (optional, approval each time).** A free, keyless web lookup tool classed as external communication, so every use needs your approval | No | Off unless enabled; every lookup asks first; results are labelled as from the web |
+| 3.3 | **Autonomy policy.** New permission levels: `workspace` (write and run inside `~/JARVIS/workspace`) and `web_read` run without asking; `external_communication`, `financial`, `destructive` and `system` (anything outside the workspace) still ask. One policy file the owner can read | No | Tests prove each level; the System page shows the policy |
+| 3.4 | **Internet.** `web.search` (free, no key) and `web.fetch` (page to clean text), automatic; results labelled with their source URL | No | Real searches answer real questions with sources |
+| 3.5 | **Code runner.** JARVIS writes and runs Python in its workspace: time limit, output limit, and macOS sandboxing so it cannot write outside the workspace. No unrestricted shell | No | Escapes are blocked in tests; real tasks run |
+| 3.6 | **Skills and learn-once.** A skill is a folder in `~/JARVIS/skills/` (manifest plus code), loaded as a tool, tested before it is enabled, committed to Git. Before calling Claude Code, JARVIS looks for a skill that fits | No | A new kind of task builds a skill via Claude Code; the same kind of task later runs locally without Claude |
+| 3.7 | **Claude Code bridge.** A tool that runs `claude -p` in the background on a task, restricted to the workspace or a skill folder, with a time limit; every use is logged with its cost in turns | No | Claude builds and tests a working skill unattended |
+| 3.8 | **Automations.** "Every morning at 8, …" or "when a file lands in my inbox, …" become saved automations run by a scheduler inside the JARVIS server, each run logged; pause, edit and delete from the interface | No | A timed and a file-triggered automation run correctly |
+| 3.9 | **Automatic memory.** After each exchange JARVIS extracts lasting facts and decisions and saves them (source and confidence recorded); duplicates merged; Memory page review and delete | No | Facts appear without asking; nothing invented; deletes stick |
+| 3.10 | **Self-improvement.** A review loop turns failures and lessons into better skills and instructions automatically; core changes go through Claude Code, must pass the full test suite, are committed, and are reverted automatically if anything later fails | No | A failure leads to a tested fix without the owner's help, with a Git record |
+
+The hard lines do not move: JARVIS never pretends something happened, and
+destructive, external, financial and system actions always wait for the owner.
 
 ## Phase 4: Voice
 
@@ -80,5 +104,4 @@ Existing code and tests are preserved.
 
 ## Owner decisions pending
 
-None now. Phase 3.6 (web lookups) and Phase 4 (speech-to-text download) will
-each need a yes when reached.
+None now. Phase 4 (speech-to-text download) will need a yes when reached.

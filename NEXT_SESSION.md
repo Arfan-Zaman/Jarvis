@@ -1,61 +1,62 @@
 # Next session handoff
 
-Read this first. Then `JARVIS_ROADMAP.md` (Phase 3) and `ARCHITECTURE.md` section 4.
+Read this first. Then `JARVIS_ROADMAP.md` (Phase 3) and `ARCHITECTURE.md`
+section 4b (autonomous design).
 
 ## Where things stand (2026-11-16)
 
 - Phases 1 and 2 and steps 3.1 and 3.2 complete. 192 tests passing.
 - JARVIS runs on Qwen 3.5 9B in the Ollama desktop app (`.env`, git-ignored).
-- Chat talks and acts, reports actions truthfully from the run log, asks
-  follow-up questions, and remembers the owner: ranked full-text memory in
-  every answer, "From memory" citations, "remember …" saves at once, passing
-  personal facts are offered and saved only on "yes".
-- **Owner's direction:** a genuinely intelligent, general JARVIS first. No
-  business-specific work yet.
+  Claude Code 2.1 is installed at `~/.local/bin/claude` and supports `-p`.
+- **Owner's decisions:** act on its own and ask only for big risks; use Claude
+  Code when needed, but learn once and do that kind of task locally next time;
+  remember automatically (reviewable); self-improve with tests and Git as the
+  safety net. Business specialisation later.
 - Remote `origin` is GitHub; push only when the owner asks.
 
-## Exact next task: steps 3.3 and 3.4, personality and everyday tools
+## Exact next task: steps 3.3 and 3.4, autonomy policy and internet
 
 No installs needed.
 
-### 3.3 Personality (small)
-1. One shared JARVIS voice in `jarvis/engine/persona.py`, used by chat answers,
-   look-up answers and fixed action wording: calm, concise, lightly dry; honours
-   stored preferences (name to use, answer length) from memory.
-2. Self-description already comes from the live tool list (3.1); add a test
-   that a newly registered tool appears in "what can you do".
+### 3.3 Autonomy policy
+1. Add permission levels `workspace` and `web_read` to `ActionCategory`; both
+   run without approval (like write, refused in read-only mode). Keep
+   `external_communication`, `financial`, `destructive`, `system` asking.
+2. Create `~/JARVIS/workspace/` (git-ignored contents) and extend
+   `SafetyLayer.authorize_path` so writes are allowed under `data/` and
+   `workspace/` only.
+3. A readable policy summary on the System page and in `jarvis.info`.
+4. Tests for every level, and that the hard four still pause for approval.
 
-### 3.4 Everyday tools (read/write internal only, through the tool registry)
-3. `time.now` (read): local date, time, weekday, timezone.
-4. `calc.evaluate` (read): safe arithmetic and percentages using `ast`, never
-   `eval`; units for length, weight, temperature, volume.
-5. Reminders: tasks gain an optional `due_at` with a time (`YYYY-MM-DD HH:MM`);
-   `reminders.due` (read) lists overdue and due-today items. No background
-   notifications yet (Phase 3.5 briefings will surface them).
-6. Notes: `notes.save` / `notes.search` (memories with category `note`, so they
-   use the same index and safety).
-7. Inbox files: `files.list` and `files.read` (read) confined to
-   `data/inbox/` via `SafetyLayer.authorize_path`; text and Markdown only,
-   size-capped. Show the inbox path on the System page.
-8. Tests for every tool: valid and invalid inputs, path escapes refused, `eval`
-   never used, permissions, run log entries.
-9. Real model on a throwaway `JARVIS_DATA_DIR`: "what time is it", "what's 17.5%
-   of 2,340", "convert 5 miles to km", "remind me at 3pm tomorrow to …", "what's
-   due today", "summarise the file in my inbox".
+### 3.4 Internet (read-only, automatic)
+5. `web.search` (`web_read`): free, keyless search using DuckDuckGo's HTML
+   endpoint via `urllib`; returns title, URL, snippet; timeout; polite
+   User-Agent with no personal details; results capped.
+6. `web.fetch` (`web_read`): fetch one http(s) URL, strip HTML to readable
+   text with `html.parser`, size cap, refuse non-http schemes and local or
+   private addresses.
+7. Chat: questions about current events or facts JARVIS cannot know route to
+   act with these tools; answers cite source URLs.
+8. Tests with a fake local HTTP server (no internet in tests); private-address
+   refusal; caps; parse failures handled.
+9. Real model: three questions that need the web; check sources are real.
 10. Update README, DEVLOG, ARCHITECTURE, ROADMAP and this file. Commit.
+
+Then 3.5 (sandboxed code runner), 3.6 and 3.7 (skills and the Claude Code
+bridge: learn once).
 
 ## Rules for the session
 
 - Standard library only. No new installs or downloads without the owner's approval.
 - Everything stays in `~/JARVIS`.
-- All actions go through the reasoning engine and `app.tools.execute`.
+- All actions go through `app.tools.execute`; no unrestricted shell, ever.
 - Never report something as working unless a test or a real run showed it.
 - Real-model checks use a throwaway `JARVIS_DATA_DIR`, not `data/`.
 
 ## Prompt to paste
 
 > Continue JARVIS. Read NEXT_SESSION.md, JARVIS_ROADMAP.md and
-> ARCHITECTURE.md, then implement steps 3.3 and 3.4 (personality and everyday
-> tools) exactly as described. Standard library only, no installs, preserve
+> ARCHITECTURE.md, then implement steps 3.3 and 3.4 (autonomy policy and
+> internet) exactly as described. Standard library only, no installs, preserve
 > existing tests, test with the real local model, update the docs and commit.
 > Do not push. Keep the report short and in plain language.

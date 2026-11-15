@@ -371,6 +371,9 @@ Ollama. Each test uses its own temporary database and never touches `data/`.
 
 ## Next recommended milestone
 
-**Phase 3.3: personality and self-knowledge**, then **3.4 everyday tools**
-(time, calculations, notes, reminders with times, reading files from a JARVIS
-inbox folder). No installs. See `JARVIS_ROADMAP.md` and `NEXT_SESSION.md`.
+**Phase 3.3 and 3.4: autonomy policy and internet.** JARVIS will act on its own
+and ask only for big risks (deleting your files, sending messages, money, changes
+outside its workspace), and will search and read the web. After that: a
+sandboxed code runner, skills that JARVIS builds with Claude Code once and then
+reuses locally, automations, automatic memory and self-improvement. See
+`JARVIS_ROADMAP.md`.

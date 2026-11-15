@@ -201,6 +201,52 @@ the owner's own words saves at once; otherwise the reply carries
 Claude Code remains the development tool used to extend JARVIS. It is not
 called by JARVIS at runtime.
 
+## 4b. Autonomous JARVIS design (decided 2026-11-16, Phase 3.3 onward)
+
+### Permission levels (replaces "ask for everything that is not internal")
+| Level | Examples | Behaviour |
+|---|---|---|
+| read | memory, tasks, files in the inbox | automatic |
+| write | JARVIS's own records | automatic, audited |
+| workspace | write and run code under `~/JARVIS/workspace`, create skills | automatic, audited, sandboxed |
+| web_read | search, fetch a page | automatic, source URL kept |
+| external_communication | email, messages, posting, submitting forms | **asks** |
+| financial | payments, purchases | **asks** |
+| destructive | deleting the owner's files or records | **asks** |
+| system | anything outside `~/JARVIS`, system settings, installs | **asks** |
+
+### Learn once, then local
+```
+task -> skill registry: does a skill fit? -- yes --> run the skill locally (no Claude)
+                                          \- no --> can the local model do it? -- yes --> do it
+                                                                                \- no --> Claude Code builds a skill
+                                                                                         -> tests pass -> registered + committed
+                                                                                         -> the task runs via the skill
+```
+A skill is `~/JARVIS/skills/<name>/` with `skill.json` (name, description,
+inputs, permission level, version), `run.py` and tests. Skills are loaded into
+the tool registry like built-in tools and bound by the same permission levels.
+Claude Code is invoked with `claude -p`, its working directory limited to the
+workspace or one skill folder, with turn and time limits; each call is a
+logged tool run.
+
+### Code execution
+Python only, as a child process inside `~/JARVIS/workspace`, with a timeout,
+an output cap and a macOS sandbox profile that denies writes outside the
+workspace. There is no unrestricted shell tool.
+
+### Automations
+Stored rules (trigger: a time schedule or an inbox file; action: a goal or a
+skill call) executed by a scheduler thread inside the JARVIS server. Every run
+is a normal goal run with a run log. Nothing runs while JARVIS is stopped.
+
+### Automatic memory and self-improvement
+After each exchange an extraction step saves lasting facts and decisions
+(source `auto:chat`, confidence recorded, duplicates merged), reviewable and
+deletable. Self-improvement edits skills and instructions directly; core code
+changes go through Claude Code, must pass the full test suite, are committed to
+Git, and are reverted automatically on later failure.
+
 ## 5. Prepared for later, not built now
 
 | Future | What Phase 2 leaves ready |
