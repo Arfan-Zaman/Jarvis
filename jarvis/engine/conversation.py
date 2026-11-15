@@ -48,6 +48,8 @@ MEMORY_CATEGORIES = ("preference", "personal", "general")
 # opinion is not enough: without one of these, it can only OFFER to remember.
 # Requests to rewrite JARVIS itself: only the self-review may propose that, and the owner approves.
 SELF_CHANGE = re.compile(r"\b(code|improve|upgrade|rewrite|reprogram|modify|change|update|optimi[sz]e)\s+(yourself|your\s+own\s+(code|program|software|system)|your\s+code)\b", re.I)
+MAC_STATUS = re.compile(r"\b(battery|charge|charging|disk space|storage|free space|how much space|wi-?fi|"
+                        r"ip address|uptime)\b", re.I)
 ATTACHED = re.compile(r"\[Attached: (uploads/[A-Za-z0-9][A-Za-z0-9._-]*)\]")
 # Requests that need real skill: sent to Claude Code even if the small router says "answer".
 HARD_WORK = re.compile(
@@ -220,6 +222,11 @@ class Conversation:
                 f"The owner attached these files (paths relative to the current folder): {', '.join(files)}. "
                 "Open and look at them (images and PDFs can be read directly). Their request:\n"
                 + ATTACHED.sub("", text).strip()), bool(MAKE_FILES.search(ATTACHED.sub("", text))))
+        if MAC_STATUS.search(text) and len(text.split()) < 25 and "mac.status" in self.app.tools.names():
+            status = self.app.tools.execute("mac.status", {}, actor="user:chat")     # instant, no planner
+            if status["ok"]:
+                from ..tools.mac import describe_status
+                return self._say(conversation_id, describe_status(status["output"]), status["run_id"])
         decision = self._route(conversation_id)
         if decision.get("mode") == "act" and not self.OWN_DATA.search(decision["goal"]) \
                 and not decision["goal"].startswith("Use the claude.browse tool"):

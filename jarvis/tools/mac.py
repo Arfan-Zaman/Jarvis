@@ -52,10 +52,13 @@ def status(app, inputs, actor):
     battery = _run(["pmset", "-g", "batt"]).splitlines()
     disk = _run(["df", "-h", str(Path.home())]).splitlines()
     apps = _run(["osascript", "-e", 'tell application "System Events" to get name of (processes where background only is false)'])
+    cols = disk[-1].split() if len(disk) > 1 else []
+    gb = lambda v: v.replace("Gi", " GB").replace("Ti", " TB").replace("Mi", " MB")    # noqa: E731
     return {
-        "battery": battery[-1].split("\t")[-1] if battery else "unknown",
-        "disk": disk[-1].split()[1:5] if len(disk) > 1 else [],          # size, used, available, capacity
-        "disk_columns": ["size", "used", "available", "capacity"],
+        "battery": battery[-1].split("\t")[-1].split(" present")[0] if battery else "unknown",
+        "disk_free": gb(cols[3]) if len(cols) > 4 else "unknown",
+        "disk_used": gb(cols[2]) if len(cols) > 4 else "unknown",
+        "disk_total": gb(cols[1]) if len(cols) > 4 else "unknown",
         "wifi_ip": _run(["ipconfig", "getifaddr", "en0"]) or "not connected",
         "uptime": _run(["uptime"]),
         "open_apps": [a.strip() for a in apps.split(",") if a.strip()][:30],
@@ -109,3 +112,10 @@ def register_mac(registry: ToolRegistry) -> None:
              {"message": S("What it should say.", required=True), "title": S("Its title.")}),
     ):
         registry.register(tool)
+
+
+def describe_status(data: dict) -> str:
+    """One plain spoken answer from mac.status, with the numbers labelled correctly."""
+    battery = data.get("battery", "unknown").replace(";", ",").strip()
+    return (f"Battery: {battery}. Disk: {data.get('disk_free')} free of {data.get('disk_total')} "
+            f"({data.get('disk_used')} used). Wi-Fi address: {data.get('wifi_ip')}.")
