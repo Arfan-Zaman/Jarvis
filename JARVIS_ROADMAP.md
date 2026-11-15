@@ -14,7 +14,7 @@ Business-specific work (Monsoor Motors, Aureus Detailing) comes later.**
 |---|---|---|
 | 1 | Foundation | **Complete** |
 | 2 | Intelligence Core: tools, reasoning engine, local model | **Complete** (2.1 to 2.3; 155 tests passing) |
-| 3 | A real JARVIS: autonomous, learning, connected | **In progress**: 3.1 to 3.4 done (212 tests passing); 3.5 next |
+| 3 | A real JARVIS: autonomous, learning, connected | **In progress**: 3.1 to 3.4 done (212 tests passing); 3.5 voice next |
 | 4 | Voice | Not started |
 | 5 | Autonomous workforce (specialist agents) | Not started |
 | 6 | Business intelligence | Later, by owner's choice |
@@ -59,22 +59,47 @@ configuration, logging, AI provider interface, tests.
    automatically. Core code changes are kept only if every test passes, and
    every change is committed to Git so it can be undone.
 
+### Reference videos studied (2026-11-16)
+Four public Instagram reels the owner shared (kept privately in
+`data/media/reels`, transcribed locally): a voice JARVIS that phones a
+restaurant, books a table and calls back; JARVIS phoning its owner about a
+problem it is already fixing; "Rose", a wake-word assistant that builds visual
+research boards and is controlled by voice; and "Zero", an assistant with a
+glowing knowledge-graph "brain" that reports what it handled overnight.
+Common to all: **voice, a living interface, proactive reports, a butler
+personality.**
+
 ### Next: the autonomous JARVIS (built in this order)
 | Step | What gets built | Needs install? | Done when |
 |---|---|---|---|
-| 3.3 | **Done.** **Autonomy policy.** New permission levels: `workspace` (write and run inside `~/JARVIS/workspace`) and `web_read` run without asking; `external_communication`, `financial`, `destructive` and `system` (anything outside the workspace) still ask. One policy file the owner can read | No | Tests prove each level; the System page shows the policy |
-| 3.4 | **Done** (keyless search is limited; optional Brave key). **Internet.** `web.search` (free, no key) and `web.fetch` (page to clean text), automatic; results labelled with their source URL | No | Real searches answer real questions with sources |
-| 3.5 | **Code runner.** JARVIS writes and runs Python in its workspace: time limit, output limit, and macOS sandboxing so it cannot write outside the workspace. No unrestricted shell | No | Escapes are blocked in tests; real tasks run |
-| 3.6 | **Skills and learn-once.** A skill is a folder in `~/JARVIS/skills/` (manifest plus code), loaded as a tool, tested before it is enabled, committed to Git. Before calling Claude Code, JARVIS looks for a skill that fits | No | A new kind of task builds a skill via Claude Code; the same kind of task later runs locally without Claude |
-| 3.7 | **Claude Code bridge.** A tool that runs `claude -p` in the background on a task, restricted to the workspace or a skill folder, with a time limit; every use is logged with its cost in turns | No | Claude builds and tests a working skill unattended |
-| 3.8 | **Automations.** "Every morning at 8, …" or "when a file lands in my inbox, …" become saved automations run by a scheduler inside the JARVIS server, each run logged; pause, edit and delete from the interface | No | A timed and a file-triggered automation run correctly |
-| 3.9 | **Automatic memory.** After each exchange JARVIS extracts lasting facts and decisions and saves them (source and confidence recorded); duplicates merged; Memory page review and delete | No | Facts appear without asking; nothing invented; deletes stick |
-| 3.10 | **Self-improvement.** A review loop turns failures and lessons into better skills and instructions automatically; core changes go through Claude Code, must pass the full test suite, are committed, and are reverted automatically if anything later fails | No | A failure leads to a tested fix without the owner's help, with a Git record |
+| 3.3 | **Done.** Autonomy policy (`workspace`, `web_read` automatic; the four hard lines ask) | No | |
+| 3.4 | **Done** (keyless search is limited; optional Brave key). Internet: `web.search`, `web.fetch` with sources | No | |
+| 3.5 | **Voice.** Talk to JARVIS from the browser (push-to-talk) and hear it answer. Speech-to-text with whisper.cpp (installed 2026-11-16, model in `data/models`); spoken replies with the macOS voice (British, butler tone); "go to sleep" / "wake up"; transcripts saved like chat | Done | Speak a request, hear a truthful spoken answer; works offline |
+| 3.6 | **Living interface (HUD).** An arc-reactor status ring (online, listening, thinking, speaking), the active model shown, live action cards ("Searching…", "Running code…") while a run works | No | The ring and cards follow real state, never animation alone |
+| 3.7 | **Code runner.** Python in the sandboxed workspace (time and output limits, no writes outside) | No | Escapes blocked in tests; real tasks run |
+| 3.8 | **Skills and learn-once, Claude Code bridge.** Claude Code builds a skill the first time; the same kind of task then runs locally | No | Second time needs no Claude |
+| 3.9 | **Research reports.** "Research X" produces a visual board: findings, charts drawn from collected data, images and sources; voice and click control ("enlarge the chart") | No | A real research question produces a sourced board |
+| 3.10 | **Automations, briefings and proactive alerts.** Scheduled and triggered automations; a morning briefing ("while you were away…" from the real log); JARVIS raises problems itself with a macOS notification and a spoken alert | No | A timed automation runs; a briefing matches the log; an alert fires |
+| 3.11 | **The brain view.** An interactive map of everything JARVIS knows (memories, projects, skills, lessons) and how they link, glowing where it is working | No | Every node is real data; click to inspect |
+| 3.12 | **Automatic memory** (reviewable) | No | |
+| 3.13 | **Self-improvement** behind tests and Git | No | |
+
+### Later, needs an owner decision (paid service)
+- **Phone calls on the owner's behalf** (reel 1) and **JARVIS phoning the
+  owner** (reel 2) need a telephony and voice service (for example Twilio,
+  Vapi or Retell), all pay-per-minute, plus a phone number. Every outgoing call
+  would be an `external_communication` action needing approval. Until then,
+  alerts use macOS notifications and speech.
 
 The hard lines do not move: JARVIS never pretends something happened, and
 destructive, external, financial and system actions always wait for the owner.
 
-## Phase 4: Voice
+## Phase 4: Voice everywhere
+
+Phase 3.5 brings push-to-talk voice in the browser. Phase 4 adds a wake word
+("Hey JARVIS") and hands-free listening.
+
+<!-- earlier text kept below -->
 
 Talk to JARVIS and hear it answer. Speaking uses the voice built into macOS (no
 install). Listening needs a local speech-to-text model (owner approval for a

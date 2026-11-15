@@ -2,6 +2,20 @@
 
 Newest entries first. Record what changed, why, and what was verified.
 
+## 2026-11-16 — Reference videos studied; roadmap updated
+
+- The owner shared four Instagram reels showing JARVIS-style assistants.
+  Downloaded with yt-dlp (already installed) into `data/media/reels`
+  (git-ignored, private reference), transcribed locally with whisper.cpp
+  (installed with the owner's approval; model `ggml-small.en`, 480 MB, in
+  `data/models`), and reviewed frame by frame.
+- Features seen: voice with personality, arc-reactor status HUD, knowledge
+  graph "brain", visual research boards controlled by voice, proactive calls
+  and overnight reports, AI phone calls to businesses.
+- Roadmap: voice (3.5) and the HUD (3.6) move first; research boards, alerts
+  and briefings, and the brain view are added; phone calls are listed as a
+  later owner decision because they need a paid telephony service.
+
 ## 2026-11-16 — Phases 3.3 and 3.4: autonomy policy and internet
 
 ### Built
