@@ -85,7 +85,10 @@ class ContextBuilder:
         chosen, seen, used = [], set(), 0
         semantic = getattr(self.app, "semantic", None)
         by_meaning = semantic.search(text, limit=memories) if semantic is not None else []
-        for item in self.personal() + by_meaning + self.search_memories(text, limit=memories, project_id=project_id):
+        by_words = self.search_memories(text, limit=memories, project_id=project_id)
+        if semantic is not None:
+            by_words = semantic.relevant(text, by_words)                 # drop off-topic word matches
+        for item in self.personal() + by_meaning + by_words:
             if item["id"] in seen or len(chosen) >= memories + len(PERSONAL):
                 continue
             if used + len(item["content"]) > budget_chars:

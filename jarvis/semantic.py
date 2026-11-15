@@ -54,8 +54,10 @@ class Semantic:
             self._ok = False
         return self._ok
 
-    def embed(self, texts: list[str]) -> list[list[float]]:
-        body = json.dumps({"model": _model(), "input": [t[:2000] for t in texts]}).encode()
+    def embed(self, texts: list[str], kind: str = "document") -> list[list[float]]:
+        # nomic-embed-text is trained with task prefixes; they make matches noticeably sharper
+        prefix = f"search_{kind}: " if "nomic" in _model() else ""
+        body = json.dumps({"model": _model(), "input": [prefix + t[:2000] for t in texts]}).encode()
         request = urllib.request.Request(self._url("/api/embed"), body, {"Content-Type": "application/json"})
         with urllib.request.urlopen(request, timeout=60) as response:
             return json.load(response).get("embeddings") or []
@@ -72,14 +74,15 @@ class Semantic:
         memories = self.app.memory.list(limit=5000)
         with self._db() as conn:
             stored = {row[0]: (row[1], row[2], row[3]) for row in conn.execute("SELECT * FROM vectors")}
-            stale = [m for m in memories if stored.get(m["id"], (None, None))[:2] != (m["updated_at"], _model())]
+            stamp = _model() + "+prefix"
+            stale = [m for m in memories if stored.get(m["id"], (None, None))[:2] != (m["updated_at"], stamp)]
             for start in range(0, len(stale), 32):
                 batch = stale[start:start + 32]
                 for memory, vec in zip(batch, self.embed([m["content"] for m in batch])):
                     blob = array.array("f", vec).tobytes()
                     conn.execute("INSERT OR REPLACE INTO vectors VALUES (?, ?, ?, ?)",
-                                 (memory["id"], memory["updated_at"], _model(), blob))
-                    stored[memory["id"]] = (memory["updated_at"], _model(), blob)
+                                 (memory["id"], memory["updated_at"], stamp, blob))
+                    stored[memory["id"]] = (memory["updated_at"], stamp, blob)
         out = {}
         for memory in memories:
             blob = stored.get(memory["id"], (None, None, None))[2]
@@ -94,13 +97,24 @@ class Semantic:
         if not text.strip() or not self.available():
             return []
         try:
-            query = self.embed([text])[0]
+            query = self.embed([text], kind="query")[0]
             scored = [(_cosine(query, vec), memory) for memory, vec in self._vectors().values()]
         except (OSError, ValueError, IndexError) as exc:
             log.info("Semantic search unavailable: %s", exc)
             return []
         scored.sort(key=lambda pair: pair[0], reverse=True)
         return [{**memory, "similarity": round(score, 3)} for score, memory in scored[:limit] if score >= MIN_SCORE]
+
+    def relevant(self, text: str, memories: list[dict], floor: float = 0.55) -> list[dict]:
+        """Drop word-search hits that are not about the question (only when embeddings exist)."""
+        if not memories or not self.available():
+            return memories
+        try:
+            query = self.embed([text], kind="query")[0]
+            vectors = self._vectors()
+        except (OSError, ValueError, IndexError):
+            return memories
+        return [m for m in memories if m["id"] not in vectors or _cosine(query, vectors[m["id"]][1]) >= floor]
 
     def expand(self, text: str) -> str:
         """Related words for a word search, from the local model (fallback without embeddings)."""

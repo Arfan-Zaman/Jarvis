@@ -2,6 +2,17 @@
 
 Newest entries first. Record what changed, why, and what was verified.
 
+## 2026-11-16 — Semantic memory search is on
+
+- Owner approved pulling `nomic-embed-text` (274 MB, Ollama). Memories are
+  embedded with nomic's task prefixes (`search_document:` / `search_query:`);
+  word-search hits below 0.55 similarity are dropped as off-topic.
+- Real data: "what do I know about cloud computing" -> the three cloud facts
+  (0.68-0.71); "AI memory research" -> the three memory-paper facts
+  (0.63-0.66); "reliable used cars to stock" -> nothing (correct, no such
+  memory; before the filter it returned unrelated notes). First search indexes
+  everything (~13 s), later ones are instant. Tests never use the real model.
+
 ## 2026-11-16 — Live abilities on the Safety panel; semantic memory search
 
 - The Safety panel was stale ("External AI: blocked", wake word and browser

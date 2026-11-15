@@ -101,7 +101,7 @@ def memory_search(app, inputs, actor):
         semantic = getattr(app, "semantic", None)
         found = [m for m in (semantic.search(inputs["query"], limit) if semantic else [])
                  if not inputs.get("category") or m["category"] == inputs["category"]]
-        found += words(inputs["query"])
+        found += semantic.relevant(inputs["query"], words(inputs["query"])) if semantic else words(inputs["query"])
         if semantic is not None and not semantic.available() and len(found) < 3:
             found += words(semantic.expand(inputs["query"]))
         seen, unique = set(), []

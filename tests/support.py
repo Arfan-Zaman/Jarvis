@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 os.environ.setdefault("JARVIS_BRAIN", "local")      # tests never call the real Claude
+os.environ.setdefault("JARVIS_EMBED_MODEL", "no-embeddings-in-tests")   # nor the real embedding model
 
 import logging
 import sqlite3
