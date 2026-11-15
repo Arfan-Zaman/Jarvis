@@ -4,7 +4,7 @@
    All content is inserted as text nodes, never as HTML. */
 
 const $ = (selector) => document.querySelector(selector);
-const state = { projects: [], conversationId: null, timer: null, navigation: 0 };
+const state = { projects: [], conversationId: null, timer: null, navigation: 0, cleanup: [], presenceConversation: null };
 
 // --- helpers ---------------------------------------------------------------
 function h(tag, attrs, ...children) {
@@ -738,6 +738,227 @@ views.system = {
   },
 };
 
+
+// --- Presence: JARVIS's operating environment ---------------------------------
+const STATE_DESCRIPTIONS = {
+  calm: 'Calm. Observant.', listening: 'Focused. Attentive.', analysing: 'Processing information.',
+  planning: 'Evaluating options.', executing: 'Performing the operation.', concerned: 'Issue detected.',
+  resolute: 'Taking action.', approval: 'Your decision is required.', awaiting: 'Waiting for your answer.',
+  speaking: 'Responding.', success: 'Operation completed.', failure: 'Operation failed.',
+  warning: 'Attention required.', error: 'Something is not responding.', offline: 'Not connected.',
+};
+
+function stateRgb(name) {
+  const spec = (window.JarvisIdentity && JarvisIdentity.STATES[name]) || { color: [255, 45, 140] };
+  return spec.color.join(',');
+}
+
+/** Speak a reply and drive the identity from the real audio level. */
+async function speakWith(identity, text) {
+  const response = await fetch('/api/voice/speak', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text }) });
+  if (!response.ok) throw new Error((await response.json().catch(() => ({}))).error || 'Speech failed');
+  const audio = new Audio(URL.createObjectURL(await response.blob()));
+  let meter = null;
+  try {                                   // real amplitude, not an animation loop
+    const context = new (window.AudioContext || window.webkitAudioContext)();
+    const source = context.createMediaElementSource(audio);
+    const analyser = context.createAnalyser();
+    analyser.fftSize = 256;
+    source.connect(analyser); analyser.connect(context.destination);
+    const data = new Uint8Array(analyser.frequencyBinCount);
+    meter = setInterval(() => {
+      analyser.getByteTimeDomainData(data);
+      let peak = 0; for (const v of data) peak = Math.max(peak, Math.abs(v - 128));
+      identity.setLevel(peak / 90);
+    }, 60);
+    audio.onended = () => { clearInterval(meter); identity.setLevel(0); context.close(); };
+  } catch (e) { /* playback still works without the meter */ }
+  identity.setState('speaking', text.length > 140 ? text.slice(0, 137) + '…' : text);
+  await audio.play();
+  await new Promise((resolve) => { audio.addEventListener('ended', resolve, { once: true }); audio.addEventListener('error', resolve, { once: true }); });
+  if (meter) clearInterval(meter);
+  identity.setLevel(0);
+}
+
+views.presence = {
+  title: 'JARVIS',
+  subtitle: '',
+  async render(root) {
+    const [status, executions] = await Promise.all([api('GET', '/api/status'), api('GET', '/api/executions?limit=100')]);
+    const connected = status.ai.configured && status.ai.available;
+    const hero = h('section', { class: 'presence-hero' });
+    const stage = h('div', { class: 'presence-stage' });
+    const label = h('div', { class: 'label' });
+    const line = h('div', { class: 'line' });
+    const identity = JarvisIdentity.create(stage, {
+      onLine: (text, lab, name) => { label.textContent = lab; line.textContent = text; hero.style.setProperty('--jv-hero-rgb', stateRgb(name)); },
+    });
+    state.cleanup.push(() => identity.destroy());
+
+    const time = h('div', { class: 'time' }), date = h('div', { class: 'date' });
+    const tick = () => { const now = new Date(); time.textContent = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); date.textContent = now.toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }); };
+    tick(); const clock = setInterval(tick, 15000); state.cleanup.push(() => clearInterval(clock));
+
+    // --- real metrics only ---
+    const checks = [status.database.integrity_ok, status.database.schema_version === status.database.expected_schema_version,
+      status.backups.count > 0, connected, status.voice && status.voice.listening && status.voice.speaking];
+    const health = Math.round(100 * checks.filter(Boolean).length / checks.length);
+    const runs = executions.items.length;
+    const okRate = runs ? Math.round(100 * executions.items.filter((e) => e.status === 'succeeded').length / runs) : null;
+    const metric = (k, v, unit, hint) => h('div', { class: 'metric' }, h('div', { class: 'k' }, k), h('div', { class: 'v' }, v, unit ? h('small', null, unit) : null), hint ? h('div', { class: 'hint' }, hint) : null);
+    const stream = h('div', { class: 'stream' });
+    const showActivity = (items) => {
+      stream.replaceChildren(...(items.length ? items.slice(-6).reverse().map((e) => h('div', { class: 'stream-item ' + (e.status === 'succeeded' ? 'ok' : e.status === 'failed' || e.status === 'refused' ? 'bad' : 'run') },
+        h('span', { class: 'dot' }), h('div', null, e.description || e.tool, ' ', h('span', { class: 'muted' }, label_(e.status))))) : [h('div', { class: 'muted small' }, 'No activity yet.')]));
+    };
+    const label_ = (s) => String(s || '').replace(/_/g, ' ');
+    showActivity(executions.items.slice(0, 6).reverse().map((e) => ({ tool: e.tool, status: e.status })));
+
+    // --- command bar ---
+    const input = h('input', { placeholder: connected ? 'Speak or type your command…' : 'No AI model is connected', 'aria-label': 'Command', disabled: !connected });
+    const you = h('div', { class: 'you' }), reply = h('div', { class: 'reply' }), memoryLine = h('div', { class: 'meta' });
+    const voiceOk = status.voice || {};
+    const mic = h('button', { class: 'round-btn', type: 'button', title: 'Talk to JARVIS', 'aria-label': 'Talk to JARVIS', disabled: !voiceOk.listening || !connected }, '🎙');
+    const send = h('button', { class: 'round-btn', type: 'submit', title: 'Send', 'aria-label': 'Send', disabled: !connected }, '➤');
+    const form = h('form', { class: 'presence-command' }, mic, input, send);
+    let speakNext = false, busy = false, settle = null;
+
+    async function submit(text) {
+      if (!text || busy) return;
+      busy = true; send.disabled = mic.disabled = true; clearTimeout(settle);
+      input.value = ''; you.textContent = `You: ${text}`; reply.textContent = ''; memoryLine.replaceChildren();
+      identity.setState('analysing', 'Understood. Reviewing…');
+      let baseline = 0;
+      try { const before = await api('GET', '/api/live'); baseline = before.run_id || before.last_run || 0; } catch (e) { /* ignore */ }
+      const poll = setInterval(async () => {            // follow the real run while it works
+        try {
+          const live = await api('GET', '/api/live');
+          if (live.run_id && live.run_id > baseline) {
+            const [s, l] = JarvisIdentity.fromLive(live);
+            if (!['success', 'failure', 'calm'].includes(s)) identity.setState(s, l);
+            showActivity(live.activity || []);
+          }
+        } catch (e) { /* the next poll will try again */ }
+      }, 450);
+      try {
+        const result = await api('POST', '/api/chat', { message: text, conversation_id: state.presenceConversation || null });
+        state.presenceConversation = result.conversation.id;
+        clearInterval(poll);
+        reply.textContent = result.reply.content;
+        if (result.reply.memory_refs) memoryLine.replaceChildren(chip('From memory', 'violet'), ...result.reply.memory_refs.map((r) => chip(r.content.length > 40 ? r.content.slice(0, 39) + '…' : r.content)));
+        const live = await api('GET', '/api/live').catch(() => null);
+        if (live && live.run_id && live.run_id > baseline) {
+          const [s, l] = JarvisIdentity.fromLive(live);
+          identity.setState(s, l);
+          showActivity(live.activity || []);
+        } else {
+          identity.setState(result.reply.role === 'system' ? 'warning' : 'calm', '');
+        }
+        if (speakNext || localStorageGet('jarvis.speak') === 'on') await speakWith(identity, result.reply.content).catch((e) => toast(e.message, true));
+        const final = identity.state;
+        if (['success', 'speaking'].includes(final)) settle = setTimeout(() => identity.setState('calm'), 3000);
+        refreshChrome();
+      } catch (error) {
+        clearInterval(poll);
+        identity.setState('error', error.message);
+      } finally {
+        busy = false; speakNext = false; send.disabled = false; mic.disabled = !voiceOk.listening; input.focus();
+      }
+    }
+    form.addEventListener('submit', (event) => { event.preventDefault(); submit(input.value.trim()); });
+
+    let recorder = null;
+    mic.addEventListener('click', act(async () => {
+      if (recorder) { recorder.stop(); return; }
+      let stream_;
+      try { stream_ = await navigator.mediaDevices.getUserMedia({ audio: true }); }
+      catch (e) { throw new Error('Microphone access was blocked. Allow it for this page in the browser settings.'); }
+      const chunks = [];
+      recorder = new MediaRecorder(stream_);
+      recorder.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
+      recorder.onstop = async () => {
+        stream_.getTracks().forEach((t) => t.stop());
+        mic.classList.remove('recording');
+        const blob = new Blob(chunks, { type: recorder.mimeType || 'audio/webm' });
+        recorder = null;
+        identity.setState('analysing', 'Transcribing…');
+        try {
+          const response = await fetch('/api/voice/transcribe', { method: 'POST', headers: { 'Content-Type': blob.type || 'audio/webm' }, body: blob });
+          const data = await response.json().catch(() => ({}));
+          if (!response.ok) throw new Error(data.error || 'Could not understand the recording');
+          const heard = (data.text || '').trim();
+          if (!heard) { identity.setState('calm', "I didn't catch that."); return; }
+          speakNext = true;
+          submit(heard);
+        } catch (error) { identity.setState('error', error.message); }
+      };
+      recorder.start();
+      mic.classList.add('recording');
+      identity.setState('listening', "I'm listening. Click again when you've finished.");
+    }));
+
+    const previewBtn = h('button', { class: 'btn sm', type: 'button' }, 'Preview all states');
+    const simBadge = chip('SIMULATION · not real activity', 'pink'); simBadge.hidden = true;
+    let stopPreview = null;
+    previewBtn.addEventListener('click', () => {
+      if (stopPreview) { stopPreview(); stopPreview = null; simBadge.hidden = true; previewBtn.textContent = 'Preview all states'; identity.setState('calm'); return; }
+      simBadge.hidden = false; previewBtn.textContent = 'Stop preview';
+      stopPreview = identity.preview();
+    });
+    state.cleanup.push(() => stopPreview && stopPreview());
+
+    hero.append(
+      h('div', { class: 'presence-head' },
+        h('div', { class: 'presence-mark' }, h('div', null, h('div', { class: 'name' }, 'JARVIS'), h('div', { class: 'motto' }, 'Reason first. Resolve always.'))),
+        h('div', { class: 'presence-clock' }, time, date)),
+      stage,
+      h('div', { class: 'presence-state' }, label, line),
+      form,
+      h('div', { class: 'presence-exchange' }, you, reply, memoryLine),
+      h('div', { class: 'row end presence-tools' }, simBadge, previewBtn));
+
+    const side = h('aside', { class: 'presence-side' },
+      metric('System health', health, '%', `${checks.filter(Boolean).length} of ${checks.length} checks passing`),
+      metric('Open tasks', status.counts.tasks_open, null, `${status.counts.tasks_completed} completed`),
+      metric('Memories', status.counts.memories, null, `${status.counts.experiences} lessons recorded`),
+      metric('Tools available', status.counts.tools, null, okRate == null ? 'No tool runs yet' : `${okRate}% of the last ${runs} runs succeeded`),
+      h('div', { class: 'metric' }, h('div', { class: 'panel-title' }, 'TOOL ACTIVITY'), stream),
+      metric('Model', status.ai.available ? status.ai.model : 'Offline', null, status.ai.available ? 'Local, on this Mac' : status.ai.detail));
+
+    root.append(h('div', { class: 'presence' }, hero, side));
+    identity.setState(connected ? 'calm' : 'offline', connected ? 'Standing by.' : status.ai.detail);
+    if (connected) input.focus();
+  },
+};
+
+function localStorageGet(key) { try { return localStorage.getItem(key); } catch (e) { return null; } }
+
+/** Compact identity for the JARVIS Desktop panel. The app drives it through window.jarvisDesktop. */
+views.desktop = {
+  title: 'JARVIS', subtitle: '',
+  async render(root) {
+    document.documentElement.classList.add('desktop-mode');
+    const stage = h('div', { class: 'desktop-identity' });
+    root.append(stage);
+    const identity = JarvisIdentity.create(stage, { compact: true });
+    let poll = null;
+    const follow = () => {                 // while thinking, show what the engine is really doing
+      clearInterval(poll);
+      poll = setInterval(async () => {
+        try {
+          const live = await api('GET', '/api/live');
+          if (live.run_id) { const [s, l] = JarvisIdentity.fromLive(live); if (s !== 'calm') identity.setState(s, l); }
+        } catch (e) { /* keep the current state */ }
+      }, 500);
+    };
+    window.jarvisDesktop = {
+      setState(name, line) { clearInterval(poll); identity.setState(name, line); if (name === 'analysing') follow(); },
+      setLevel(v) { identity.setLevel(v); },
+    };
+    identity.setState('calm');
+  },
+};
+
 // --- shell -----------------------------------------------------------------
 async function refreshChrome() {
   try {
@@ -757,9 +978,11 @@ async function refreshChrome() {
 }
 
 async function show(name) {
-  const view = views[name] || views.dashboard;
-  const key = views[name] ? name : 'dashboard';
+  const view = views[name] || views.presence;
+  const key = views[name] ? name : 'presence';
   const token = ++state.navigation;
+  state.cleanup.splice(0).forEach((fn) => { try { fn(); } catch (e) { /* already gone */ } });
+  document.body.classList.toggle('presence-mode', key === 'presence');
   document.querySelectorAll('.nav a').forEach((link) => {
     const active = link.dataset.view === key;
     link.classList.toggle('active', active);
@@ -780,7 +1003,7 @@ async function show(name) {
   $('#view').replaceWith(root);
 }
 
-const route = async () => { await show(location.hash.replace('#', '') || 'dashboard'); window.scrollTo(0, 0); };
+const route = async () => { await show(location.hash.replace('#', '') || 'presence'); window.scrollTo(0, 0); };
 window.addEventListener('hashchange', route);
 route();
 refreshChrome();

@@ -1,0 +1,197 @@
+/* JARVIS visual identity. Black is the space; hot pink is the intelligence;
+   violet is deep reasoning; white is fact; red only for real failure. */
+
+.jv-identity {
+  --jv-accent: rgb(255, 45, 140);
+  --jv-accent-rgb: 255, 45, 140;
+  --jv-eye-open: 0.85;
+  --jv-face: 0.55;
+  --jv-glow: 0.35;
+  --jv-brow: 0deg;
+  --jv-level: 0;
+  position: relative;
+  aspect-ratio: 1;
+  width: 100%;
+  isolation: isolate;
+}
+.jv-core { position: absolute; inset: 0; z-index: 0; }
+.jv-face {
+  position: absolute;
+  inset: 11%;
+  width: 78%;
+  height: 78%;
+  z-index: 1;
+  overflow: visible;
+  transition: opacity 0.6s ease;
+  opacity: calc(0.35 + var(--jv-face) * 0.65);
+}
+
+/* The mask emerges from darkness: faint facets, light only at the edges. */
+.jv-facet {
+  fill-opacity: calc(0.6 + var(--jv-face) * 0.4);
+  stroke: rgba(255, 255, 255, 0.07);
+  stroke-width: 0.8;
+  stroke-linejoin: round;
+  filter: brightness(var(--shade, 0.7));
+}
+.jv-crest { stroke: rgba(255, 255, 255, 0.12); stroke-width: 0.8; }
+.jv-ridge { stroke: rgba(255, 255, 255, 0.1); stroke-width: 1; }
+.jv-edge {
+  fill: none;
+  stroke: var(--jv-accent);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: calc(0.15 + var(--jv-glow) * 0.6);
+  filter: drop-shadow(0 0 3px rgba(var(--jv-accent-rgb), 0.8));
+  transition: opacity 0.5s ease, stroke 0.5s ease;
+}
+.jv-brow {
+  stroke: var(--jv-accent);
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  opacity: calc(0.25 + var(--jv-glow) * 0.6);
+  transform-box: fill-box;
+  transition: transform 0.6s cubic-bezier(.2,.8,.2,1), opacity 0.5s ease;
+}
+.jv-brow-r { transform-origin: 0% 50%; transform: rotate(var(--jv-brow)); }
+.jv-brow-l { transform-origin: 100% 50%; transform: rotate(calc(var(--jv-brow) * -1)); }
+
+/* Sensor eyes: the aperture opens, narrows and focuses with the state. */
+.jv-eye-socket { fill: #020203; stroke: rgba(255, 255, 255, 0.06); stroke-width: 0.8; }
+.jv-aperture {
+  transform-box: fill-box;
+  transform-origin: center;
+  transform: scaleY(var(--jv-eye-open));
+  transition: transform 0.45s cubic-bezier(.2,.8,.2,1);
+}
+.jv-eye-bloom { fill: var(--jv-accent); opacity: calc(0.2 + var(--jv-glow) * 0.55); }
+.jv-eye-glow { fill: var(--jv-accent); opacity: calc(0.4 + var(--jv-glow) * 0.6); }
+.jv-eye-hot {
+  stroke: #fff; stroke-width: 2; stroke-linecap: round;
+  opacity: calc(0.25 + var(--jv-glow) * 0.65);
+}
+.jv-eye-iris {
+  fill: var(--jv-accent);
+  opacity: calc(0.55 + var(--jv-glow) * 0.45);
+  transition: fill 0.5s ease;
+}
+.jv-pupil {
+  fill: #fff;
+  opacity: calc(0.35 + var(--jv-glow) * 0.6);
+  transition: opacity 0.4s ease;
+}
+.jv-grille {
+  stroke: var(--jv-accent);
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  opacity: 0.08;
+}
+[hidden] { display: none !important; }
+.jv-identity[data-state="speaking"] .jv-grille {
+  opacity: calc(0.15 + var(--jv-level) * (0.85 - var(--i) * 0.12));
+}
+
+/* State accents: restraint makes the rare intense states powerful. */
+.jv-identity[data-state="calm"] .jv-face { filter: none; }
+.jv-identity[data-state="listening"] .jv-face { filter: drop-shadow(0 0 18px rgba(var(--jv-accent-rgb), 0.25)); }
+.jv-identity[data-state="resolute"] .jv-face,
+.jv-identity[data-state="concerned"] .jv-face { filter: drop-shadow(0 0 22px rgba(var(--jv-accent-rgb), 0.35)); }
+.jv-identity[data-state="failure"] .jv-face,
+.jv-identity[data-state="error"] .jv-face { filter: drop-shadow(0 0 16px rgba(255, 59, 59, 0.3)); }
+
+@media (prefers-reduced-motion: reduce) {
+  .jv-identity * { transition: none !important; }
+}
+
+/* --- Presence page ------------------------------------------------------ */
+body.presence-mode .topbar { display: none; }
+.presence { display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr) 300px; align-items: start; }
+.presence-hero {
+  position: relative;
+  border-radius: 20px;
+  border: 1px solid rgba(var(--jv-hero-rgb, 255, 45, 140), 0.22);
+  background:
+    radial-gradient(60% 55% at 50% 42%, rgba(var(--jv-hero-rgb, 255, 45, 140), 0.08), transparent 70%),
+    linear-gradient(180deg, #08080b, #040405);
+  padding: 22px 22px 18px;
+  overflow: hidden;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+.presence-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.presence-mark { display: flex; gap: 12px; align-items: center; }
+.presence-mark .name { font-size: 22px; font-weight: 600; letter-spacing: 0.32em; }
+.presence-mark .motto { color: var(--muted); font-size: 12.5px; letter-spacing: 0.02em; }
+.presence-clock { text-align: right; font-variant-numeric: tabular-nums; }
+.presence-clock .time { font-size: 24px; font-weight: 500; letter-spacing: 0.04em; }
+.presence-clock .date { color: var(--faint); font-size: 11.5px; }
+.presence-stage { width: min(100%, 520px); margin: 4px auto 0; }
+.presence-state { text-align: center; margin-top: -6px; }
+.presence-state .label {
+  font: 600 11.5px/1 var(--mono);
+  letter-spacing: 0.32em;
+  color: rgb(var(--jv-hero-rgb, 255, 45, 140));
+}
+.presence-state .line { margin-top: 8px; font-size: 15px; color: #e9e9f2; min-height: 22px; }
+.presence-command {
+  display: flex; gap: 10px; align-items: center;
+  margin: 18px auto 0; max-width: 640px;
+  padding: 6px 6px 6px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(var(--jv-hero-rgb, 255, 45, 140), 0.35);
+  background: rgba(0, 0, 0, 0.55);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.02), 0 0 30px rgba(var(--jv-hero-rgb, 255, 45, 140), 0.08);
+}
+.presence-command input {
+  flex: 1; border: 0; background: transparent; padding: 10px 4px; font-size: 15px;
+}
+.presence-command input:focus-visible { box-shadow: none; }
+.round-btn {
+  width: 42px; height: 42px; border-radius: 50%; flex: none;
+  border: 1px solid rgba(var(--jv-hero-rgb, 255, 45, 140), 0.5);
+  background: rgba(var(--jv-hero-rgb, 255, 45, 140), 0.12);
+  color: #fff; cursor: pointer; font-size: 16px;
+}
+.round-btn:hover { background: rgba(var(--jv-hero-rgb, 255, 45, 140), 0.24); }
+.round-btn:disabled { opacity: 0.4; cursor: default; }
+.round-btn.recording { background: rgba(255, 45, 140, 0.4); animation: pulse 1.1s ease-in-out infinite; }
+.presence-exchange { max-width: 640px; margin: 14px auto 0; display: grid; gap: 8px; }
+.presence-exchange .you { color: var(--muted); font-size: 13.5px; }
+.presence-exchange .reply { color: #f1f1f7; font-size: 14.5px; white-space: pre-wrap; overflow-wrap: anywhere; }
+
+.presence-side { display: grid; gap: 12px; }
+.metric {
+  border-radius: 14px; padding: 14px 16px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: linear-gradient(180deg, #0d0d12, #08080b);
+}
+.metric .k { color: var(--muted); font-size: 12px; }
+.metric .v { font-size: 26px; font-weight: 600; font-variant-numeric: tabular-nums; margin-top: 2px; }
+.metric .v small { font-size: 13px; color: var(--muted); font-weight: 500; margin-left: 4px; }
+.metric .hint { color: var(--faint); font-size: 11.5px; }
+.panel-title { font: 600 11px/1 var(--mono); letter-spacing: 0.22em; color: var(--muted); margin: 2px 0 10px; }
+.stream { display: grid; gap: 7px; }
+.stream-item { display: flex; gap: 9px; align-items: baseline; font-size: 13px; }
+.stream-item .dot { width: 7px; height: 7px; border-radius: 50%; flex: none; background: var(--faint); transform: translateY(-1px); }
+.stream-item.ok .dot { background: #4ade80; }
+.stream-item.run .dot { background: #ff2d8c; box-shadow: 0 0 8px #ff2d8c; }
+.stream-item.bad .dot { background: #ff3b3b; }
+.stream-item .muted { font-size: 12px; }
+
+.state-gallery { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+.state-card {
+  border-radius: 14px; border: 1px solid rgba(255, 255, 255, 0.07); background: #060608; padding: 10px;
+}
+.state-card .name { font: 600 11px/1 var(--mono); letter-spacing: 0.2em; margin-top: 6px; }
+.state-card .desc { color: var(--muted); font-size: 11.5px; margin-top: 4px; }
+
+@media (max-width: 1100px) { .presence { grid-template-columns: minmax(0, 1fr); } }
+
+/* --- Desktop panel mode (inside JARVIS Desktop) --------------------------- */
+html.desktop-mode, html.desktop-mode body { background: transparent !important; overflow: hidden; }
+html.desktop-mode .backdrop, html.desktop-mode .sidebar, html.desktop-mode .topbar, html.desktop-mode .toasts { display: none !important; }
+html.desktop-mode .shell { display: block; padding: 0; max-width: none; }
+html.desktop-mode #view { animation: none; }
+.desktop-identity { width: 100vmin; height: 100vmin; margin: 0 auto; }
+
+.presence-tools { margin-top: 10px; }

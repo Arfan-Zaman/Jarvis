@@ -38,8 +38,12 @@ Done:
    (calm, analysing, planning, executing, concerned, resolute, approval,
    awaiting, success, failure).
 
+3. Done: `jarvis/web/static/identity.js` + `identity.css` and the Presence
+   home page (`#presence`, default) and desktop view (`#desktop`). Details below
+   kept for reference.
+
 Next steps, in order:
-3. `jarvis/web/static/identity.js` + `identity.css`: original faceted face
+3. (done) `jarvis/web/static/identity.js` + `identity.css`: original faceted face
    (SVG), sensor eyes (aperture, gaze follows the cursor), neural core (canvas),
    state machine; a Presence home page laid out like the reference with real
    numbers only; a clearly labelled simulated preview of all states.

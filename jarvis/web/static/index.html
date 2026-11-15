@@ -6,6 +6,7 @@
   <meta name="color-scheme" content="dark">
   <title>JARVIS</title>
   <link rel="stylesheet" href="/static/app.css">
+  <link rel="stylesheet" href="/static/identity.css">
 </head>
 <body>
   <div class="backdrop" aria-hidden="true"></div>
@@ -21,6 +22,7 @@
       </div>
 
       <nav class="nav" aria-label="Sections">
+        <a href="#presence" data-view="presence">JARVIS</a>
         <a href="#dashboard" data-view="dashboard">Dashboard</a>
         <a href="#chat" data-view="chat">Chat</a>
         <a href="#goals" data-view="goals">Goals</a>
@@ -59,6 +61,7 @@
     </div>
   </dialog>
 
+  <script src="/static/identity.js" defer></script>
   <script src="/static/app.js" defer></script>
 </body>
 </html>

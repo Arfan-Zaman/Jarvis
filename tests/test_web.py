@@ -107,6 +107,11 @@ class WebTests(JarvisTestCase):
         self.assertEqual(status, 200)
         self.assertIn("JARVIS", html)
         self.assertEqual(self.call("GET", "/static/app.js")[0], 200)
+        for asset in ("/static/identity.js", "/static/identity.css"):
+            self.assertEqual(self.call("GET", asset)[0], 200)
+        self.assertIn("/static/identity.js", html)
+        status, live = self.call("GET", "/api/live")
+        self.assertEqual((status, live["state"]), (200, "calm"))
         self.assertEqual(self.call("GET", "/static/app.css")[0], 200)
         for path in ("/static/../server.py", "/static/%2e%2e/server.py", "/static/missing.js", "/etc/passwd"):
             with self.subTest(path=path):
