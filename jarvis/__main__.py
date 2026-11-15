@@ -58,6 +58,7 @@ def cmd_serve(config, args) -> int:
     logger.info("AI provider: %s", status.detail if not status.available else f"{status.name} ({status.model})")
     logger.info("Press Ctrl+C to stop.")
     app.learner.start()                       # continuous learning while the server runs
+    app.selfreview.start()                    # weekly self-review; proposals wait for the owner
     try:
         server.serve_forever()
     except KeyboardInterrupt:

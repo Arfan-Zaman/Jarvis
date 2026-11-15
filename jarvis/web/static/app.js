@@ -686,6 +686,54 @@ views.experiences = {
   },
 };
 
+/** Weekly self-review: JARVIS's proposed changes to its own code, waiting for the owner. */
+function selfReviewPanel() {
+  const body = h('div', { class: 'stack' }, h('div', { class: 'muted small' }, 'Loading…'));
+  const runBtn = h('button', { class: 'btn sm', type: 'button' }, 'Review now');
+  const decide = (branch, verb) => act(async () => {
+    if (verb === 'approve' && !(await dialog({ title: 'Merge this self-review?', text: branch,
+      note: 'The tests run on the merged result first; nothing is merged if they fail. Nothing is pushed.', okLabel: 'Approve and merge' }))) return;
+    if (verb === 'reject' && !(await dialog({ title: 'Reject this self-review?', text: branch,
+      note: 'Deletes the branch and its worktree.', okLabel: 'Reject and delete', danger: true }))) return;
+    const out = await api('POST', `/api/self-review/${branch}/${verb}`);
+    toast(out.message || 'Done');
+    await load();
+  });
+  const proposal = (p) => h('div', { class: 'item' },
+    h('div', { class: 'grow stack' },
+      h('div', { class: 'title mono' }, p.branch),
+      h('div', { class: 'meta' }, p.tests_ok === undefined ? null : chip(p.tests_ok ? 'tests pass' : 'tests fail', p.tests_ok ? 'ok' : 'bad'),
+        p.at ? chip(when(p.at)) : null),
+      p.self_review ? h('pre', { class: 'wrap small' }, p.self_review) : h('div', { class: 'muted small' }, 'No SELF_REVIEW.md on this branch.'),
+      p.diff_stat ? h('pre', { class: 'mono small scroll-x' }, p.diff_stat) : null),
+    h('div', { class: 'actions' },
+      h('button', { class: 'btn sm', onclick: decide(p.branch, 'reject') }, 'Reject'),
+      h('button', { class: 'btn sm danger', onclick: decide(p.branch, 'approve') }, 'Approve')));
+  const load = async () => {
+    const s = await api('GET', '/api/self-review');
+    const last = s.last || {};
+    body.replaceChildren(
+      h('div', { class: 'muted small' }, s.enabled
+        ? `Every ${s.interval_days} days while idle, Claude Code reviews JARVIS's code and logs and proposes fixes on a separate branch. Nothing reaches main until you approve.`
+        : 'Self-review is off (JARVIS_REVIEW=0). You can still run one now.'),
+      s.running ? h('div', null, chip('reviewing now…', 'warn')) : null,
+      last.at ? h('div', null, last.ok ? last.summary : `Last pass did not finish: ${last.error}`,
+        h('span', { class: 'muted small' }, ` ${new Date(last.at).toLocaleString()}`)) : h('div', { class: 'muted small' }, 'No self-review pass yet.'),
+      s.error ? h('div', { class: 'muted small' }, s.error) : null,
+      s.proposals.length ? h('div', { class: 'list' }, s.proposals.map(proposal)) : h('div', { class: 'empty' }, 'No proposals waiting.'));
+    runBtn.disabled = !!s.running;
+  };
+  runBtn.addEventListener('click', act(async () => {
+    runBtn.disabled = true; runBtn.textContent = 'Starting…';
+    await api('POST', '/api/self-review/run');
+    toast('Self-review started. It can take up to half an hour.');
+    runBtn.textContent = 'Review now';
+    await load();
+  }));
+  load().catch(() => body.replaceChildren(h('div', { class: 'muted small' }, 'Self-review status is unavailable.')));
+  return h('div', { class: 'glass panel' }, h('div', { class: 'row between' }, h('h2', { class: 'grow' }, 'Self-review'), runBtn), body);
+}
+
 views.system = {
   title: 'System status',
   subtitle: 'Health, safety, backups and the audit trail',
@@ -745,6 +793,7 @@ views.system = {
               h('button', { class: 'btn sm danger', onclick: act(async () => { await api('POST', `/api/approvals/${item.id}/approve`); toast('Approved. The requester may now proceed once.'); rerender(); }) }, 'Approve'))))
           )
           : h('div', { class: 'empty' }, 'Nothing is waiting for approval.')),
+      selfReviewPanel(),
       h('div', { class: 'glass panel' }, h('h2', null, 'Agents'),
         h('div', { class: 'list' }, agents.items.map((agent) => h('div', { class: 'item' },
           h('div', { class: 'grow' }, h('div', { class: 'title mono' }, agent.name), h('div', { class: 'muted small' }, agent.description)),

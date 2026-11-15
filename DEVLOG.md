@@ -26,6 +26,30 @@ Newest entries first. Record what changed, why, and what was verified.
   Origin/Host checks, CSP, static path checks, no innerHTML of content.
 - 255 tests pass.
 
+## 2026-11-16 — Weekly self-review (owner approves every change)
+
+- `jarvis/selfreview.py`: every `JARVIS_REVIEW_DAYS` (default 7) while idle
+  (off with `JARVIS_REVIEW=0`), JARVIS cuts a git worktree under
+  `workspace/self-review/<date>` on `jarvis/self-review-<YYYY-MM-DD>` from
+  `main`, hands Claude Code the jarvis.log tail, failed runs and DEVLOG, and
+  lets it make up to 3 small fixes there, commit them and explain them in
+  `SELF_REVIEW.md`. Claude runs headless with no MCP servers and project
+  settings only; Bash is limited to the test suite and a few git commands
+  (status/diff/log/show/add/commit); push, merge, checkout, branch are denied.
+- A proposal that touches `jarvis/safety.py`, `jarvis/selfreview.py`,
+  dependency files, `.claude/` or `.env` is discarded automatically; an empty
+  one leaves no branch behind.
+- Owner only, from the System page "Self-review" panel: Approve tries the
+  `--no-ff` merge in a scratch worktree, runs the tests on the merged result,
+  and only then fast-forwards `main` to that tested merge (refuses if main is
+  not checked out or is dirty). Never pushes. Reject deletes branch + worktree.
+  Both act only on `jarvis/self-review-*` branches. No tool exposes them.
+- API: `GET /api/self-review`, `POST /api/self-review/run`,
+  `POST /api/self-review/<branch>/approve|reject`.
+- Verified: `tests/test_selfreview.py` (fake Claude, real temp git repo:
+  naming, protected files, merge refused on failing tests, branch guard,
+  routes); full suite 262 tests OK. Not yet run against real Claude Code.
+
 ## 2026-11-16 — Interrupt and mute
 
 - While JARVIS thinks or talks, a quiet second listener runs; hearing
