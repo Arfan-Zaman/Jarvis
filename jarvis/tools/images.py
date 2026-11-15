@@ -28,7 +28,7 @@ from pathlib import Path
 
 from ..common import JarvisError, ValidationError
 from ..safety import ActionCategory
-from .claude import NEVER, READ_TOOLS, WRITE_TOOLS, claude_binary
+from .claude import NEVER, WRITE_TOOLS, claude_binary
 from .registry import Tool, ToolRegistry
 
 MODEL = os.environ.get("JARVIS_IMAGE_MODEL", "gpt_image_2_6")
@@ -73,11 +73,11 @@ def higgsfield_config(path: Path = MCP_FILE) -> str:
 
 
 def command(binary: str, prompt: str, allowed: list[str]) -> list[str]:
-    blocked = NEVER + WRITE_TOOLS + READ_TOOLS + ["WebSearch", "WebFetch"]
-    return [binary, "-p", prompt, "--output-format", "json", "--permission-mode", "default",
+    blocked = NEVER + WRITE_TOOLS + ["Read", "Grep", "Glob", "WebSearch", "WebFetch"]   # bare names: deny everywhere
+    return [binary, "-p", "--output-format", "json", "--permission-mode", "default",
             "--allowedTools", ",".join(allowed), "--disallowedTools", ",".join(dict.fromkeys(blocked)),
             "--strict-mcp-config", "--mcp-config", higgsfield_config(), "--setting-sources", "project",
-            "--no-session-persistence"]
+            "--no-session-persistence", "--", prompt]
 
 
 def _ask_claude(app, prompt: str, allowed: list[str], runner) -> dict:

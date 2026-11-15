@@ -383,8 +383,8 @@ class Conversation:
             return self._image_reply(conversation_id, result)
         left = f" You have {balance:g}." if balance is not None else ""
         return self._say(conversation_id, (
-            f"That picture will cost {cost:g} Higgsfield credits.{left} Shall I make it? Say yes to spend "
-            f"them, or no to leave it.\n\nPicture: {_quote(prompt, 300)}"), result["run_id"])
+            f"That picture will cost {cost:g} Higgsfield credits.{left} Press Approve to make it, or say no "
+            f"to leave it.\n\nPicture: {_quote(prompt, 300)}"), result["run_id"])
 
     def _pending_image(self, conversation_id: int) -> dict | None:
         """The picture JARVIS priced in its previous reply and is waiting to be told yes about."""
@@ -404,14 +404,14 @@ class Conversation:
         if approval["status"] != "pending":
             return self._say(conversation_id, f"That price is no longer open ({approval['status']}). "
                              "Ask me again and I'll quote it fresh.", None)
-        if not yes:     # the owner's own answer in chat decides it
+        if not yes:     # declining by voice or text is safe: nothing is spent
             self.app.safety.deny(picture["approval_id"])
             self.app.runs.set_status(picture["run_id"], "cancelled")
             return self._say(conversation_id, "Understood. No picture, and nothing spent.", None)
-        self.app.safety.approve(picture["approval_id"])
-        result = self.app.tools.execute("image.generate", picture["inputs"], actor="user:chat",
-                                        approval_id=picture["approval_id"], run_id=picture["run_id"])
-        return self._image_reply(conversation_id, result)
+        # Spending is never approved by speech or chat text (a "yes" from the TV must not spend
+        # credits): the owner presses Approve, which calls the approvals API directly.
+        return self._say(conversation_id, "Press Approve under the price to spend the credits. "
+                         "I don't take a spoken or typed yes for spending.", picture["run_id"])
 
     def _image_reply(self, conversation_id: int, result: dict) -> dict:
         if not result["ok"]:

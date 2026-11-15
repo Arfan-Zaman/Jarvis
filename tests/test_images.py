@@ -66,7 +66,8 @@ class ImageToolTests(unittest.TestCase):
         run = self.runner('Here: {"balance": 1200, "cost": 6, "plan": "plus"}')
         out = images.image_quote(FakeApp, {"prompt": "a red fox", "aspect_ratio": "16:9"}, "user", runner=run)
         self.assertEqual((out["cost"], out["balance"], out["affordable"], out["model"]), (6, 1200, True, "gpt_image_2_6"))
-        prompt = self.flag(self.calls[0][0], "-p")
+        prompt = self.calls[0][0][-1]            # the prompt comes last, after "--"
+        self.assertEqual(self.calls[0][0][-2], "--")
         self.assertIn('"get_cost": true', prompt)
         self.assertIn('"aspect_ratio": "16:9"', prompt)
         self.assertNotIn('"use_unlim": true', prompt)
@@ -85,7 +86,8 @@ class ImageToolTests(unittest.TestCase):
                                     runner=run, fetch=fetch)
         cmd = self.calls[0][0]
         self.assertEqual(self.flag(cmd, "--allowedTools").split(","), images.GENERATE_TOOLS)
-        prompt = self.flag(cmd, "-p")
+        prompt = cmd[-1]                          # the prompt comes last, after "--"
+        self.assertEqual(cmd[-2], "--")
         self.assertIn("at most 6 credits", prompt)
         self.assertIn('"use_unlim": false', prompt)
         self.assertIn('"model": "gpt_image_2_6"', prompt)
@@ -152,26 +154,35 @@ class ImageRegistryAndChatTests(JarvisTestCase):
         self.app = self.make_app(provider=ScriptedProvider([router]))
         return self.app
 
-    def test_chat_quotes_then_makes_the_picture_on_yes(self):
+    def test_chat_quotes_and_only_the_approve_button_spends(self):
         app = self.chat_app({"mode": "image", "prompt": "a red fox at dusk", "aspect_ratio": "16:9"})
         first = app.chat("Jarvis, make me a picture of a red fox at dusk, wide")
         reply, cid = first["reply"], first["conversation"]["id"]
         self.assertIn("6 Higgsfield credits", reply["content"])
         self.assertIn("1200", reply["content"])
+        self.assertIn("Press Approve", reply["content"])
         self.assertEqual(self.ask.call_count, 1)              # only the quote so far
+        # a spoken or typed "yes" never spends credits
+        said_yes = app.chat("yes", cid)["reply"]
+        self.assertIn("Press Approve", said_yes["content"])
+        self.assertEqual(self.ask.call_count, 1)
         self.fetch.assert_not_called()
-        second = app.chat("yes", cid)["reply"]
+        # the Approve button: the approvals API, then the same tool call with that approval
+        step = app.runs.get(reply["run_id"])["steps"][-1]
+        self.assertEqual(app.safety.get_approval(step["approval_id"])["status"], "pending")
+        app.safety.approve(step["approval_id"])
+        made = app.tools.execute("image.generate", step["input"], approval_id=step["approval_id"], run_id=reply["run_id"])
+        self.assertTrue(made["ok"], made)
         self.assertEqual(self.ask.call_count, 2)
-        self.assertIn("6 credits, 1194 left", second["content"])
-        saved = Path(second["content"].split("Saved to ")[1].strip())
+        saved = Path(made["output"]["path"])
+        saved = saved if saved.is_absolute() else app.config.workspace_dir / saved
         self.assertEqual(saved.parent, app.config.workspace_dir / "images")
         self.assertEqual(saved.read_bytes(), PNG)
-        self.assertEqual(app.runs.get(reply["run_id"], with_steps=False)["status"], "completed")
 
     def test_chat_no_spends_nothing(self):
         app = self.chat_app({"mode": "answer"})               # the router missed it; the wording catches it
         first = app.chat("Can you make me a picture of a lighthouse?")
-        self.assertIn("Shall I make it?", first["reply"]["content"])
+        self.assertIn("Press Approve", first["reply"]["content"])
         second = app.chat("no", first["conversation"]["id"])["reply"]
         self.assertIn("nothing spent", second["content"])
         self.assertEqual(self.ask.call_count, 1)

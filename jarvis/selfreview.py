@@ -41,7 +41,7 @@ TEST_CMD = ["-m", "unittest", "discover", "-s", "tests"]
 PROTECTED = ("jarvis/safety.py", "jarvis/selfreview.py", ".claude/", ".env", "requirements",
              "pyproject.toml", "setup.py", "setup.cfg", ".gitignore")
 
-ALLOWED_TOOLS = ["Read", "Grep", "Glob", "Edit", "Write", "MultiEdit",
+ALLOWED_TOOLS = ["Read(./**)", "Grep(./**)", "Glob(./**)", "Edit(./**)", "Write(./**)", "MultiEdit(./**)",   # its own worktree only
                  "Bash(python3 -m unittest discover -s tests)", "Bash(python3 -m unittest:*)",
                  "Bash(git status:*)", "Bash(git diff:*)", "Bash(git log:*)", "Bash(git show:*)",
                  "Bash(git add:*)", "Bash(git commit:*)"]
@@ -111,13 +111,13 @@ def touches_protected(paths) -> list[str]:
 
 
 def claude_command(binary: str, prompt: str, branch: str) -> list[str]:
-    return [binary, "-p", prompt, "--output-format", "json",
+    return [binary, "-p", "--output-format", "json",
             "--permission-mode", "acceptEdits",
             "--allowedTools", ",".join(ALLOWED_TOOLS),
             "--disallowedTools", ",".join(DENIED_TOOLS),
             "--strict-mcp-config", "--mcp-config", '{"mcpServers":{}}', "--setting-sources", "project",
             "--no-session-persistence",
-            "--append-system-prompt", BRIEF.format(branch=branch)]
+            "--append-system-prompt", BRIEF.format(branch=branch), "--", prompt]
 
 
 def run_tests(cwd: Path) -> tuple[bool, str]:

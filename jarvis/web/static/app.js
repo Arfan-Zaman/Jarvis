@@ -1007,7 +1007,11 @@ views.presence = {
     async function offerApproval(runId) {
       decision.replaceChildren();
       const run = await api('GET', `/api/runs/${runId}`).catch(() => null);
-      const approval = run && run.report && run.report.approval;
+      if (!run) return;
+      // a single tool waiting (e.g. a priced picture), or a multi-step goal paused for approval
+      const waitingStep = run.kind !== 'goal' ? (run.steps || []).slice().reverse().find((st) => st.status === 'waiting_approval' && st.approval_id) : null;
+      let approval = run.report && run.report.approval;
+      if (waitingStep) approval = (await api('GET', '/api/approvals?status=pending')).items.find((x) => x.id === waitingStep.approval_id);
       if (!approval || approval.status !== 'pending') return;
       const yes = h('button', { class: 'btn primary', type: 'button' }, 'Approve');
       const no = h('button', { class: 'btn', type: 'button' }, 'Deny');
@@ -1019,6 +1023,14 @@ views.presence = {
       yes.addEventListener('click', act(async () => {
         decision.replaceChildren(); identity.setState('executing', 'Approved. Working on it…');
         await api('POST', `/api/approvals/${approval.id}/approve`);
+        if (waitingStep) {                              // re-run that exact tool call with the approval
+          const out = await api('POST', `/api/tools/${waitingStep.tool}/execute`, { inputs: waitingStep.input, approval_id: approval.id, run_id: runId });
+          const made = out.output || {};
+          reply.textContent = out.ok ? (made.path ? `Here it is${typeof made.cost === 'number' ? ` (${made.cost} credits)` : ''}. Saved to ${made.path}` : (made.result || 'Done.')) : `That failed: ${out.error}`;
+          const pictures = typeof workspaceImages === 'function' ? workspaceImages(reply.textContent) : null; if (pictures) reply.append(pictures);
+          identity.setState(out.ok ? 'success' : 'failure'); refreshChrome();
+          return;
+        }
         const report = await api('POST', `/api/runs/${runId}/resume`);
         const done = await api('GET', `/api/runs/${runId}`);
         const results = (done.steps || []).filter((st) => st.status === 'succeeded' && st.output && typeof st.output.result === 'string').map((st) => st.output.result);

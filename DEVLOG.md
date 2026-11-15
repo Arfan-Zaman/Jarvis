@@ -2,6 +2,22 @@
 
 Newest entries first. Record what changed, why, and what was verified.
 
+## 2026-11-16 — Merged image generation and weekly self-review
+
+- Merged `claude/self-review-0dbf57` and `claude/image-generation-4646c9`
+  (change-log, router, UI and test conflicts resolved by keeping both sides).
+- Hardened on merge: the image tool now denies the bare Read/Grep/Glob names
+  (it had picked up the new path-scoped list, which would only have denied
+  workspace reads); self-review's Read/Edit/Write are confined to its own
+  worktree; both pass the prompt after `--`.
+- Spending is approved only with the Approve button: a spoken or typed "yes"
+  no longer generates a picture ("no" still cancels). The one-click card now
+  handles single-tool approvals by re-running that exact call with the
+  approval. 281 tests pass; live server restarted, System page shows the
+  Self-review panel, all six Claude/image tools registered.
+- Not yet run for real: a self-review pass, and a real picture (the higgsfield
+  connector is still on the 0-credit account).
+
 ## 2026-11-16 — Browser, files and photos, security hardening
 
 - `claude.browse` (system category, asks first): Claude Code drives a real
