@@ -2,6 +2,17 @@
 
 Newest entries first. Record what changed, why, and what was verified.
 
+## 2026-11-16 — 3D face (WebGL) and HUD Presence page
+
+- The swarm now renders with WebGL (no library): soft glowing sprites,
+  additive light so the bots look see-through, a bloom pass, depth fog, and
+  three tilted 3D rings of bots spinning in their own planes, all turning with
+  the gaze. Canvas 2D stays as the fallback.
+- Presence page: the grey stat cards are gone. Readouts (health, tasks,
+  memories, tools) are HUD callouts pinned to the reticle with leader lines;
+  the side column is a quiet activity log. Collapses to a grid under 900px.
+- Checked in Chrome on 8765 (WebGL active, no console errors); 243 tests pass.
+
 ## 2026-11-16 — Claude Code as JARVIS's deep mind
 
 - New tool `claude.work` (`jarvis/tools/claude.py`, category workspace): runs

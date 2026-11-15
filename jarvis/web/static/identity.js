@@ -230,15 +230,28 @@
     let lastNow = 0;
     function snap() { x.set(hx); y.set(hy); z.set(hz); vx.fill(0); vy.fill(0); vz.fill(0); }
 
-    function draw(ctx, w, now, o) {
+    // 3D reticle: three tilted rings of bots around the head, broken into arcs
+    const RINGS = [{ r: 0.6, tilt: 1.25, roll: 0.25, speed: 0.22, arcs: [[0, 0.3], [0.38, 0.62], [0.7, 0.93]] },
+                   { r: 0.68, tilt: 1.42, roll: -0.35, speed: -0.15, arcs: [[0.05, 0.95]] },
+                   { r: 0.77, tilt: 1.1, roll: 0.6, speed: 0.1, arcs: [[0, 0.12], [0.2, 0.45], [0.55, 0.6], [0.66, 0.9]] }];
+    const ringPts = [];
+    RINGS.forEach((ring, i) => {
+      const count = Math.round(ring.r * (N > 2000 ? 420 : 220));
+      for (let j = 0; j < count; j++) {
+        const u = j / count;
+        if (ring.arcs.some(([a, b]) => u >= a && u <= b)) ringPts.push([i, u * Math.PI * 2]);
+      }
+    });
+    const TOTAL = N + ringPts.length;
+    const out = new Float32Array(TOTAL * 7);          // x, y, size, r, g, b, a (pixels)
+
+    // One simulation step plus projection; fills `out`, returns the point count.
+    function frame(w, now, o) {
       const { spec, state, t, gaze, level, color, dpr } = o;
-      ctx.clearRect(0, 0, w, w);
       if (o.reduced && !o.snapped) { snap(); o.snapped = true; }
       const sec = now / 1000;
-      // physics runs in ~60 Hz steps whatever the frame rate (a throttled tab still converges)
       const steps = lastNow ? Math.max(1, Math.min(30, Math.round((now - lastNow) / 16.7))) : 1;
       lastNow = now;
-      // the divide / fly / merge-elsewhere cycle
       const period = spec.still || state === 'offline' ? 0 : state === 'executing' ? 9 : state === 'calm' || state === 'speaking' ? 16 : 12;
       let split = 0, offX = 0, offY = 0;
       if (period && !o.reduced) {
@@ -250,24 +263,26 @@
       }
       for (let k = 0; k < K; k++) {
         const a = (k / K) * Math.PI * 2 + sec * (state === 'executing' ? 1.1 : 0.55);
-        ccx[k] = Math.cos(a) * 0.46; ccy[k] = Math.sin(a) * 0.34; ccz[k] = Math.sin(a * 2) * 0.2;
+        ccx[k] = Math.cos(a) * 0.5; ccy[k] = Math.sin(a) * 0.36; ccz[k] = Math.sin(a * 2) * 0.35;
       }
       let swell = 1;
       if (spec.burst && t < 1.6) swell += 0.55 * Math.sin(Math.PI * t / 1.6);
       const shimmer = state === 'analysing' || state === 'planning' ? 0.014 : 0.004;
       const kick = spec.disrupt && t < 0.9 ? (1 - t / 0.9) * 0.02 : 0;
       const spring = split > 0.05 ? 0.035 : 0.055, damp = 0.86;
-      const tilt = gaze[0] * 0.55 + (spec.still ? 0 : Math.sin(sec / 4.5) * 0.14), pitch = -gaze[1] * 0.35;
+      const tilt = gaze[0] * 0.6 + (spec.still ? 0 : Math.sin(sec / 4.5) * 0.18), pitch = -gaze[1] * 0.4;
       const ct = Math.cos(tilt), st = Math.sin(tilt), cp = Math.cos(pitch), sp = Math.sin(pitch);
-      const W = w * 0.84, mid = w / 2, accent = color;
-      const mix = state === 'warning' || state === 'error' || state === 'failure' ? 0.75 : spec.mix > 0.3 ? 0.45 : 0.18;
+      const W = w * 0.78, mid = w / 2, accent = color;
+      const mix = state === 'warning' || state === 'error' || state === 'failure' ? 0.75 : spec.mix > 0.3 ? 0.45 : 0.15;
       const flicker = spec.flicker ? 0.65 + 0.35 * Math.sin(now / 80) : 1;
       const glow = Math.max(0.25, spec.glow) * flicker;
-      // halo behind the swarm
-      const halo = ctx.createRadialGradient(mid, mid, 0, mid, mid, w * 0.5);
-      halo.addColorStop(0, rgba(accent, 0.1 * glow)); halo.addColorStop(1, rgba(accent, 0));
-      ctx.fillStyle = halo; ctx.fillRect(0, 0, w, w);
-      ctx.globalCompositeOperation = 'lighter';
+      const big = w / dpr > 400 ? 1.3 : 1;
+      let m = 0;
+      const emit = (X, Y, Z, size, r, g, b, a) => {
+        const p = 2.6 / (2.6 - Z), fog = Math.max(0.25, Math.min(1, 0.65 + Z * 0.9));
+        out[m++] = mid + X * W * p; out[m++] = mid + Y * W * p; out[m++] = size * p * dpr * big;
+        out[m++] = r / 255; out[m++] = g / 255; out[m++] = b / 255; out[m++] = Math.min(1, a * fog);
+      };
       for (let n = 0; n < N; n++) {
         const k = cl[n], s = seed[n];
         let tx = hx[n] * swell + offX, ty = hy[n] * swell + offY, tz = hz[n];
@@ -283,21 +298,101 @@
           vz[n] = (vz[n] + (tz - z[n]) * spring) * damp;
           x[n] += vx[n]; y[n] += vy[n]; z[n] += vz[n];
         }
-        // rotate toward the gaze, then perspective
         let X = x[n] * ct + z[n] * st, Z = -x[n] * st + z[n] * ct, Y = y[n];
         [Y, Z] = [Y * cp - Z * sp, Y * sp + Z * cp];
-        const p = 2.4 / (2.4 - Z), sx = mid + X * W * p, sy = mid + Y * W * p;
         const L = lum[n], speed = Math.abs(vx[n]) + Math.abs(vy[n]);
-        let a = (0.3 + 0.9 * L) * glow + Math.min(0.3, speed * 6);
-        if (spec.voice && L > 0.6) a += level * 0.7;
-        const r = cr[n] + (accent[0] - cr[n]) * mix, g = cg[n] + (accent[1] - cg[n]) * mix, b = cb[n] + (accent[2] - cb[n]) * mix;
-        ctx.fillStyle = `rgba(${r | 0},${g | 0},${b | 0},${Math.min(1, a).toFixed(3)})`;
-        const size = (L > 0.7 ? 2.6 : 1.6) * dpr * p * (w / dpr > 400 ? 1.25 : 1);
-        ctx.fillRect(sx - size / 2, sy - size / 2, size, size);
+        let a = (0.42 + 0.75 * L) * glow + Math.min(0.35, speed * 7);
+        if (spec.voice && L > 0.6) a += level * 0.8;
+        const twinkle = 0.85 + 0.15 * Math.sin(sec * 3 + s);
+        emit(X, Y, Z, L > 0.7 ? 3.2 : 2.1, cr[n] + (accent[0] - cr[n]) * mix, cg[n] + (accent[1] - cg[n]) * mix,
+             cb[n] + (accent[2] - cb[n]) * mix, a * twinkle);
+      }
+      // rings: real 3D circles, spinning in their own planes, seen through the same camera
+      const spin = sec * (spec.speed || 1);
+      for (const [i, u] of ringPts) {
+        const ring = RINGS[i], ang = u + spin * ring.speed;
+        let X = Math.cos(ang) * ring.r, Y = Math.sin(ang) * ring.r, Z = 0;
+        const cT = Math.cos(ring.tilt), sT = Math.sin(ring.tilt);       // tip the ring back
+        [Y, Z] = [Y * cT, Y * sT];
+        const cR = Math.cos(ring.roll), sR = Math.sin(ring.roll);       // and roll it
+        [X, Y] = [X * cR - Y * sR, X * sR + Y * cR];
+        let X2 = X * ct + Z * st, Z2 = -X * st + Z * ct, Y2 = Y;
+        [Y2, Z2] = [Y2 * cp - Z2 * sp, Y2 * sp + Z2 * cp];
+        emit(X2, Y2 + 0.02, Z2, 1.9, accent[0], accent[1], accent[2], 0.6 * glow);
+      }
+      return m / 7;
+    }
+
+    // Canvas 2D fallback (no WebGL).
+    function draw(ctx, w, now, o) {
+      const count = frame(w, now, o);
+      ctx.clearRect(0, 0, w, w);
+      ctx.globalCompositeOperation = 'lighter';
+      for (let i = 0; i < count; i++) {
+        const q = i * 7, size = out[q + 2];
+        ctx.fillStyle = `rgba(${out[q + 3] * 255 | 0},${out[q + 4] * 255 | 0},${out[q + 5] * 255 | 0},${out[q + 6].toFixed(3)})`;
+        ctx.fillRect(out[q] - size / 2, out[q + 1] - size / 2, size, size);
       }
       ctx.globalCompositeOperation = 'source-over';
     }
-    return { draw };
+
+    return { draw, frame, out };
+  }
+
+  // WebGL renderer for the swarm: soft glowing sprites, additive light, a bloom pass.
+  function makeGL(canvas) {
+    const gl = canvas.getContext('webgl', { alpha: true, premultipliedAlpha: true, antialias: false });
+    if (!gl) return null;
+    const shader = (type, src) => {
+      const sh = gl.createShader(type); gl.shaderSource(sh, src); gl.compileShader(sh);
+      if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(sh));
+      return sh;
+    };
+    const prog = gl.createProgram();
+    gl.attachShader(prog, shader(gl.VERTEX_SHADER, `
+      attribute vec2 a_pos; attribute float a_size; attribute vec4 a_col;
+      uniform vec2 u_res; uniform float u_scale; varying vec4 v_col;
+      void main() {
+        vec2 clip = a_pos / u_res * 2.0 - 1.0;
+        gl_Position = vec4(clip.x, -clip.y, 0.0, 1.0);
+        gl_PointSize = max(1.0, a_size * u_scale);
+        v_col = a_col;
+      }`));
+    gl.attachShader(prog, shader(gl.FRAGMENT_SHADER, `
+      precision mediump float; varying vec4 v_col; uniform float u_gain; uniform float u_core;
+      void main() {
+        float d = length(gl_PointCoord - 0.5) * 2.0;
+        if (d > 1.0) discard;
+        float light = mix(exp(-d * d * 3.0), exp(-d * d * 9.0) + 0.6 * exp(-d * d * 40.0), u_core);
+        float a = v_col.a * light * u_gain;
+        vec3 hot = mix(v_col.rgb, vec3(1.0), u_core * 0.55 * exp(-d * d * 30.0));
+        gl_FragColor = vec4(hot * a, a);
+      }`));
+    gl.linkProgram(prog);
+    if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) return null;
+    const buf = gl.createBuffer();
+    const loc = (n) => gl.getAttribLocation(prog, n), u = (n) => gl.getUniformLocation(prog, n);
+    const aPos = loc('a_pos'), aSize = loc('a_size'), aCol = loc('a_col');
+    const uRes = u('u_res'), uScale = u('u_scale'), uGain = u('u_gain'), uCore = u('u_core');
+    return {
+      render(data, count, w) {
+        gl.viewport(0, 0, w, w);
+        gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT);
+        if (!count) return;
+        gl.useProgram(prog);
+        gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+        gl.bufferData(gl.ARRAY_BUFFER, data.subarray(0, count * 7), gl.DYNAMIC_DRAW);
+        gl.enableVertexAttribArray(aPos); gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 28, 0);
+        gl.enableVertexAttribArray(aSize); gl.vertexAttribPointer(aSize, 1, gl.FLOAT, false, 28, 8);
+        gl.enableVertexAttribArray(aCol); gl.vertexAttribPointer(aCol, 4, gl.FLOAT, false, 28, 12);
+        gl.uniform2f(uRes, w, w);
+        gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE);       // light adds up: see-through bots
+        gl.uniform1f(uScale, 6.0); gl.uniform1f(uGain, 0.05); gl.uniform1f(uCore, 0.0);   // bloom
+        gl.drawArrays(gl.POINTS, 0, count);
+        gl.uniform1f(uScale, 1.9); gl.uniform1f(uGain, 0.95); gl.uniform1f(uCore, 1.0);   // bots
+        gl.drawArrays(gl.POINTS, 0, count);
+      },
+    };
   }
 
   let counter = 0;
@@ -348,13 +443,20 @@
       artStack.prepend(el);
       el.src = art.base + file;
     }
-    let swarm = null;
+    let swarm = null, glr = null, glCanvasEl = null;
     const swarmOpts = { snapped: false };
     if (options.art !== false) artAssets().then((index) => {
       art = index; showArt();
       if (!options.static && options.swarm !== false && index.files.has('base.png')) {
         loadSwarm(index.base + 'base.png', compact ? 1300 : 3200)
-          .then((s) => { swarm = s; root.classList.add('jv-swarm-mode'); resize(); })
+          .then((s) => {
+            swarm = s;
+            const glCanvas = document.createElement('canvas');
+            glCanvas.className = 'jv-gl';
+            try { glr = makeGL(glCanvas); } catch (e) { glr = null; }
+            if (glr) { canvas.after(glCanvas); glCanvasEl = glCanvas; }
+            root.classList.add('jv-swarm-mode'); resize();
+          })
           .catch(() => {});                       // stays on the still art
       }
     });
@@ -396,6 +498,10 @@
       dpr = Math.min(window.devicePixelRatio || 1, 2);
       canvas.width = canvas.height = Math.round(size * dpr);
       canvas.style.width = canvas.style.height = `${size}px`;
+      if (glCanvasEl) {
+        glCanvasEl.width = glCanvasEl.height = canvas.width;
+        glCanvasEl.style.width = glCanvasEl.style.height = `${size}px`;
+      }
     }
 
     function apply() {
@@ -436,7 +542,8 @@
       const color = mixColor(spec.color, VIOLET, spec.mix);
       if (swarm) {
         Object.assign(swarmOpts, { spec, state, t, gaze, level, color, dpr, reduced: reducedMotion() });
-        swarm.draw(ctx, w, now, swarmOpts);
+        if (glr) { ctx.clearRect(0, 0, w, w); glr.render(swarm.out, swarm.frame(w, now, swarmOpts), w); }
+        else swarm.draw(ctx, w, now, swarmOpts);
         return;
       }
       ctx.clearRect(0, 0, w, w);

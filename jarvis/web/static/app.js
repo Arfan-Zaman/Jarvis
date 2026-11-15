@@ -805,6 +805,8 @@ views.presence = {
     const health = Math.round(100 * checks.filter(Boolean).length / checks.length);
     const runs = executions.items.length;
     const okRate = runs ? Math.round(100 * executions.items.filter((e) => e.status === 'succeeded').length / runs) : null;
+    const callout = (pos, k, v, hint) => h('div', { class: `hud-callout ${pos}` },
+      h('div', { class: 'v' }, String(v)), h('div', { class: 'k' }, k), h('div', { class: 'hint' }, hint));
     const metric = (k, v, unit, hint) => h('div', { class: 'metric' }, h('div', { class: 'k' }, k), h('div', { class: 'v' }, v, unit ? h('small', null, unit) : null), hint ? h('div', { class: 'hint' }, hint) : null);
     const stream = h('div', { class: 'stream' });
     const showActivity = (items) => {
@@ -911,19 +913,20 @@ views.presence = {
       h('div', { class: 'presence-head' },
         h('div', { class: 'presence-mark' }, h('div', null, h('div', { class: 'name' }, 'JARVIS'), h('div', { class: 'motto' }, 'Reason first. Resolve always.'))),
         h('div', { class: 'presence-clock' }, time, date)),
-      stage,
+      h('div', { class: 'hud' },
+        callout('tl', 'System health', `${health}%`, `${checks.filter(Boolean).length} of ${checks.length} checks passing`),
+        callout('tr', 'Open tasks', status.counts.tasks_open, `${status.counts.tasks_completed} completed`),
+        stage,
+        callout('bl', 'Memories', status.counts.memories, `${status.counts.experiences} lessons recorded`),
+        callout('br', 'Tools', status.counts.tools, okRate == null ? 'No tool runs yet' : `${okRate}% of the last ${runs} runs worked`)),
       h('div', { class: 'presence-state' }, label, line),
       form,
       h('div', { class: 'presence-exchange' }, you, reply, memoryLine),
       h('div', { class: 'row end presence-tools' }, simBadge, previewBtn));
 
     const side = h('aside', { class: 'presence-side' },
-      metric('System health', health, '%', `${checks.filter(Boolean).length} of ${checks.length} checks passing`),
-      metric('Open tasks', status.counts.tasks_open, null, `${status.counts.tasks_completed} completed`),
-      metric('Memories', status.counts.memories, null, `${status.counts.experiences} lessons recorded`),
-      metric('Tools available', status.counts.tools, null, okRate == null ? 'No tool runs yet' : `${okRate}% of the last ${runs} runs succeeded`),
-      h('div', { class: 'metric' }, h('div', { class: 'panel-title' }, 'TOOL ACTIVITY'), stream),
-      metric('Model', status.ai.available ? status.ai.model : 'Offline', null, status.ai.available ? 'Local, on this Mac' : status.ai.detail));
+      h('div', { class: 'log-head' }, 'Activity'), stream,
+      h('div', { class: 'log-model' }, status.ai.available ? `Thinking locally with ${status.ai.model}` : status.ai.detail));
 
     root.append(h('div', { class: 'presence' }, hero, side));
     identity.setState(connected ? 'calm' : 'offline', connected ? 'Standing by.' : status.ai.detail);

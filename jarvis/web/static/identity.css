@@ -245,3 +245,43 @@ html.desktop-mode #view { animation: none; }
 .jv-swarm-mode .jv-art,
 .jv-swarm-mode .jv-face { display: none; }
 .jv-swarm-mode .jv-core { opacity: 1; transform: none; }
+.jv-gl { position: absolute; inset: 0; z-index: 1; pointer-events: none; }
+.jv-swarm-mode::before {                 /* the reticle's light falls on the dark around it */
+  content: ""; position: absolute; inset: 6%; border-radius: 50%; z-index: 0; pointer-events: none;
+  background: radial-gradient(closest-side, rgba(var(--jv-accent-rgb), 0.08), rgba(var(--jv-accent-rgb), 0.02) 55%, transparent);
+}
+
+/* --- HUD: readouts pinned to the reticle, a quiet activity log beside it --- */
+.hud { position: relative; width: min(100%, 860px); margin: 0 auto; }
+.hud .presence-stage { width: min(100%, 540px); }
+.hud-callout { position: absolute; width: 150px; font-variant-numeric: tabular-nums; }
+.hud-callout .v { font-size: 30px; font-weight: 300; letter-spacing: 0.02em; color: #fff3f9; line-height: 1; }
+.hud-callout .k { margin-top: 6px; font-size: 13px; color: #e9dfe6; }
+.hud-callout .hint { font-size: 11.5px; color: var(--faint); margin-top: 2px; }
+.hud-callout::before {             /* leader line toward the reticle, ending in a node */
+  content: ""; position: absolute; top: 15px; width: 96px; height: 1px;
+  background: linear-gradient(90deg, rgba(var(--jv-hero-rgb, 255,45,140), 0.0), rgba(var(--jv-hero-rgb, 255,45,140), 0.7));
+}
+.hud-callout::after {
+  content: ""; position: absolute; top: 12px; width: 7px; height: 7px; border-radius: 50%;
+  border: 1px solid rgba(var(--jv-hero-rgb, 255,45,140), 0.9); box-shadow: 0 0 10px rgba(var(--jv-hero-rgb, 255,45,140), 0.6);
+}
+.hud-callout.tl, .hud-callout.bl { left: 0; text-align: right; }
+.hud-callout.tr, .hud-callout.br { right: 0; }
+.hud-callout.tl, .hud-callout.tr { top: 16%; }
+.hud-callout.bl, .hud-callout.br { bottom: 16%; }
+.hud-callout.tl::before, .hud-callout.bl::before { left: calc(100% + 10px); }
+.hud-callout.tl::after, .hud-callout.bl::after { left: calc(100% + 106px); }
+.hud-callout.tr::before, .hud-callout.br::before { right: calc(100% + 10px); transform: scaleX(-1); }
+.hud-callout.tr::after, .hud-callout.br::after { right: calc(100% + 106px); }
+.presence-side { gap: 10px; padding: 4px 0 0 16px; border-left: 1px solid rgba(255, 255, 255, 0.07); }
+.presence-side .log-head { font-size: 13px; color: #e9dfe6; }
+.presence-side .log-model { font-size: 11.5px; color: var(--faint); margin-top: 8px; }
+.presence { grid-template-columns: minmax(0, 1fr) 240px; }
+@media (max-width: 1100px) { .presence { grid-template-columns: minmax(0, 1fr); } .presence-side { border-left: 0; padding-left: 0; } }
+@media (max-width: 900px) {
+  .hud { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 18px; }
+  .hud .presence-stage { grid-column: 1 / -1; order: -1; }
+  .hud-callout { position: static; width: auto; text-align: left !important; }
+  .hud-callout::before, .hud-callout::after { display: none; }
+}
