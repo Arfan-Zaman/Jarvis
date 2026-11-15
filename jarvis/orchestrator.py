@@ -22,7 +22,7 @@ from .providers import AIProvider, ProviderError, build_provider
 from .safety import ActionCategory, SafetyLayer
 from .voice import Voice
 from .stores.runs import RunStore
-from .tools import ToolRegistry, register_builtin, register_claude, register_images, register_mac, register_web
+from .tools import ToolRegistry, register_builtin, register_claude, register_images, register_mac, register_mail_calendar, register_web
 from .stores import (
     AgentStore, ConversationStore, EventLog, ExperienceStore,
     MemoryStore, ProjectStore, SettingsStore, TaskStore,
@@ -64,6 +64,7 @@ class Jarvis:
         register_web(self.tools)
         register_claude(self.tools)
         register_mac(self.tools)
+        register_mail_calendar(self.tools)
         register_images(self.tools)
         self.engine = Engine(self)
         from .learner import Learner

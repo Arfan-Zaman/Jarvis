@@ -77,7 +77,8 @@ ROUTER = """You decide how JARVIS handles the owner's latest message. Reply with
 {"mode": "act", "goal": "<the request restated as a complete, self-contained instruction>"}
   when the owner wants JARVIS to DO something with its own tools, or to look up their own
   stored information: create, change, complete or list tasks; search stored memories;
-  record a lesson; list or read projects; check JARVIS's health. Also choose "act" for a
+  record a lesson; list or read projects; check JARVIS's health; read, search, summarise,
+  draft or send the owner's email; read their calendar or add an event to it. Also choose "act" for a
   QUICK look-up on the internet (news, a price, one fact) or when the owner gives a web
   address to read. In-depth research or comparisons are "delegate", not "act".
 
@@ -101,8 +102,8 @@ ROUTER = """You decide how JARVIS handles the owner's latest message. Reply with
 
 {"mode": "answer"}
   for everything else: conversation, greetings, general knowledge, explanations, maths,
-  advice, opinions, or requests for abilities JARVIS does not have (email, calendar,
-  devices, payments). If unsure whether the owner wants an action, choose "answer".
+  advice, opinions, or requests for abilities JARVIS does not have (phone calls, text
+  messages, devices, payments). If unsure whether the owner wants an action, choose "answer".
   If, in passing, the owner states a LASTING fact or preference about themselves (for
   example "call me Arfan", "I'm vegetarian", "I work late on Thursdays"), add
   "remember": "<that fact>" and "category" so JARVIS can offer to remember it. Do not do
@@ -145,9 +146,12 @@ def system_prompt(tools: list[dict], memories: list[dict] | None = None) -> str:
         "browser; read files and photos the owner uploads; find, open and organise files and apps on the "
         "owner's Mac; run commands, scripts and installs on the Mac (the owner approves each task once); "
         "write code and documents; make pictures (the owner approves the credit cost); remember and learn "
-        "continuously; manage tasks, projects and goals; propose improvements to its own code weekly. "
+        "continuously; manage tasks, projects and goals; propose improvements to its own code weekly; "
+        "read, search and summarise the owner's email in Mail, write drafts and replies for them to check, "
+        "and send email (the owner approves every message on screen first); read today's and upcoming "
+        "events in Calendar and add events. "
         "The owner talks to it by voice or text. "
-        "JARVIS cannot send email or messages, make phone calls, use a calendar or make payments. "
+        "JARVIS cannot send text messages, make phone calls or make payments. "
         "Never claim or offer these, and never tell the owner to do by hand something JARVIS can do. "
         "You can freely share general knowledge, ideas, suggestions and advice from what you know.\n"
         "In this reply you are only talking. Never say you have done, saved, added or changed "
@@ -329,7 +333,9 @@ class Conversation:
     OWN_DATA = re.compile(r"\b(task|tasks|to-?do|memor(y|ies)|remember|project|projects|lesson|experience|"
                           r"health|backup|approval|goal|file|files|folder|download|downloads|desktop|document|"
                           r"app|apps|open|launch|battery|disk|storage|wi-?fi|mac|computer|run|install|command|"
-                          r"script|terminal|notif\w*|remind\w*|organi[sz]e|convert|rename|move|delete)\b", re.I)
+                          r"script|terminal|notif\w*|remind\w*|organi[sz]e|convert|rename|move|delete|"
+                          r"e-?mails?|mail|mails|inbox|unread|drafts?|reply|replies|"
+                          r"calendars?|agenda|meetings?|appointments?|diary)\b", re.I)
 
     def _converse(self, conversation_id: int, offer: dict | None = None) -> dict | None:
         """Reply with Claude (understands follow-ups and corrections, searches the web itself).

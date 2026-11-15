@@ -13,6 +13,9 @@ from support import JarvisTestCase
 
 EXPECTED_TOOLS = {
     "claude.work": "workspace", "claude.operate": "system", "claude.research": "web_read", "claude.converse": "web_read", "mac.find_files": "read", "mac.status": "read", "mac.open": "write", "mac.notify": "write", "claude.browse": "system",
+    "mail.recent": "read", "mail.search": "read", "mail.read": "read", "mail.draft": "write",
+    "mail.send": "external_communication", "calendar.today": "read", "calendar.upcoming": "read",
+    "calendar.add_event": "write",
     "jarvis.info": "read", "system.health": "read", "projects.list": "read", "projects.get": "read",
     "tasks.list": "read", "memory.search": "read",
     "tasks.create": "write", "tasks.update": "write", "tasks.complete": "write",
@@ -50,9 +53,9 @@ class RegistryTests(ToolCase):
         for tool in tools.values():
             self.assertTrue(tool["description"])
             self.assertIsInstance(tool["inputs"], dict)
-            # Only Claude Code with a shell, the browser, and spending picture credits ask first.
+            # Only Claude Code with a shell, the browser, spending picture credits and sending email ask first.
             self.assertEqual(tool["requires_approval"],
-                             tool["name"] in ("claude.operate", "claude.browse", "image.generate"))
+                             tool["name"] in ("claude.operate", "claude.browse", "image.generate", "mail.send"))
         self.assertEqual(tools["tasks.create"]["inputs"]["title"], {
             "type": "string", "description": "What needs doing.", "required": True})
         self.assertEqual({t["name"] for t in self.app.tools.list("write")},
@@ -344,7 +347,7 @@ class ToolApiTests(ToolCase):
     def test_discover_execute_and_read_history(self):
         status, tools = self.call("GET", "/api/tools")
         self.assertEqual((status, len(tools["items"])), (200, len(EXPECTED_TOOLS)))
-        self.assertEqual(len(self.call("GET", "/api/tools?permission=read")[1]["items"]), 8)   # + mac.find_files, mac.status
+        self.assertEqual(len(self.call("GET", "/api/tools?permission=read")[1]["items"]), 13)   # + mac, mail and calendar reads
 
         status, result = self.call("POST", "/api/tools/tasks.create/execute", {"inputs": {"title": "Via API"}})
         self.assertEqual((status, result["ok"]), (200, True))
