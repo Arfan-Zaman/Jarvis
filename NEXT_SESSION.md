@@ -3,6 +3,61 @@
 Read this first. Then `JARVIS_ROADMAP.md` (Phase 3) and `ARCHITECTURE.md`
 section 4b (autonomous design).
 
+## START HERE: art-mode session handoff (2026-11-16, latest)
+
+The previous session hit its usage limit. Exact state:
+
+**Done and pushed** (commit `eff4e35` and the commit with this note):
+- Art mode in `jarvis/web/static/identity.js` + `identity.css`: when rendered
+  files exist in `jarvis/web/static/identity/`, the vector face hides and the
+  state's still (or loop) crossfades in; live eye glow (colour/intensity/opening
+  from the `STATES` table), voice level on the eyes while speaking, subtle
+  cursor parallax, canvas core as a halo. A state without its own still uses
+  `base.png`; with no files at all the old vector face is used. Mapping is the
+  `ART` table; eye positions are `ART_EYES` (guesses, tune to the real render).
+- `GET /api/identity/assets` (server.py) lists which of the fixed file names
+  exist. Test added in `tests/test_web.py`. 240 tests pass.
+- Verified in the browser with temporary placeholder PNGs (deleted): Presence
+  and desktop views switch to art mode, crossfade and base fallback work, no
+  files gives the vector face, no console errors.
+- `.claude/launch.json` has `jarvis-throwaway` (port 8777, throwaway
+  `JARVIS_DATA_DIR`) for safe checks. The owner's real server was restarted on
+  port 8765 with the new code.
+
+**Blocked: the art itself is not generated yet.**
+- The project Higgsfield connector (`.mcp.json`, server name `higgsfield`,
+  211 tools, the only one that can generate) is still signed in to the owner's
+  OLD account: 0 credits, free plan. Re-authenticating in `/mcp` kept returning
+  the old account, most likely because the normal browser was still signed in
+  to the old account. Fix: sign out of higgsfield.ai in the normal browser,
+  then `/mcp` -> `higgsfield` -> Clear authentication -> Authenticate -> sign
+  in with the NEW account (Google). Check with the `balance` tool: the new
+  account showed 1,210 credits, Plus plan.
+- The claude.ai connector "Higgsfield AI" is on the new account but is
+  read-only (7 tools, no generation). Do not try to generate with it.
+- Browser route (fallback): higgsfield.ai in the built-in browser pane was stuck
+  on a Cloudflare "Verify you are human" box (Claude must not tick it; the owner
+  must) and the email sign-in. The owner's Chrome was not signed in. The owner
+  is signed in to the new account in Safari; the pane's cookie import (only
+  higgsfield.ai) would carry that over. On the website, GPT Image 2 at 2K/high
+  costs 6.5 credits per image (Black Friday price).
+
+**Quote already given (connector prices, credits):** base 2K high 2.75; 11
+stills about 30; 3 x 5 s loops 105 at 720p or 240 at 1080p (Seedance 2.5,
+omni_reference, base.png as start image, no audio). Owner approval is still
+needed before spending; generate the base first, show it, wait for approval.
+
+**Next steps:**
+1. Get a generating route on the new account (above). Confirm the balance.
+2. Generate `base.png` (prompt in "Owner feedback" below; gpt_image_2_6,
+   resolution 2k, quality high, 1:1), show it, wait for approval.
+3. Generate the 11 state stills with base as `image_references`, same framing;
+   then the loops if approved. Download to `jarvis/web/static/identity/` with
+   the exact names.
+4. Tune `ART_EYES` to the real eye positions; check `#presence` and `#desktop`
+   on the throwaway server; run `python3 -m unittest discover -s tests`;
+   update DEVLOG.md; commit and push to `origin main`.
+
 ## Where things stand (2026-11-16)
 
 - Phases 1 and 2 and steps 3.1 to 3.5 and JARVIS Desktop complete. 233 tests passing.
@@ -18,7 +73,7 @@ section 4b (autonomous design).
   thresholds are in `ClapDetector`. The HUD work should reuse the orb's states.
 - Reference videos (four reels) are in `data/media/reels` with transcripts and
   contact sheets; the roadmap's Phase 3 list is derived from them.
-- Remote `origin` is GitHub; push only when the owner asks.
+- Remote `origin` is GitHub; the owner now wants a push after every step.
 
 ## In progress: visual identity and character (owner's spec, 2026-11-16)
 
