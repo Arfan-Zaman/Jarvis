@@ -500,7 +500,7 @@ views.chat = {
         } catch (e) { /* try again */ }
       }, 2000);
       try {
-        const result = await api('POST', '/api/chat', { message: text, attachments: files, conversation_id: state.conversationId });
+        const result = await api('POST', '/api/chat', { message: text, attachments: files, conversation_id: state.conversationId, voice: voice.speakNext });
         state.conversationId = result.conversation.id;
         rememberConversation(state.conversationId);
         await openThread();
@@ -1115,7 +1115,7 @@ views.presence = {
         } catch (e) { /* the next poll will try again */ }
       }, 450);
       try {
-        const result = await api('POST', '/api/chat', { message: text, attachments: files, conversation_id: currentConversation() });
+        const result = await api('POST', '/api/chat', { message: text, attachments: files, conversation_id: currentConversation(), voice: speakNext });
         rememberConversation(result.conversation.id);
         if (result.reply.run_id) offerApproval(result.reply.run_id);
         clearInterval(poll);
@@ -1130,7 +1130,11 @@ views.presence = {
         } else {
           identity.setState(result.reply.role === 'system' ? 'warning' : 'calm', '');
         }
-        if (speakNext || localStorageGet('jarvis.speak') === 'on') await speakWith(identity, result.reply.content).catch((e) => toast(e.message, true));
+        if (speakNext || localStorageGet('jarvis.speak') === 'on') {
+          const said = sentences(result.reply.content);         // long answers: say the start, show the rest
+          const spoken = said.length > 3 ? said.slice(0, 3).join(' ') + ' The rest is on screen.' : result.reply.content;
+          await speakWith(identity, spoken).catch((e) => toast(e.message, true));
+        }
         const final = identity.state;
         if (['success', 'speaking', 'warm', 'curious', 'sad', 'angry', 'resolute', 'concerned'].includes(final) && !convo.on) settle = setTimeout(() => identity.setState('calm'), 3000);
         refreshChrome();
@@ -1175,7 +1179,7 @@ views.presence = {
           const rms = Math.sqrt(sum / data.length), now = performance.now();
           if (!opts.quiet) identity.setLevel(Math.min(1, rms * 7));
           if (rms > 0.035) { loudFor += 50; if (loudFor > 150) spoke = true; lastVoice = now; } else loudFor = 0;
-          const done = !convo.on || (opts.abort && opts.abort()) || (spoke && now - lastVoice > 1100) || now - started > 25000 || (!spoke && now - started > 12000);
+          const done = !convo.on || (opts.abort && opts.abort()) || (spoke && now - lastVoice > (opts.quiet ? 1100 : 1700)) || now - started > 25000 || (!spoke && now - started > 12000);
           if (done) { clearInterval(tick); resolve(); }
         }, 50);
       });
@@ -1209,7 +1213,7 @@ views.presence = {
       let stream;
       try { stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } }); }
       catch (e) { convo.on = false; setBtn(); identity.setState('calm', 'Allow the microphone to talk hands-free.'); return; }
-      let quiet = 0, queued = null;
+      let quiet = 0, queued = null, carry = '';
       while (convo.on) {
         let heard = '';
         if (queued) { heard = queued; queued = null; }              // said right after interrupting
@@ -1230,6 +1234,11 @@ views.presence = {
           heard = heard.slice(hit.index + hit[0].length).trim();
           if (!heard || heard.split(/\s+/).length < 2) { identity.setState('listening', 'Yes?'); await speakWith(identity, 'Yes?').catch(() => {}); continue; }
         }
+        // "So...", "Um", "Alright, so": the start of a thought, not a message. Keep it, add the next part.
+        if (convo.talking && /^(so|um+|uh+|er+|hmm+|alright|all right|okay|ok|well|and|but|like|right|listen|look)([\s,.!?…-]+(so|um+|uh+|then|listen|look))*[\s,.!?…-]*$/i.test(heard)) {
+          carry = (carry + ' ' + heard).trim(); continue;
+        }
+        if (carry) { heard = `${carry} ${heard}`; carry = ''; }
         if (/^(stop|end|that'?s all|goodbye|bye)( (the )?conversation)?[.!]*$/i.test(heard)) {
           convo.talking = false; setBtn(); await speakWith(identity, 'Standing by.').catch(() => {}); continue;
         }

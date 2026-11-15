@@ -101,7 +101,7 @@ class Voice:
             raise VoiceError(f"{what} failed: {detail or f'exit code {done.returncode}'}")
         return done
 
-    def transcribe(self, audio: bytes, content_type: str = "application/octet-stream") -> str:
+    def transcribe(self, audio: bytes, content_type: str = "application/octet-stream", hint: str = "") -> str:
         """Speech to text. Returns the words heard (may be empty for silence)."""
         status = self.status()
         if not status["listening"]:
@@ -118,8 +118,9 @@ class Voice:
             source.write_bytes(audio)
             self._run([find_program("ffmpeg"), "-loglevel", "error", "-y", "-i", str(source),
                        "-ar", "16000", "-ac", "1", str(wav)], 60, "Audio conversion")
+            prompt = ["--prompt", hint[:600]] if hint else []        # names it should expect: far fewer mishearings
             self._run([find_program("whisper-cli"), "-m", str(self.model_path), "-f", str(wav),
-                       "-nt", "-np", "-otxt", "-of", str(out)], TRANSCRIBE_TIMEOUT, "Speech recognition")
+                       "-nt", "-np", *prompt, "-otxt", "-of", str(out)], TRANSCRIBE_TIMEOUT, "Speech recognition")
             text_file = out.with_suffix(".txt")
             heard = text_file.read_text(encoding="utf-8", errors="replace") if text_file.exists() else ""
         heard = " ".join(heard.split())
@@ -141,3 +142,19 @@ class Voice:
                        "--file-format=m4af", "--data-format=aac", "-o", str(audio), "-f", str(script)],
                       60, "Speech")
             return audio.read_bytes()
+
+
+BASE_WORDS = "Jarvis, Ultron, Ultraman, Vision, Claude, Claude Code, Higgsfield, nanobots, approve, hands-free"
+
+
+def vocabulary(app) -> str:
+    """Words the owner is likely to say: project names, names from memory, JARVIS's own terms."""
+    words = [p["name"] for p in app.projects.list()[:20]]
+    for memory in app.memory.list(limit=200):
+        if memory["category"] in ("personal", "preference"):
+            words += re.findall(r"\b[A-Z][a-zA-Z]{2,}\b", memory["content"])
+    seen, unique = set(), []
+    for word in words:
+        if word.lower() not in seen:
+            seen.add(word.lower()); unique.append(word)
+    return f"{BASE_WORDS}, {', '.join(unique[:40])}." if unique else f"{BASE_WORDS}."

@@ -187,8 +187,9 @@ class Conversation:
         self.app = app
 
     # --- entry point -------------------------------------------------------
-    def respond(self, conversation_id: int, text: str) -> dict:
+    def respond(self, conversation_id: int, text: str, voice: bool = False) -> dict:
         """Produce and store JARVIS's reply to the latest user message."""
+        self._voice = voice
         pending = self._pending_question(conversation_id)
         if pending:
             if CANCEL.match(text):
@@ -215,10 +216,19 @@ class Conversation:
                 "Open and look at them (images and PDFs can be read directly). Their request:\n"
                 + ATTACHED.sub("", text).strip()), bool(MAKE_FILES.search(ATTACHED.sub("", text))))
         decision = self._route(conversation_id)
+        if decision.get("mode") == "act" and not self.OWN_DATA.search(decision["goal"]) \
+                and not decision["goal"].startswith("Use the claude.browse tool"):
+            spoken = self._converse(conversation_id)       # a web question: Claude searches and answers
+            if spoken:
+                return spoken
         if decision.get("mode") == "act":
             return self._act(conversation_id, decision["goal"])
         if decision.get("mode") == "image":
             return self._image(conversation_id, decision["prompt"], decision.get("aspect_ratio"))
+        if decision.get("mode") == "delegate" and getattr(self, "_voice", False) and not decision.get("files"):
+            spoken = self._converse(conversation_id)       # by voice, talk it through instead of a long job
+            if spoken:
+                return spoken
         if decision.get("mode") == "delegate":
             return self._delegate(conversation_id, decision["task"], decision["files"])
         if decision.get("mode") == "remember":
@@ -227,8 +237,9 @@ class Conversation:
             # Owner's standing instruction: keep lasting facts without asking. Saved as
             # unverified, with the chat as its source, so it can be reviewed or deleted.
             self._learn(decision["remember"])
-            return self._answer(conversation_id)
-        return self._answer(conversation_id, offer=decision.get("remember"))
+            return self._converse(conversation_id) or self._answer(conversation_id)
+        offer = decision.get("remember") if not auto_learn() else None
+        return self._converse(conversation_id, offer=offer) or self._answer(conversation_id, offer=decision.get("remember"))
 
     def _learn(self, offer: dict) -> dict | None:
         result = self.app.tools.execute(
@@ -267,7 +278,11 @@ class Conversation:
             return {"mode": "image", "prompt": str(picture or latest).strip()[:4000],
                     "aspect_ratio": ratio if isinstance(ratio, str) and re.fullmatch(r"\d{1,2}:\d{1,2}", ratio) else None}
         can_delegate = "claude.work" in self.app.tools.names()
-        if can_delegate and decision.get("mode") in ("answer", None) and HARD_WORK.search(latest):
+        short = len(latest.split()) < 5               # "Can you?", "So...": conversation, not a job
+        if short and decision.get("mode") == "delegate":
+            decision = {"mode": "answer"}
+        if can_delegate and decision.get("mode") in ("answer", None) and HARD_WORK.search(latest) \
+                and not getattr(self, "_voice", False) and len(latest) > 60:
             task, decision = latest, {"mode": "delegate"}   # the small model under-rates hard work
         if decision.get("mode") == "delegate" and isinstance(task, str) and task.strip() and can_delegate:
             files = decision.get("files") is True or bool(MAKE_FILES.search(f"{latest} {task}"))
@@ -298,11 +313,56 @@ class Conversation:
         return replies[-1]["memory_offer"] if replies else None
 
     # --- answering ---------------------------------------------------------
+    # Things that need JARVIS's own records stay with the local planner; everything else is talk.
+    OWN_DATA = re.compile(r"\b(task|tasks|to-?do|memor(y|ies)|remember|project|projects|lesson|experience|"
+                          r"health|backup|approval|goal)\b", re.I)
+
+    def _converse(self, conversation_id: int, offer: dict | None = None) -> dict | None:
+        """Reply with Claude (understands follow-ups and corrections, searches the web itself).
+        Returns None when Claude is unavailable, so the local model answers instead."""
+        if os.environ.get("JARVIS_BRAIN", "claude") != "claude" or "claude.converse" not in self.app.tools.names():
+            return None
+        history = self._history(conversation_id)
+        latest = next((m["content"] for m in reversed(history) if m["role"] == "user"), "")
+        memories = ContextBuilder(self.app).build(latest)["memories"]
+        instructions = system_prompt(self.app.tools.list(), memories) + (
+            "\nYou can search the web yourself (WebSearch, WebFetch) whenever the answer needs current or "
+            "checked facts: do it quietly and then answer, citing the key source briefly.\n"
+            "Read the whole conversation: short replies like 'Can you?' or 'So?' continue the previous topic. "
+            "If the owner corrects a word you misheard or a request you got wrong, take the correction and "
+            "answer the corrected request. Speech is transcribed, so expect misheard words and guess sensibly.")
+        if getattr(self, "_voice", False):
+            instructions += ("\nThis is a SPOKEN conversation. Reply the way a sharp person talks: one to three "
+                             "short sentences, plain words, no lists, no markdown, no headings. Never open with "
+                             "'Understood' or 'Certainly'. If unsure what they meant, ask one short question.")
+        transcript = "\n".join(f"{'OWNER' if m['role'] == 'user' else 'JARVIS'}: {m['content'][:2000]}" for m in history)
+        result = self.app.tools.execute("claude.converse", {"conversation": transcript + "\nJARVIS:",
+                                                             "instructions": instructions}, actor="user:chat")
+        if not result["ok"] or not (result["output"] or {}).get("reply"):
+            log.info("Claude conversation unavailable, using the local model: %s", result.get("error"))
+            return None
+        text = result["output"]["reply"]
+        refs = []
+        mark = MEMORY_MARK.search(text)
+        if mark:
+            ids = {int(n) for n in re.findall(r"\d+", mark.group(1))}
+            refs = [{"id": m["id"], "content": m["content"]} for m in memories if m["id"] in ids]
+            text = text[:mark.start()].rstrip()
+        if offer:
+            text += f"\n\nShall I remember that: {_quote(offer['fact'], 200)}?"
+        return self.app.conversations.add_message(conversation_id, "assistant", text or "…", "claude", "claude",
+                                                  memory_refs=refs or None, memory_offer=offer)
+
     def _answer(self, conversation_id: int, offer: dict | None = None, note: str = "") -> dict:
         history = self._history(conversation_id)
         latest = next((m["content"] for m in reversed(history) if m["role"] == "user"), "")
         memories = ContextBuilder(self.app).build(latest)["memories"]
         instructions = system_prompt(self.app.tools.list(), memories)
+        if getattr(self, "_voice", False):
+            instructions += ("\nThis is a SPOKEN conversation. Reply the way a sharp person talks: one to three "
+                             "short sentences, plain words, no lists, no markdown, no headings. Never open with "
+                             "'Understood' or 'Certainly'. If the owner corrects you, accept it in a few words and "
+                             "answer the corrected request. If you are unsure what they meant, ask one short question.")
         if offer:   # JARVIS asks about saving it itself, in fixed wording, after this reply
             instructions += ("\nDo not mention remembering, noting or saving anything in this reply, "
                              "and do not ask whether to: that question is asked separately.")

@@ -2,6 +2,28 @@
 
 Newest entries first. Record what changed, why, and what was verified.
 
+## 2026-11-16 — JARVIS understands: Claude as the conversational brain
+
+- Owner: "it's not understanding me". Causes found in real transcripts: names
+  misheard (Ultron as Altron/Ultraman), utterances cut at the first pause
+  ("So..."), short follow-ups ("Can you?") turned into 6-minute Claude Code
+  jobs, and the local 9B planner failing web questions (45-53 s, "unusable
+  action twice").
+- `claude.converse` (web_read, Haiku, `JARVIS_CHAT_MODEL`; off with
+  `JARVIS_BRAIN=local`): conversation replies and web questions now go to
+  Claude with the whole conversation, persona and memories; it searches the
+  web itself. The local model still routes and handles JARVIS's own data
+  (tasks, memory, projects, goals) and is the fallback.
+- Speech: whisper gets a vocabulary hint (JARVIS terms, project names, names
+  from memory): "Monsaw Motors" became "Monsoor Motors" in a test. End of
+  speech waits 1.7 s; fillers like "So..." are held and joined to what follows.
+- Spoken mode (`voice: true` from hands-free and the mic): one to three short
+  sentences; long answers say the first three sentences and leave the rest on
+  screen. Short messages (under five words) are never turned into jobs.
+- Real spoken test: tallest mountain (11 s, correct), the correction to
+  include New Guinea (11 s, Puncak Jaya), "Can you?" (7 s, on topic), EV
+  advice (10 s, three short sentences and a question). 281 tests pass.
+
 ## 2026-11-16 — Long Claude jobs are visible; faster default model
 
 - Chat looked broken because Claude Code jobs ran for 6+ minutes behind a

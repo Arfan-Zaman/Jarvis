@@ -232,7 +232,8 @@ class Jarvis:
         return task
 
     # --- chat --------------------------------------------------------------
-    def chat(self, text: str, conversation_id: int | None = None, attachments: list[str] | None = None) -> dict:
+    def chat(self, text: str, conversation_id: int | None = None, attachments: list[str] | None = None,
+             voice: bool = False) -> dict:
         """Store the user's message and JARVIS's reply.
 
         JARVIS decides whether to just answer or to carry out an action through
@@ -258,7 +259,7 @@ class Jarvis:
                 conversation_id, "system", NO_PROVIDER_NOTICE.format(detail=status.detail).strip())
         else:
             try:
-                reply = self.conversation.respond(conversation_id, text)
+                reply = self.conversation.respond(conversation_id, text, voice=voice)
             except ProviderError as exc:
                 log.warning("AI provider failed: %s", exc)
                 self.events.record("ai", "provider.error", str(exc), level="error")

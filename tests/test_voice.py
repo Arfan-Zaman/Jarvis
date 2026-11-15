@@ -147,7 +147,9 @@ class VoiceApiTests(JarvisTestCase):
         with mock.patch.object(self.app.voice, "transcribe", return_value="hello jarvis") as transcribe:
             status, _, body, _ = self.call("POST", "/api/voice/transcribe", b"\x1aE\xdf\xa3audio", "audio/webm;codecs=opus")
         self.assertEqual((status, json.loads(body)), (200, {"text": "hello jarvis"}))
-        transcribe.assert_called_once_with(b"\x1aE\xdf\xa3audio", "audio/webm;codecs=opus")
+        args, kwargs = transcribe.call_args
+        self.assertEqual(args, (b"\x1aE\xdf\xa3audio", "audio/webm;codecs=opus"))
+        self.assertIn("Jarvis", kwargs["hint"])                         # vocabulary hint for names
         self.assertEqual(self.app.list("conversations"), [])          # transcription alone stores nothing
 
     def test_speak_returns_audio(self):

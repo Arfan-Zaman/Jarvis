@@ -201,7 +201,43 @@ def claude_browse(app, inputs, actor, runner=subprocess.run):
     return {"result": reply.get("result", ""), "turns": reply.get("num_turns"), "cost_usd": reply.get("total_cost_usd")}
 
 
+def claude_converse(app, inputs, actor, runner=subprocess.run):
+    """JARVIS's conversational brain: Claude reads the conversation and replies, searching the
+    web itself when the question needs current facts. Read-only: no files, no shell."""
+    binary = claude_binary()
+    if not binary:
+        raise JarvisError("Claude Code is not installed")
+    cmd = [binary, "-p", "--output-format", "json", "--model", os.environ.get("JARVIS_CHAT_MODEL", "haiku"),
+           "--allowedTools", "WebSearch,WebFetch",
+           "--disallowedTools", ",".join(NEVER + WRITE_TOOLS + ["Read", "Grep", "Glob"]),
+           "--strict-mcp-config", "--mcp-config", '{"mcpServers":{}}', "--setting-sources", "project",
+           "--no-session-persistence", "--append-system-prompt", inputs["instructions"][:12000],
+           "--", inputs["conversation"][-16000:]]
+    workspace = Path(app.config.workspace_dir)
+    workspace.mkdir(parents=True, exist_ok=True)
+    env = {k: v for k, v in os.environ.items() if not k.startswith("CLAUDE_CODE_")}
+    try:
+        done = runner(cmd, cwd=str(workspace), capture_output=True, text=True, timeout=180, env=env,
+                      stdin=subprocess.DEVNULL)
+    except subprocess.TimeoutExpired:
+        raise JarvisError("Claude took too long to answer") from None
+    try:
+        reply = json.loads(done.stdout)
+    except (json.JSONDecodeError, TypeError):
+        raise JarvisError(f"Claude failed (exit {done.returncode})") from None
+    if reply.get("is_error") or done.returncode:
+        raise JarvisError(f"Claude reported an error: {str(reply.get('result') or reply)[:300]}")
+    return {"reply": reply.get("result", "").strip()}
+
+
 def register_claude(registry: ToolRegistry) -> None:
+    registry.register(Tool(
+        "claude.converse",
+        "JARVIS's conversational brain: answers the owner in the flow of the conversation, "
+        "searching the web when needed. Read-only.",
+        ActionCategory.WEB_READ, claude_converse,
+        {"conversation": {"type": "string", "description": "The conversation so far, latest message last.", "required": True},
+         "instructions": {"type": "string", "description": "Who JARVIS is and how to reply.", "required": True}}))
     registry.register(Tool(
         "claude.browse",
         "Use a real web browser like a person would: open sites, search, click, read, fill search boxes, "

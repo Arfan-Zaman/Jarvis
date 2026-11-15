@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import os
+os.environ.setdefault("JARVIS_BRAIN", "local")      # tests never call the real Claude
+
 import logging
 import sqlite3
 import tempfile

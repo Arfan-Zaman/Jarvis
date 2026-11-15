@@ -157,7 +157,8 @@ def _chat(app: Jarvis, req: Request):
     attachments = req.body.get("attachments") or []
     if not isinstance(attachments, list) or not all(isinstance(a, str) for a in attachments):
         raise ValidationError("attachments must be a list of uploaded file paths")
-    return app.chat(req.body.get("message", ""), conversation_id, attachments=attachments[:10])
+    return app.chat(req.body.get("message", ""), conversation_id, attachments=attachments[:10],
+                    voice=req.body.get("voice") is True)
 
 
 # --- tools and run log ----------------------------------------------------
@@ -294,7 +295,8 @@ def _voice_status(app: Jarvis, req: Request):
 @route("POST", "/api/voice/transcribe")
 def _voice_transcribe(app: Jarvis, req: Request):
     """Body: the recorded audio itself. Returns the words heard; nothing is stored."""
-    return {"text": app.voice.transcribe(req.raw, req.content_type or "application/octet-stream")}
+    from ..voice import vocabulary
+    return {"text": app.voice.transcribe(req.raw, req.content_type or "application/octet-stream", hint=vocabulary(app))}
 
 
 @route("POST", "/api/files")
