@@ -92,10 +92,23 @@ def tasks_complete(app, inputs, actor):
 def memory_search(app, inputs, actor):
     from ..engine.context import ContextBuilder, fts_query
     if inputs.get("query") and fts_query(inputs["query"]):
-        # Ranked full-text search: finds "prefers" for "preference", trusted facts first.
-        return ContextBuilder(app).search_memories(
-            inputs["query"], limit=inputs.get("limit", 20), category=inputs.get("category"),
+        # By meaning first (embeddings, when installed), then ranked word search; without embeddings
+        # and with few hits, search again with related words so paraphrases are still found.
+        limit, builder = inputs.get("limit", 20), ContextBuilder(app)
+        words = lambda text: builder.search_memories(                                   # noqa: E731
+            text, limit=limit, category=inputs.get("category"),
             project_id=inputs.get("project_id"), include_global=False)
+        semantic = getattr(app, "semantic", None)
+        found = [m for m in (semantic.search(inputs["query"], limit) if semantic else [])
+                 if not inputs.get("category") or m["category"] == inputs["category"]]
+        found += words(inputs["query"])
+        if semantic is not None and not semantic.available() and len(found) < 3:
+            found += words(semantic.expand(inputs["query"]))
+        seen, unique = set(), []
+        for memory in found:
+            if memory["id"] not in seen:
+                seen.add(memory["id"]); unique.append(memory)
+        return unique[:limit]
     return app.list("memories", query=inputs.get("query"), limit=inputs.get("limit", 20),
                     **_filters(inputs, "category", "project_id"))
 

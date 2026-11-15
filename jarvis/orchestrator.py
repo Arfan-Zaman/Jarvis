@@ -68,6 +68,8 @@ class Jarvis:
         self.engine = Engine(self)
         from .learner import Learner
         self.learner = Learner(self)
+        from .semantic import Semantic
+        self.semantic = Semantic(self)
         from .selfreview import SelfReview
         self.selfreview = SelfReview(self)
         self.voice = Voice(self.config)
@@ -328,9 +330,55 @@ class Jarvis:
             "backups": {"count": len(backups), "latest": backups[0] if backups else None,
                         "keep": self.config.backup_keep},
             "counts": self.counts(),
-            "not_built_yet": ["wake word (hands-free voice)", "autonomous agents", "browser automation",
-                              "semantic memory search", "external integrations"],
+            "abilities": self.abilities(),
+            "external_ai": self.external_ai(),
+            "not_built_yet": [a["name"] for a in self.abilities() if a["state"] == "not built"],
         }
+
+    def abilities(self) -> list[dict]:
+        """What JARVIS can do right now, worked out from the live tools and settings (never hard-coded)."""
+        import os
+        from .tools.claude import claude_binary
+        names = set(self.tools.names())
+        claude = bool(claude_binary())
+        voice = self.voice.status()
+        def row(name, state, detail):
+            return {"name": name, "state": state, "detail": detail}
+        def has(tool, state="on"):
+            return state if tool in names else "not built"
+        semantic = getattr(self, "semantic", None)
+        rows = [
+            row("Read", "on", "its own records, memories, files you give it"),
+            row("Write", "on" if self.config.allow_writes else "read-only", "tasks, memories, projects, notes"),
+            row("Web", "on" if claude else "basic", "full-web search and reading" if claude else "Wikipedia and instant answers"),
+            row("Code", has("claude.work") if claude else "needs Claude Code", "writes, fixes and explains code in its workspace"),
+            row("Build", has("claude.work") if claude else "needs Claude Code", "makes scripts, pages, documents and apps as files"),
+            row("Commands", ("off" if os.environ.get("JARVIS_OPERATE", "1") == "0" else has("claude.operate", "asks first"))
+                if claude else "needs Claude Code", "runs commands, scripts and installs on your Mac, one approval per task, sandboxed"),
+            row("Mac", has("mac.status"), "finds files, opens apps and sites, battery, disk, notifications"),
+            row("Browser", has("claude.browse", "asks first"), "uses a real browser like a person (never buys, signs in or posts)"),
+            row("Co-work", "on" if claude and os.environ.get("JARVIS_BRAIN", "claude") == "claude" else "local only",
+                "Claude as its conversational brain and partner for hard work"),
+            row("Autonomous", "on" if getattr(self, "learner", None) else "off",
+                "learns from the web every 30 minutes, reviews its own code weekly (you approve changes)"),
+            row("Voice", "on" if voice.get("listening") and voice.get("speaking") else "partly",
+                "wake word, hands-free conversation, interrupt by name"),
+            row("Pictures", has("image.generate", "asks first"), "makes images on Higgsfield (you approve the cost)"),
+            row("Semantic memory", ("on" if semantic.available() else "needs embedding model") if semantic else "not built",
+                "finds memories by meaning"),
+            row("Reminders", has("schedule.add"), "reminders and scheduled jobs"),
+            row("Email and calendar", has("mail.recent"), "reads mail and your schedule, drafts replies (sending asks first)"),
+            row("Morning briefing", "on" if "briefing" in names or hasattr(self, "briefing") else "not built",
+                "spoken rundown on the first wake of the day"),
+        ]
+        return rows
+
+    def external_ai(self) -> dict:
+        from .tools.claude import claude_binary
+        on = bool(claude_binary())
+        return {"provider": "Claude (Anthropic), through your Claude Code sign-in" if on else None, "on": on,
+                "used_for": ["conversation", "web research", "code and documents", "Mac tasks", "browser"] if on else [],
+                "kept_private": "keys, passwords, cloud logins and JARVIS's own data are blocked by a macOS sandbox"}
 
     def dashboard(self) -> dict:
         return {

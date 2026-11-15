@@ -83,7 +83,9 @@ class ContextBuilder:
               budget_chars: int = 2000) -> dict:
         """Relevant memories and lessons for `text`, within a size budget."""
         chosen, seen, used = [], set(), 0
-        for item in self.personal() + self.search_memories(text, limit=memories, project_id=project_id):
+        semantic = getattr(self.app, "semantic", None)
+        by_meaning = semantic.search(text, limit=memories) if semantic is not None else []
+        for item in self.personal() + by_meaning + self.search_memories(text, limit=memories, project_id=project_id):
             if item["id"] in seen or len(chosen) >= memories + len(PERSONAL):
                 continue
             if used + len(item["content"]) > budget_chars:

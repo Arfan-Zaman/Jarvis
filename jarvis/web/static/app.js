@@ -831,12 +831,17 @@ views.system = {
         ])),
         h('div', { class: 'glass panel' }, h('h2', null, 'Safety'), kv([
           ['Mode', status.safety.read_only ? chip('read-only', 'warn') : chip('read / write', 'ok')],
+          ['Abilities', h('div', { class: 'stack ability-list' }, ...(status.abilities || []).map((a) => h('div', { class: 'row', title: a.detail },
+            chip(a.name, { on: 'ok', 'asks first': 'pink', basic: 'warn', partly: 'warn', 'local only': 'warn' }[a.state] || null),
+            h('span', { class: 'small muted' }, a.state === 'on' ? a.detail : `${a.state}: ${a.detail}`))))],
           ['Runs automatically', h('div', { class: 'meta' }, (status.safety.automatic || []).map((name) => chip(label(name), 'ok')))],
           ['Asks you first', h('div', { class: 'meta' }, status.safety.approval_required_for.map((name) => chip(label(name), 'pink')))],
           ['Workspace', h('span', { class: 'mono' }, status.safety.workspace || '')],
           ['Approval lifetime', `${status.safety.approval_ttl_minutes} min, single use`],
-          ['External AI', status.safety.external_ai_allowed ? chip('allowed', 'warn') : chip('blocked', 'ok')],
-          ['Not built yet', status.not_built_yet.join(', ')],
+          ['External AI', status.external_ai && status.external_ai.on
+            ? h('div', null, chip('Claude: on', 'violet'), h('div', { class: 'small muted' }, `${status.external_ai.used_for.join(', ')}. ${status.external_ai.kept_private}.`))
+            : chip('none', 'ok')],
+          ['Not built yet', status.not_built_yet.length ? status.not_built_yet.join(', ') : 'nothing'],
         ])),
         h('div', { class: 'glass panel' },
           h('div', { class: 'row between' }, h('h2', null, `Backups (${backups.items.length}, keeps ${status.backups.keep})`),

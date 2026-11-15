@@ -125,3 +125,7 @@ dialog { border-radius: var(--radius); }
 .approve-row { margin-top: 10px; gap: 8px; padding: 10px 12px; border-left: 2px solid var(--pink); background: rgba(255, 46, 136, 0.06); }
 .approve-row:empty { display: none; }
 .presence-hero.dropping { outline: 1px dashed var(--pink); outline-offset: -6px; }
+
+.ability-list { gap: 6px; }
+.ability-list .row { gap: 8px; flex-wrap: nowrap; align-items: baseline; }
+.ability-list .chip { flex: none; }

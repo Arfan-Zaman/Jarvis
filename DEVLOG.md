@@ -2,6 +2,22 @@
 
 Newest entries first. Record what changed, why, and what was verified.
 
+## 2026-11-16 — Live abilities on the Safety panel; semantic memory search
+
+- The Safety panel was stale ("External AI: blocked", wake word and browser
+  listed as not built). `status()` now computes `abilities` from the live tools
+  and settings: Read, Write, Web, Code, Build, Commands, Mac, Browser,
+  Co-work, Autonomous, Voice, Pictures, Semantic memory, Reminders, Email and
+  calendar, Morning briefing, each on / asks first / needs X / not built;
+  "Not built yet" is derived from it. External AI shows Claude, what it is
+  used for, and what the sandbox keeps private.
+- `jarvis/semantic.py`: memories by meaning with a local Ollama embedding
+  model (`JARVIS_EMBED_MODEL`, default nomic-embed-text, vectors cached in
+  data/embeddings.db); used in recall and `memory.search`. Without the model
+  it expands the query with related words, which proved too noisy on real
+  data ("my dealership" matched AWS facts), so the owner is asked to approve
+  pulling the ~270 MB model. 282 tests pass.
+
 ## 2026-11-16 — Mac access, sandboxed
 
 - `claude.operate` is now Mac access, on by default (`JARVIS_OPERATE=0` turns
