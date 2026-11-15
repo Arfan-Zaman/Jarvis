@@ -62,6 +62,10 @@ SAVE_CLAIM = re.compile(r"\b(noted|note of|logged|saved|recorded|stored|flagged|
                         r"keep (that|this|it) in mind|bear (that|this|it) in mind|in (my )?memory|"
                         r"i'?ll (ensure|make sure|keep)|from now on|going forward)\b", re.I)
 MEMORY_MARK = re.compile(r"\s*\[memory:\s*([0-9,\s]*)\]\s*$", re.I)
+# "make me a picture of ...": sent to image.generate (it spends credits, so the owner says yes first).
+PICTURE = re.compile(r"\b(make|create|generate|draw|paint|design|render|give me|show me)\b.{0,40}\b"
+                     r"(picture|image|photo|drawing|illustration|artwork|painting|wallpaper|logo|poster)s?\b"
+                     r"|^\W*(jarvis\W+)?(please\s+)?(draw|paint|sketch)\s+(me\s+)?(a|an|the|some|my)\b", re.I | re.S)
 
 ROUTER = """You decide how JARVIS handles the owner's latest message. Reply with ONE JSON object.
 
@@ -77,6 +81,9 @@ ROUTER = """You decide how JARVIS handles the owner's latest message. Reply with
   something (a script, a web page, an app, a document); in-depth research or comparison; careful
   analysis; long or polished writing; detailed plans or strategy; hard maths or reasoning.
   "files": true when the owner wants something made or saved as files.
+
+{"mode": "image", "prompt": "<a full description of the picture to make>", "aspect_ratio": "1:1" | "16:9" | "9:16" | ...}
+  when the owner wants a picture, photo, drawing, illustration or other image MADE for them.
 
 {"mode": "remember", "fact": "<the fact in the first person, as the owner would say it,
  e.g. 'I prefer short answers' - never 'The user ...'>", "category": "preference" | "personal" | "general"}
@@ -181,6 +188,10 @@ class Conversation:
                 return self._say(conversation_id, persona.DROPPED, pending)
             return self._act(conversation_id, text, resume=pending)
 
+        picture = self._pending_image(conversation_id)
+        if picture and (YES.match(text) or NO.match(text) or CANCEL.match(text)):
+            return self._image_decided(conversation_id, picture, bool(YES.match(text)))
+
         offer = self._pending_offer(conversation_id)
         if offer and YES.match(text):
             return self._remember(conversation_id, offer["fact"], offer["category"])
@@ -190,6 +201,8 @@ class Conversation:
         decision = self._route(conversation_id)
         if decision.get("mode") == "act":
             return self._act(conversation_id, decision["goal"])
+        if decision.get("mode") == "image":
+            return self._image(conversation_id, decision["prompt"], decision.get("aspect_ratio"))
         if decision.get("mode") == "delegate":
             return self._delegate(conversation_id, decision["task"], decision["files"])
         if decision.get("mode") == "remember":
@@ -229,6 +242,11 @@ class Conversation:
         fact = fact.strip()[:500] if isinstance(fact, str) and fact.strip() else None
         task = decision.get("task")
         latest = next((m["content"] for m in reversed(self._history(conversation_id)) if m["role"] == "user"), "")
+        picture = decision.get("prompt") if decision.get("mode") == "image" else None
+        if "image.generate" in self.app.tools.names() and (picture or PICTURE.search(latest)):
+            ratio = decision.get("aspect_ratio")
+            return {"mode": "image", "prompt": str(picture or latest).strip()[:4000],
+                    "aspect_ratio": ratio if isinstance(ratio, str) and re.fullmatch(r"\d{1,2}:\d{1,2}", ratio) else None}
         can_delegate = "claude.work" in self.app.tools.names()
         if can_delegate and decision.get("mode") in ("answer", None) and HARD_WORK.search(latest):
             task, decision = latest, {"mode": "delegate"}   # the small model under-rates hard work
@@ -330,6 +348,64 @@ class Conversation:
         why = ("Claude Code is signed out; run `claude` in Terminal and sign in"
                if "authenticat" in error.lower() or "login" in error.lower() else f"Claude Code failed: {error[:200]}")
         return self._answer(conversation_id, note=f"\n\n(Answered by the local model only. {why}.)")
+
+    # --- pictures ------------------------------------------------------------
+    def _image(self, conversation_id: int, prompt: str, aspect_ratio: str | None) -> dict:
+        """Quote the price (spends nothing), then ask the owner before spending credits."""
+        inputs = {"prompt": prompt, **({"aspect_ratio": aspect_ratio} if aspect_ratio else {})}
+        quote = self.app.tools.execute("image.quote", inputs, actor="user:chat")
+        if not quote["ok"]:
+            return self._say(conversation_id, f"I couldn't price that picture: {quote['error']}", None)
+        price = quote["output"]
+        cost, balance = price["cost"], price.get("balance")
+        if balance is not None and balance < cost:
+            return self._say(conversation_id, (
+                f"That picture would cost {cost:g} credits, but the Higgsfield account I'm connected to has "
+                f"{balance:g} ({price.get('plan') or 'unknown plan'}). Nothing was spent. If this is the old "
+                "account, reconnect the higgsfield connector with the paid one."), None)
+        result = self.app.tools.execute("image.generate", {**inputs, "max_credits": cost}, actor="user:chat")
+        if result["status"] != "approval_required":   # approval is always required; anything else is a fault
+            return self._image_reply(conversation_id, result)
+        left = f" You have {balance:g}." if balance is not None else ""
+        return self._say(conversation_id, (
+            f"That picture will cost {cost:g} Higgsfield credits.{left} Shall I make it? Say yes to spend "
+            f"them, or no to leave it.\n\nPicture: {_quote(prompt, 300)}"), result["run_id"])
+
+    def _pending_image(self, conversation_id: int) -> dict | None:
+        """The picture JARVIS priced in its previous reply and is waiting to be told yes about."""
+        replies = [m for m in self.app.conversations.messages(conversation_id, limit=20)
+                   if m["role"] in ("assistant", "system")]
+        if not replies or not replies[-1].get("run_id"):
+            return None
+        run = self.app.runs.get(replies[-1]["run_id"])
+        step = run["steps"][-1] if run.get("steps") else None
+        if run["status"] != "waiting_approval" or not step or step["tool"] != "image.generate" \
+                or not step.get("approval_id"):
+            return None
+        return {"run_id": run["id"], "approval_id": step["approval_id"], "inputs": step["input"]}
+
+    def _image_decided(self, conversation_id: int, picture: dict, yes: bool) -> dict:
+        approval = self.app.safety.get_approval(picture["approval_id"])
+        if approval["status"] != "pending":
+            return self._say(conversation_id, f"That price is no longer open ({approval['status']}). "
+                             "Ask me again and I'll quote it fresh.", None)
+        if not yes:     # the owner's own answer in chat decides it
+            self.app.safety.deny(picture["approval_id"])
+            self.app.runs.set_status(picture["run_id"], "cancelled")
+            return self._say(conversation_id, "Understood. No picture, and nothing spent.", None)
+        self.app.safety.approve(picture["approval_id"])
+        result = self.app.tools.execute("image.generate", picture["inputs"], actor="user:chat",
+                                        approval_id=picture["approval_id"], run_id=picture["run_id"])
+        return self._image_reply(conversation_id, result)
+
+    def _image_reply(self, conversation_id: int, result: dict) -> dict:
+        if not result["ok"]:
+            return self._say(conversation_id, f"I couldn't make the picture: {result['error']}", None)
+        made = result["output"]
+        left = f", {made['balance']:g} left" if isinstance(made.get("balance"), (int, float)) else ""
+        cost = f"{made['cost']:g} credits" if isinstance(made.get("cost"), (int, float)) else "credits not reported"
+        note = f"\n\n{made['note']}" if made.get("note") else ""
+        return self._say(conversation_id, f"Here it is ({cost}{left}). Saved to {made['path']}{note}", None)
 
     def _say(self, conversation_id: int, text: str, run_id: int | None) -> dict:
         status = self.app.provider.status()

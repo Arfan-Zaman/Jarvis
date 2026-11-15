@@ -2,6 +2,36 @@
 
 Newest entries first. Record what changed, why, and what was verified.
 
+## 2026-11-16 — Pictures on Higgsfield ("Jarvis, make me a picture of …")
+
+- New `jarvis/tools/images.py`: `image.quote` (automatic, spends nothing:
+  balance + `generate_image` with `get_cost: true`) and `image.generate`
+  (financial: the safety layer asks the owner every time; `max_credits` is the
+  quoted price and is part of the approval). Both run Claude Code headless like
+  `claude.py`, but with only the `higgsfield` server from `.mcp.json` and only
+  the four Higgsfield tools allowed (no shell, files or web). Model
+  `gpt_image_2_6`, one image, `use_unlim: false`; Claude re-checks the price
+  and refuses above the approved cost, and JARVIS flags any charge above it.
+  JARVIS downloads the image itself (https only) to
+  `workspace/images/<timestamp>-<slug>.png`.
+- Chat: new "image" route (router mode plus a wording catch). JARVIS replies
+  with the cost and balance and waits; "yes" approves and makes it, "no"
+  denies it and nothing is spent. If the balance is below the cost it says so
+  and asks for nothing.
+- `GET /api/files/<path>` serves files inside the workspace only (traversal
+  refused); only plain images and text are served as themselves, anything
+  else as a download, so workspace HTML never runs on JARVIS's origin. The chat
+  shows any `workspace/images/…` path in a reply as the picture.
+- Verified: 13 new tests (Claude never run) and the full suite green. A live
+  headless `balance` call through the project connector returned
+  `{"credits":0,"subscription_plan_type":"free"}`: it is still signed in to the
+  owner's OLD account. A live `image.quote` through the real code priced one
+  high 2k `gpt_image_2_6` picture at 2.75 credits (balance 0, free plan).
+  No image was generated and no credits were spent. To use
+  the paid Plus account: sign out of higgsfield.ai in the normal browser, then
+  in Claude Code `/mcp` → higgsfield → clear authentication → authenticate
+  with the new account.
+
 ## 2026-11-16 — Interrupt and mute
 
 - While JARVIS thinks or talks, a quiet second listener runs; hearing
