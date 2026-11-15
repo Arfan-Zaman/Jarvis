@@ -3,7 +3,10 @@
 Every action JARVIS takes is classified into a category:
 
     read                    always allowed
+    web_read                always allowed: searching and reading public web pages
     write                   allowed unless read-only mode is on; audited
+    workspace               allowed unless read-only mode is on: writing and running
+                            things inside JARVIS's own workspace folder; audited
     destructive             needs explicit human approval, every time
     external_communication  needs explicit human approval, every time
     financial               needs explicit human approval, every time
@@ -39,13 +42,16 @@ HUMAN = "user"
 
 class ActionCategory(str, Enum):
     READ = "read"
+    WEB_READ = "web_read"
     WRITE = "write"
+    WORKSPACE = "workspace"
     DESTRUCTIVE = "destructive"
     EXTERNAL_COMMUNICATION = "external_communication"
     FINANCIAL = "financial"
     SYSTEM = "system"
 
 
+AUTOMATIC = (ActionCategory.READ, ActionCategory.WEB_READ, ActionCategory.WRITE, ActionCategory.WORKSPACE)
 APPROVAL_REQUIRED = frozenset({
     ActionCategory.DESTRUCTIVE,
     ActionCategory.EXTERNAL_COMMUNICATION,
@@ -88,13 +94,15 @@ class SafetyLayer:
 
         if category is ActionCategory.READ:
             return Decision(True, reason="read access")
+        if category is ActionCategory.WEB_READ:      # reading the public web changes nothing here
+            return Decision(True, reason="web read access")
 
         if not self.config.allow_writes:
             self._refuse(action, category.value, actor,
                          "JARVIS is in read-only mode (JARVIS_ALLOW_WRITES=false)", details)
 
-        if category is ActionCategory.WRITE:
-            return Decision(True, reason="write access")
+        if category in (ActionCategory.WRITE, ActionCategory.WORKSPACE):
+            return Decision(True, reason=f"{category.value} access")
 
         if category not in APPROVAL_REQUIRED:  # defensive: new categories fail closed
             self._refuse(action, category.value, actor, "no policy for this category", details)
@@ -215,12 +223,13 @@ class SafetyLayer:
 
     # --- file-system permissions ------------------------------------------
     def authorize_path(self, path: Path | str, *, write: bool, actor: str = "system") -> Path:
-        """Confine file access: reads to the project, writes to the data dir.
+        """Confine file access: reads to the project, writes to the data and workspace dirs.
 
         Symlinks are resolved first, so a link cannot be used to escape.
         """
         resolved = Path(path).expanduser().resolve()
-        roots = [self.config.data_dir] if write else [self.config.root, self.config.data_dir]
+        roots = [self.config.data_dir, self.config.workspace_dir] if write \
+            else [self.config.root, self.config.data_dir, self.config.workspace_dir]
         if write and not self.config.allow_writes:
             self._refuse("file.write", "write", actor, "JARVIS is in read-only mode", {"path": str(resolved)})
         if not any(resolved == root or root in resolved.parents for root in roots):
@@ -232,7 +241,9 @@ class SafetyLayer:
     def policy(self) -> dict:
         return {
             "read_only": not self.config.allow_writes,
+            "automatic": [category.value for category in AUTOMATIC],
             "approval_required_for": sorted(category.value for category in APPROVAL_REQUIRED),
+            "workspace": str(self.config.workspace_dir),
             "approval_ttl_minutes": self.config.approval_ttl_minutes,
             "external_ai_allowed": self.config.allow_external_ai,
         }

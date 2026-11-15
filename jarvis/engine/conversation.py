@@ -59,7 +59,9 @@ ROUTER = """You decide how JARVIS handles the owner's latest message. Reply with
 {"mode": "act", "goal": "<the request restated as a complete, self-contained instruction>"}
   when the owner wants JARVIS to DO something with its own tools, or to look up their own
   stored information: create, change, complete or list tasks; search stored memories;
-  record a lesson; list or read projects; check JARVIS's health.
+  record a lesson; list or read projects; check JARVIS's health. Also choose "act" for
+  questions that need up-to-date or looked-up information from the internet (news, recent
+  events, prices, facts you are not sure of) or when the owner gives a web address to read.
 
 {"mode": "remember", "fact": "<the fact in the first person, as the owner would say it,
  e.g. 'I prefer short answers' - never 'The user ...'>", "category": "preference" | "personal" | "general"}
@@ -67,7 +69,7 @@ ROUTER = """You decide how JARVIS handles the owner's latest message. Reply with
 
 {"mode": "answer"}
   for everything else: conversation, greetings, general knowledge, explanations, maths,
-  advice, opinions, or requests for abilities JARVIS does not have (email, calendar, web,
+  advice, opinions, or requests for abilities JARVIS does not have (email, calendar,
   devices, payments). If unsure whether the owner wants an action, choose "answer".
   If, in passing, the owner states a LASTING fact or preference about themselves (for
   example "call me Arfan", "I'm vegetarian", "I work late on Thursdays"), add
@@ -75,6 +77,7 @@ ROUTER = """You decide how JARVIS handles the owner's latest message. Reply with
   this for questions, passing moods, or one-off remarks.
 
 Write the goal so it makes sense without the conversation (resolve "it", "that", "him").
+Keep any web address the owner gave, exactly as written, in the goal.
 
 JARVIS's tools:
 """
@@ -282,7 +285,7 @@ class Conversation:
         done = [s for s in run["steps"] if s["plan_id"] is not None and s["status"] == "succeeded"]
         changes, created = [], set()
         for step in done:
-            if step["category"] == "read":
+            if step["category"] in ("read", "web_read"):
                 continue
             output = step["output"] if isinstance(step["output"], dict) else {}
             if step["tool"] == "tasks.update" and output.get("id") in created:
@@ -298,7 +301,8 @@ class Conversation:
         if status == "completed":
             if changes:
                 return f"Done. {did}"
-            return self._answer_from_data(conversation_id, done) or "Done. Nothing needed changing."
+            answer = self._answer_from_data(conversation_id, done) or "Done. Nothing needed changing."
+            return answer + self._sources(done)
         if status == "blocked":
             return (f"{did} " if did else "") + f"Before I go on: {report['question']}"
         if status == "waiting_approval":
@@ -311,6 +315,18 @@ class Conversation:
         reason = report.get("error") or "it did not finish"
         return (f"I couldn't complete that. {reason}"
                 + (f" What I did manage: {did[2:] if did.startswith('I ') else did}" if did else " Nothing was changed."))
+
+    @staticmethod
+    def _sources(steps: list[dict]) -> str:
+        """Web addresses actually used, taken from the tool results (never from the model)."""
+        outputs = [(s["tool"], s["output"] if isinstance(s["output"], dict) else {}) for s in steps]
+        # Pages actually read are the sources; search hits count only if nothing was read.
+        urls = [o["url"] for tool, o in outputs if tool == "web.fetch" and o.get("url")]
+        if not urls:
+            urls = [r["url"] for tool, o in outputs if tool == "web.search"
+                    for r in o.get("results", [])[:3] if r.get("url")]
+        urls = list(dict.fromkeys(urls))[:4]
+        return ("\n\nSources: " + ", ".join(urls)) if urls else ""
 
     def _answer_from_data(self, conversation_id: int, steps: list[dict]) -> str | None:
         """Phrase a reply to a look-up from the data the tools returned."""

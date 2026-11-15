@@ -619,7 +619,9 @@ views.system = {
         ])),
         h('div', { class: 'glass panel' }, h('h2', null, 'Safety'), kv([
           ['Mode', status.safety.read_only ? chip('read-only', 'warn') : chip('read / write', 'ok')],
-          ['Needs approval', h('div', { class: 'meta' }, status.safety.approval_required_for.map((name) => chip(label(name), 'pink')))],
+          ['Runs automatically', h('div', { class: 'meta' }, (status.safety.automatic || []).map((name) => chip(label(name), 'ok')))],
+          ['Asks you first', h('div', { class: 'meta' }, status.safety.approval_required_for.map((name) => chip(label(name), 'pink')))],
+          ['Workspace', h('span', { class: 'mono' }, status.safety.workspace || '')],
           ['Approval lifetime', `${status.safety.approval_ttl_minutes} min, single use`],
           ['External AI', status.safety.external_ai_allowed ? chip('allowed', 'warn') : chip('blocked', 'ok')],
           ['Not built yet', status.not_built_yet.join(', ')],

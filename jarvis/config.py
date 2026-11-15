@@ -40,6 +40,7 @@ DEFAULTS = {
     "JARVIS_ENGINE_MAX_STEPS": "12",
     "JARVIS_ENGINE_MAX_FAILURES": "3",
     "JARVIS_ENGINE_MAX_MODEL_CALLS": "40",
+    "JARVIS_BRAVE_API_KEY": "",
 }
 
 
@@ -67,10 +68,16 @@ class Config:
     engine_max_steps: int = 12
     engine_max_failures: int = 3
     engine_max_model_calls: int = 40
+    brave_api_key: str = ""
 
     @property
     def db_path(self) -> Path:
         return self.data_dir / "jarvis.db"
+
+    @property
+    def workspace_dir(self) -> Path:
+        """Where JARVIS may freely create and run things (Phase 3 autonomy)."""
+        return self.root / "workspace"
 
     @property
     def log_dir(self) -> Path:
@@ -88,6 +95,7 @@ class Config:
         """Configuration safe to show in the interface (no secrets exist yet)."""
         data = {key: str(value) if isinstance(value, Path) else value for key, value in asdict(self).items()}
         data["db_path"] = str(self.db_path)
+        data["brave_api_key"] = "set" if self.brave_api_key else ""     # never reveal secrets
         return data
 
 
@@ -184,4 +192,5 @@ def load_config(
         engine_max_steps=_integer("JARVIS_ENGINE_MAX_STEPS", get("JARVIS_ENGINE_MAX_STEPS"), 1, 50),
         engine_max_failures=_integer("JARVIS_ENGINE_MAX_FAILURES", get("JARVIS_ENGINE_MAX_FAILURES"), 1, 20),
         engine_max_model_calls=_integer("JARVIS_ENGINE_MAX_MODEL_CALLS", get("JARVIS_ENGINE_MAX_MODEL_CALLS"), 1, 500),
+        brave_api_key=get("JARVIS_BRAVE_API_KEY").strip(),
     )

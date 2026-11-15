@@ -5,45 +5,48 @@ section 4b (autonomous design).
 
 ## Where things stand (2026-11-16)
 
-- Phases 1 and 2 and steps 3.1 and 3.2 complete. 192 tests passing.
+- Phases 1 and 2 and steps 3.1 to 3.4 complete. 212 tests passing.
 - JARVIS runs on Qwen 3.5 9B in the Ollama desktop app (`.env`, git-ignored).
   Claude Code 2.1 is installed at `~/.local/bin/claude` and supports `-p`.
-- **Owner's decisions:** act on its own and ask only for big risks; use Claude
-  Code when needed, but learn once and do that kind of task locally next time;
-  remember automatically (reviewable); self-improve with tests and Git as the
-  safety net. Business specialisation later.
+- Chat talks and acts, remembers the owner, acts without asking for everyday
+  work (asks only for destructive, external, financial and system actions), and
+  searches and reads the web with sources. Keyless search is Wikipedia and
+  DuckDuckGo instant answers; an optional `JARVIS_BRAVE_API_KEY` adds full web
+  search.
+- **Owner's decisions:** autonomous within the hard lines; Claude Code once per
+  kind of task, then reuse locally as a skill; automatic reviewable memory;
+  self-improvement behind tests and Git. Business work later.
 - Remote `origin` is GitHub; push only when the owner asks.
 
-## Exact next task: steps 3.3 and 3.4, autonomy policy and internet
+## Exact next task: step 3.5, the code runner
 
 No installs needed.
 
-### 3.3 Autonomy policy
-1. Add permission levels `workspace` and `web_read` to `ActionCategory`; both
-   run without approval (like write, refused in read-only mode). Keep
-   `external_communication`, `financial`, `destructive`, `system` asking.
-2. Create `~/JARVIS/workspace/` (git-ignored contents) and extend
-   `SafetyLayer.authorize_path` so writes are allowed under `data/` and
-   `workspace/` only.
-3. A readable policy summary on the System page and in `jarvis.info`.
-4. Tests for every level, and that the hard four still pause for approval.
+1. `jarvis/tools/code.py`: tool `code.run` (permission `workspace`). Inputs:
+   `code` (Python source), optional `filename`, `timeout` (default 30 s, max
+   120), `args`. Writes the file under `workspace/runs/<run-id>/` and runs it
+   with the same Python as JARVIS as a child process, with cwd in that folder.
+2. Sandbox: run through macOS `sandbox-exec` with a profile that denies file
+   writes outside the run folder and `workspace/`, and denies network unless
+   the call sets `network: true` (then outbound only). Verify `sandbox-exec`
+   exists; if it does not, refuse to run rather than run unsandboxed.
+3. Limits: timeout (kill the process group), output capped (e.g. 20,000
+   characters each for stdout and stderr), environment stripped of secrets
+   (no `JARVIS_BRAVE_API_KEY`, etc.).
+4. Result: exit code, stdout, stderr, duration, files created (names and sizes).
+5. `code.read_file` / `code.write_file` (`workspace`) for files under
+   `workspace/` only, via `SafetyLayer.authorize_path`.
+6. Engine protocol: for calculations, data processing or anything a short
+   script does better, write and run code; check the result before using it.
+7. Tests: success, syntax error, timeout kill, output cap, write outside the
+   workspace blocked by the sandbox, network blocked by default, secrets absent
+   from the environment, refusal when the sandbox is unavailable.
+8. Real model: "what is the 50th Fibonacci number", "make a CSV of the next 12
+   months with their number of days and save it in my workspace", "count the
+   words in this text: …".
+9. Update README, DEVLOG, ARCHITECTURE, ROADMAP and this file. Commit.
 
-### 3.4 Internet (read-only, automatic)
-5. `web.search` (`web_read`): free, keyless search using DuckDuckGo's HTML
-   endpoint via `urllib`; returns title, URL, snippet; timeout; polite
-   User-Agent with no personal details; results capped.
-6. `web.fetch` (`web_read`): fetch one http(s) URL, strip HTML to readable
-   text with `html.parser`, size cap, refuse non-http schemes and local or
-   private addresses.
-7. Chat: questions about current events or facts JARVIS cannot know route to
-   act with these tools; answers cite source URLs.
-8. Tests with a fake local HTTP server (no internet in tests); private-address
-   refusal; caps; parse failures handled.
-9. Real model: three questions that need the web; check sources are real.
-10. Update README, DEVLOG, ARCHITECTURE, ROADMAP and this file. Commit.
-
-Then 3.5 (sandboxed code runner), 3.6 and 3.7 (skills and the Claude Code
-bridge: learn once).
+Then 3.6 and 3.7: skills and the Claude Code bridge (learn once).
 
 ## Rules for the session
 
@@ -56,7 +59,7 @@ bridge: learn once).
 ## Prompt to paste
 
 > Continue JARVIS. Read NEXT_SESSION.md, JARVIS_ROADMAP.md and
-> ARCHITECTURE.md, then implement steps 3.3 and 3.4 (autonomy policy and
-> internet) exactly as described. Standard library only, no installs, preserve
-> existing tests, test with the real local model, update the docs and commit.
-> Do not push. Keep the report short and in plain language.
+> ARCHITECTURE.md, then implement step 3.5 (the sandboxed code runner) exactly
+> as described. Standard library only, no installs, preserve existing tests,
+> test with the real local model, update the docs and commit. Do not push.
+> Keep the report short and in plain language.

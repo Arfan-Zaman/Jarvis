@@ -61,6 +61,9 @@ or, if the goal is not fully achieved yet,
   {"achieved": false, "missing": "<what is still missing>",
    "next_steps": [{"description": "...", "tool": "..."}, ...]}
 (leave next_steps empty if the missing part cannot be done with the tools).
+If a search or page did not contain the answer, next_steps should try again differently:
+a new web.search with other, shorter key words (for example the likely name of the thing),
+then web.fetch of the best result with "focus" set.
 
 Rules:
 - A plan must include the steps that actually make the requested change. Looking
@@ -77,6 +80,10 @@ Rules:
   person or value the owner means, and never ask about something already answered in
   "answers_from_owner".
 - Use only the listed tools and only their listed inputs. Use ids from results; never invent them.
+- If the goal contains a web address, read that address with web.fetch. Do not search instead.
+- For other questions about the outside world, use web.search, then web.fetch on the most
+  relevant result if the snippets are not enough. When fetching, set "focus" to the key words
+  of the question. Only give facts the results support.
 - Keep plans short. Never state that something was done unless a result shown to you says so."""
 
 
@@ -176,7 +183,7 @@ class Engine:
         }[run["status"]]
         model_summary = (run["result"] or {}).get("model_summary")
         changes = [{"tool": e["tool"], "what": self._describe(e["output"])} for e in executions
-                   if e["status"] == "succeeded" and e["category"] != "read"]
+                   if e["status"] == "succeeded" and e["category"] not in ("read", "web_read")]
         if run["status"] == "completed":
             headline = (f"Goal achieved and checked: {len(plan)} step(s) succeeded, "
                         + (f"{len(changes)} change(s) made." if changes else "no changes were needed or made."))

@@ -2,6 +2,45 @@
 
 Newest entries first. Record what changed, why, and what was verified.
 
+## 2026-11-16 — Phases 3.3 and 3.4: autonomy policy and internet
+
+### Built
+- Permission levels `web_read` (allowed even in read-only mode) and `workspace`
+  (allowed unless read-only). The four asking levels are unchanged. The policy
+  is reported in status and shown on the System page.
+- `~/JARVIS/workspace/` (git-ignored); `authorize_path` allows writes under
+  `data/` and `workspace/` only.
+- `jarvis/tools/web.py`: `web.search` (Wikipedia REST search and DuckDuckGo
+  instant-answer API, keyless; Brave Search if `JARVIS_BRAVE_API_KEY` is set)
+  and `web.fetch` (clean page text, size cap, `focus` keeps the matching parts
+  of long pages; refuses non-http(s) URLs and private or local addresses,
+  including on redirect).
+- Chat routes internet questions to act; the protocol says read a given URL
+  rather than search, and retry with a different search when results miss.
+  Answers end with Sources taken from the run log (pages read; search hits
+  only if nothing was read).
+- Web reads are not counted as "changes made".
+
+### Decisions
+- DuckDuckGo's HTML results page answered automated requests with a bot
+  challenge. It is not used, and no attempt is made to get around it.
+- The search key is read from `.env` and never shown (`public_dict` masks it).
+
+### Found with the real model, then fixed
+1. Given a URL, it searched instead of reading it.
+2. Sources listed search hits it never read (the Ruby article for a Python
+   question).
+3. A long page was cut off before the answer; `focus` now extracts the
+   matching parts.
+4. After a miss it gave up; the review step now retries with a new search.
+
+### Verified
+- 212 tests passing (192 existing, 20 new); web tests use a fake local server.
+- Real model: Python's creator (correct, cited), python.org downloads (read the
+  given page), Bhutan's capital and population (correct, two sources).
+  Australia's tallest mountain still fails honestly: keyless search returned
+  the wrong Wikipedia page.
+
 ## 2026-11-16 — Phase 3.2: memory of you
 
 ### Built

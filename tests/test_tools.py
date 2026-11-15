@@ -16,6 +16,7 @@ EXPECTED_TOOLS = {
     "tasks.list": "read", "memory.search": "read",
     "tasks.create": "write", "tasks.update": "write", "tasks.complete": "write",
     "memory.save": "write", "experience.record": "write",
+    "web.search": "web_read", "web.fetch": "web_read",
 }
 
 

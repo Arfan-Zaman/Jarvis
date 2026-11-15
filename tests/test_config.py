@@ -62,6 +62,12 @@ class ConfigTests(unittest.TestCase):
             with self.subTest(host=host), self.assertRaises(ConfigError):
                 self.load(environ={"JARVIS_HOST": host})
 
+    def test_search_key_is_loaded_but_never_shown(self):
+        config = self.load("JARVIS_BRAVE_API_KEY=secret-123\n")
+        self.assertEqual(config.brave_api_key, "secret-123")
+        self.assertEqual(config.public_dict()["brave_api_key"], "set")
+        self.assertNotIn("secret-123", str(config.public_dict()))
+
     def test_malformed_env_file(self):
         with self.assertRaises(ConfigError):
             self.load("THIS IS NOT VALID\n")

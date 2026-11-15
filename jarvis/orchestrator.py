@@ -21,7 +21,7 @@ from .logging_setup import get_logger
 from .providers import AIProvider, ProviderError, build_provider
 from .safety import ActionCategory, SafetyLayer
 from .stores.runs import RunStore
-from .tools import ToolRegistry, register_builtin
+from .tools import ToolRegistry, register_builtin, register_web
 from .stores import (
     AgentStore, ConversationStore, EventLog, ExperienceStore,
     MemoryStore, ProjectStore, SettingsStore, TaskStore,
@@ -60,6 +60,7 @@ class Jarvis:
         self.runs = RunStore(self.db)
         self.tools = ToolRegistry(self)
         register_builtin(self.tools)
+        register_web(self.tools)
         self.engine = Engine(self)
         self.conversation = Conversation(self)
         self.started_at = time.time()
@@ -76,6 +77,7 @@ class Jarvis:
     def start(self) -> "Jarvis":
         """Prepare the database. Safe to call on every launch."""
         self.config.data_dir.mkdir(parents=True, exist_ok=True)
+        self.config.workspace_dir.mkdir(parents=True, exist_ok=True)
         self._backup_before_upgrade()
         self.db.initialize()
         self._seed()

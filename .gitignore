@@ -38,3 +38,6 @@ node_modules/
 
 # --- Claude Code local settings ---
 .claude/settings.local.json
+
+# --- JARVIS workspace: things JARVIS creates and runs for you (Phase 3) ---
+/workspace/

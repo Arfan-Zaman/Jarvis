@@ -14,7 +14,7 @@ Business-specific work (Monsoor Motors, Aureus Detailing) comes later.**
 |---|---|---|
 | 1 | Foundation | **Complete** |
 | 2 | Intelligence Core: tools, reasoning engine, local model | **Complete** (2.1 to 2.3; 155 tests passing) |
-| 3 | A real JARVIS: autonomous, learning, connected | **In progress**: 3.1 and 3.2 done (192 tests passing); 3.3 next |
+| 3 | A real JARVIS: autonomous, learning, connected | **In progress**: 3.1 to 3.4 done (212 tests passing); 3.5 next |
 | 4 | Voice | Not started |
 | 5 | Autonomous workforce (specialist agents) | Not started |
 | 6 | Business intelligence | Later, by owner's choice |
@@ -62,8 +62,8 @@ configuration, logging, AI provider interface, tests.
 ### Next: the autonomous JARVIS (built in this order)
 | Step | What gets built | Needs install? | Done when |
 |---|---|---|---|
-| 3.3 | **Autonomy policy.** New permission levels: `workspace` (write and run inside `~/JARVIS/workspace`) and `web_read` run without asking; `external_communication`, `financial`, `destructive` and `system` (anything outside the workspace) still ask. One policy file the owner can read | No | Tests prove each level; the System page shows the policy |
-| 3.4 | **Internet.** `web.search` (free, no key) and `web.fetch` (page to clean text), automatic; results labelled with their source URL | No | Real searches answer real questions with sources |
+| 3.3 | **Done.** **Autonomy policy.** New permission levels: `workspace` (write and run inside `~/JARVIS/workspace`) and `web_read` run without asking; `external_communication`, `financial`, `destructive` and `system` (anything outside the workspace) still ask. One policy file the owner can read | No | Tests prove each level; the System page shows the policy |
+| 3.4 | **Done** (keyless search is limited; optional Brave key). **Internet.** `web.search` (free, no key) and `web.fetch` (page to clean text), automatic; results labelled with their source URL | No | Real searches answer real questions with sources |
 | 3.5 | **Code runner.** JARVIS writes and runs Python in its workspace: time limit, output limit, and macOS sandboxing so it cannot write outside the workspace. No unrestricted shell | No | Escapes are blocked in tests; real tasks run |
 | 3.6 | **Skills and learn-once.** A skill is a folder in `~/JARVIS/skills/` (manifest plus code), loaded as a tool, tested before it is enabled, committed to Git. Before calling Claude Code, JARVIS looks for a skill that fits | No | A new kind of task builds a skill via Claude Code; the same kind of task later runs locally without Claude |
 | 3.7 | **Claude Code bridge.** A tool that runs `claude -p` in the background on a task, restricted to the workspace or a skill folder, with a time limit; every use is logged with its cost in turns | No | Claude builds and tests a working skill unattended |

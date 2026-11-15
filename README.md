@@ -6,7 +6,8 @@ interface. Phase 2.1 added controlled tools and a run log; Phase 2.2 adds a
 reasoning engine that plans and carries out goals using those tools. Phase 2.3
 connects a local AI model (Qwen 3.5 9B through Ollama), so JARVIS can now chat
 and carry out goals for real, entirely on this Mac. Phase 3.1 makes chat one
-conversation that both talks and acts; Phase 3.2 gives it a memory of you.
+conversation that both talks and acts; Phase 3.2 gives it a memory of you;
+Phases 3.3 and 3.4 let it act on its own and use the internet.
 
 - Runs entirely on this Mac. Nothing is sent anywhere.
 - Python standard library only. The one outside program is Ollama, which runs
@@ -97,6 +98,34 @@ Real conversation, Qwen 3.5 9B: a greeting, "15% of 240" (36), "remind me to
 call Sam tomorrow" (task created with the correct date), an ambiguous request
 that asked which business, a task list, saving a preference, and declining to
 send email. Replies take 2 to 30 seconds; the first after a restart is slowest.
+
+## Autonomy and the internet
+
+JARVIS now acts without asking for everyday work and asks only for big risks:
+
+| Runs automatically | Asks you first |
+|---|---|
+| reading its records, the web (`web_read`), changing its own records, working in `~/JARVIS/workspace` | deleting your things (`destructive`), sending emails or messages (`external_communication`), money (`financial`), anything outside `~/JARVIS` (`system`) |
+
+The System page shows this policy and the workspace path.
+
+**Internet.** `web.search` uses Wikipedia and DuckDuckGo instant answers, both
+free and keyless. `web.fetch` reads one public page as clean text, and on long
+pages returns the parts that match the question. Answers end with **Sources**,
+listing only pages that were actually read. JARVIS refuses to read addresses on
+your Mac or home network, including through redirects. DuckDuckGo's normal
+results page is not used: it blocks automated visitors, and JARVIS does not try
+to get around that.
+
+**Full web search (optional).** Keyless search covers encyclopedia facts but
+not news, prices or most websites. For more, create a free Brave Search API key
+yourself and put it in `.env` as `JARVIS_BRAVE_API_KEY`. It is never shown in
+the interface.
+
+Real model: "Who created Python?" (correct, cited Wikipedia), "Read
+python.org/downloads…" (read that page), "Capital of Bhutan and its
+population?" (correct, two sources). "Tallest mountain in Australia?" failed
+honestly, because Wikipedia's search returned the wrong page.
 
 ## Memory of you
 
@@ -312,7 +341,7 @@ cd ~/JARVIS
 python3 -m unittest discover -s tests
 ```
 
-192 tests cover database initialisation, memory create/retrieve/delete, task
+212 tests cover database initialisation, memory create/retrieve/delete, task
 creation and completion, project creation, experience storage, configuration
 loading, safety checks, AI provider reporting, backup and restore, the web
 API, the tool registry, tool execution, permissions, the run log, and the
@@ -320,7 +349,8 @@ reasoning engine (planning, failures, invalid plans, missing information,
 approvals, limits, false completion claims, goal review, interruption
 recovery), and the conversation (routing, truthful reporting, follow-up
 questions, approvals in chat), and memory (index sync, ranking, the
-remember and offer-to-remember flows, citations). The automated tests use a scripted stand-in, so they never need
+remember and offer-to-remember flows, citations), autonomy levels, and the web
+tools (against a fake local server, so tests never use the internet). The automated tests use a scripted stand-in, so they never need
 Ollama. Each test uses its own temporary database and never touches `data/`.
 
 ## Backup and recovery
@@ -348,6 +378,9 @@ Ollama. Each test uses its own temporary database and never touches `data/`.
 - The model is small and local: it handles simple goals well but can still
   make poor plans on complex ones. The review step and the run log catch
   failures, but they are not perfect.
+- Without a search key, web search is limited to Wikipedia and instant answers,
+  so some factual questions fail (honestly) and news is not available.
+- Web answers take 20 to 60 seconds with the local model.
 - Memory search matches words and word forms, not meaning: "car" will not find
   "vehicle". Near-duplicates worded differently can both be stored.
 - The model sometimes cites a memory it did not really need.
@@ -371,9 +404,6 @@ Ollama. Each test uses its own temporary database and never touches `data/`.
 
 ## Next recommended milestone
 
-**Phase 3.3 and 3.4: autonomy policy and internet.** JARVIS will act on its own
-and ask only for big risks (deleting your files, sending messages, money, changes
-outside its workspace), and will search and read the web. After that: a
-sandboxed code runner, skills that JARVIS builds with Claude Code once and then
-reuses locally, automations, automatic memory and self-improvement. See
-`JARVIS_ROADMAP.md`.
+**Phase 3.5: the code runner.** JARVIS writes and runs Python inside its
+workspace, sandboxed so it cannot touch anything else. Then 3.6 and 3.7: skills
+built once with Claude Code and reused locally. See `NEXT_SESSION.md`.

@@ -29,7 +29,7 @@ from typing import Callable
 
 from ..common import JarvisError, NotFoundError, PermissionDenied, ValidationError, utcnow
 from ..logging_setup import get_logger
-from ..safety import ActionCategory
+from ..safety import APPROVAL_REQUIRED, ActionCategory
 
 log = get_logger("tools")
 
@@ -50,7 +50,7 @@ class Tool:
         """Public description, used for discovery (and later shown to a model)."""
         return {"name": self.name, "description": self.description,
                 "permission": self.category.value,
-                "requires_approval": self.category not in (ActionCategory.READ, ActionCategory.WRITE),
+                "requires_approval": self.category in APPROVAL_REQUIRED,
                 "inputs": self.inputs}
 
 
