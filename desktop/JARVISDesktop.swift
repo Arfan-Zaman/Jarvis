@@ -14,6 +14,7 @@
 
 import AppKit
 import AVFoundation
+import WebKit
 
 // MARK: - Settings (written into Info.plist by the build script)
 
@@ -196,7 +197,11 @@ final class UtteranceRecorder {
         return outcome
     }
 
-    func wav() -> Data {
+    func wav() -> Data { WAV.encode(samples, sampleRate: sampleRate) }
+}
+
+enum WAV {
+    static func encode(_ samples: [Float], sampleRate: Double) -> Data {
         var data = Data()
         let rate = UInt32(sampleRate), count = UInt32(samples.count)
         func append<T>(_ value: T) { withUnsafeBytes(of: value) { data.append(contentsOf: $0) } }
@@ -209,6 +214,57 @@ final class UtteranceRecorder {
         for sample in samples { append(Int16(max(-1, min(1, sample)) * 32767).littleEndian) }
         return data
     }
+}
+
+// MARK: - Wake word: speech segments checked for the name "Jarvis"
+
+/// Cuts the microphone stream into short speech segments (with a little audio
+/// from just before the speech started). Each segment is transcribed locally by
+/// the JARVIS server and checked for the name; nothing is kept otherwise.
+final class WakeListener {
+    let sampleRate: Double
+    private let frameSize: Int
+    private var pending: [Float] = []
+    private var ring: [Float] = []
+    private var segment: [Float]?
+    private var speechRun = 0, silence = 0, length = 0, speechTotal = 0
+    private let noise: () -> Float
+
+    init(sampleRate: Double, noise: @escaping () -> Float) {
+        self.sampleRate = sampleRate
+        self.noise = noise
+        frameSize = max(64, Int(sampleRate * 0.01))
+    }
+
+    /// Returns a finished speech segment as WAV data, or nil.
+    func add(_ samples: [Float]) -> Data? {
+        pending.append(contentsOf: samples)
+        var result: Data?
+        while pending.count >= frameSize {
+            let frame = Array(pending.prefix(frameSize))
+            pending.removeFirst(frameSize)
+            let rms = (frame.reduce(0) { $0 + $1 * $1 } / Float(frameSize)).squareRoot()
+            let speech = rms > max(noise() * 5, 0.006)
+            if var current = segment {
+                current.append(contentsOf: frame)
+                segment = current
+                length += 1
+                if speech { silence = 0; speechTotal += 1 } else { silence += 1 }
+                if silence >= 50 || length >= 600 {            // 0.5 s pause, or 6 s at most
+                    if speechTotal >= 25 { result = WAV.encode(current, sampleRate: sampleRate) }
+                    segment = nil; length = 0; silence = 0; speechTotal = 0
+                }
+            } else {
+                ring.append(contentsOf: frame)
+                if ring.count > frameSize * 40 { ring.removeFirst(ring.count - frameSize * 40) }
+                speechRun = speech ? speechRun + 1 : 0
+                if speechRun >= 3 { segment = ring; ring.removeAll(); length = 0; silence = 0; speechTotal = speechRun }
+            }
+        }
+        return result
+    }
+
+    func reset() { segment = nil; ring.removeAll(); pending.removeAll(); speechRun = 0 }
 }
 
 // MARK: - Talking to the JARVIS server
@@ -369,6 +425,9 @@ final class OrbView: NSView {
         }
     }
 
+    /// The web identity takes over the visuals; this view stays as the click and drag surface.
+    func hideVisuals() { layer?.sublayers?.forEach { $0.isHidden = true } }
+
     override func mouseDown(with event: NSEvent) {
         if event.clickCount == 1 { window?.performDrag(with: event) }
     }
@@ -380,9 +439,16 @@ final class OrbView: NSView {
 
 // MARK: - The app
 
-final class AppDelegate: NSObject, NSApplicationDelegate, AVAudioPlayerDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, AVAudioPlayerDelegate, WKNavigationDelegate {
     private var panel: NSPanel!
     private var orb: OrbView!
+    private var identity: WKWebView!
+    private var identityReady = false
+    private var wakeListener: WakeListener?
+    private var wakeBusy = false                     // touched only on the audio queue
+    private var wakeEnabled = UserDefaults.standard.object(forKey: "wakeEnabled") as? Bool ?? true
+    private var quietUntil = Date.distantPast        // ignore our own voice just after speaking
+    private var meter: Timer?
     private var bubble: NSTextField!
     private var bubbleBox: NSVisualEffectView!
     private let engine = AVAudioEngine()
@@ -404,6 +470,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, AVAudioPlayerDelegate 
         say("Starting up…", speak: false)
         Task { @MainActor in
             let up = await server.ensureRunning(api: api)
+            if up, let url = URL(string: Settings.server.absoluteString + "/#desktop") {
+                identity.load(URLRequest(url: url))
+            }
             if !up { setState(.offline); say("I couldn't start the JARVIS server. Open the JARVIS folder and run it once by hand to see why.", speak: false); return }
             await startMicrophone()
         }
@@ -416,7 +485,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, AVAudioPlayerDelegate 
 
     // --- window ---
     private func buildPanel() {
-        let size = NSSize(width: 360, height: 120)
+        let size = NSSize(width: 390, height: 150)
         let saved = UserDefaults.standard.string(forKey: "orbOrigin").map(NSPointFromString)
         let screen = NSScreen.main?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
         let origin = saved ?? NSPoint(x: screen.maxX - size.width - 24, y: screen.minY + 24)
@@ -433,10 +502,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, AVAudioPlayerDelegate 
         }
 
         let content = NSView(frame: NSRect(origin: .zero, size: size))
-        orb = OrbView(frame: NSRect(x: size.width - 120, y: 0, width: 120, height: 120))
+        let face = NSRect(x: size.width - 150, y: 0, width: 150, height: 150)
+        let webConfig = WKWebViewConfiguration()
+        identity = WKWebView(frame: face, configuration: webConfig)
+        identity.setValue(false, forKey: "drawsBackground")     // transparent: only the identity shows
+        identity.navigationDelegate = self
+        orb = OrbView(frame: face)
         orb.onClick = { [weak self] in self?.manualWake() }
         orb.menuProvider = { [weak self] in self?.menu() ?? NSMenu() }
-        bubbleBox = NSVisualEffectView(frame: NSRect(x: 0, y: 14, width: size.width - 126, height: 92))
+        bubbleBox = NSVisualEffectView(frame: NSRect(x: 0, y: 29, width: size.width - 156, height: 92))
         bubbleBox.material = .hudWindow
         bubbleBox.blendingMode = .behindWindow
         bubbleBox.state = .active
@@ -450,7 +524,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, AVAudioPlayerDelegate 
         bubbleBox.addSubview(bubble)
         bubbleBox.isHidden = true
         content.addSubview(bubbleBox)
-        content.addSubview(orb)
+        content.addSubview(identity)
+        content.addSubview(orb)          // on top: clicks, drags and the menu
         panel.contentView = content
         panel.orderFrontRegardless()
     }
@@ -461,11 +536,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, AVAudioPlayerDelegate 
         let listen = menu.addItem(withTitle: muted ? "Start listening for claps" : "Stop listening for claps",
                                   action: #selector(toggleMute), keyEquivalent: "")
         listen.target = self
+        let name = menu.addItem(withTitle: wakeEnabled ? "Stop waking on “Jarvis”" : "Wake on “Jarvis”",
+                                action: #selector(toggleWake), keyEquivalent: "")
+        name.target = self
         menu.addItem(.separator())
         menu.addItem(withTitle: "Quit JARVIS Desktop", action: #selector(quit), keyEquivalent: "").target = self
         return menu
     }
     @objc private func openJarvis() { NSWorkspace.shared.open(Settings.server) }
+    @objc private func toggleWake() {
+        wakeEnabled.toggle()
+        UserDefaults.standard.set(wakeEnabled, forKey: "wakeEnabled")
+        audioQueue.async { self.wakeListener?.reset() }
+        say(wakeEnabled ? "I'll answer to my name." : "I'll wake on a double clap or a click only.", speak: false, linger: 5)
+    }
+
     @objc private func toggleMute() {
         muted.toggle()
         if muted { engine.stop(); setState(.muted); say("Clap listening is off. Click me to talk.", speak: false) }
@@ -476,6 +561,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate, AVAudioPlayerDelegate 
     private func setState(_ new: OrbState) {
         state = new
         orb.set(new)
+        pushIdentity()
+    }
+
+    /// Mirror the real state onto the web identity (face and core).
+    private func pushIdentity() {
+        guard identityReady else { return }
+        let name: String
+        switch state {
+        case .starting: name = "offline"
+        case .idle, .muted: name = "calm"
+        case .listening: name = "listening"
+        case .thinking: name = "analysing"       // the page then follows the engine's real progress
+        case .speaking: name = "speaking"
+        case .offline: name = "error"
+        }
+        identity.evaluateJavaScript("window.jarvisDesktop && window.jarvisDesktop.setState('\(name)')")
+    }
+
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        identityReady = true
+        orb.hideVisuals()
+        pushIdentity()
     }
 
     private func say(_ text: String, speak: Bool, linger: Double = 14) {
@@ -510,6 +617,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, AVAudioPlayerDelegate 
             DispatchQueue.main.async { self?.wake() }
         }
         detector.onDebug = { DesktopLog.write($0) }
+        wakeListener = WakeListener(sampleRate: format.sampleRate) { [weak detector] in detector?.noiseLevel ?? 0.002 }
         DesktopLog.write(String(format: "microphone started: %.0f Hz, %d channel(s)", format.sampleRate, format.channelCount))
         self.detector = detector
         input.removeTap(onBus: 0)
@@ -521,7 +629,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, AVAudioPlayerDelegate 
         do {
             try engine.start()
             setState(.idle)
-            say("Ready. Clap twice, then say “Jarvis…” and your request.", speak: false, linger: 8)
+            say("Ready. Say “Jarvis…” and your request, or clap twice.", speak: false, linger: 8)
         } catch {
             setState(.offline)
             say("The microphone could not start: \(error.localizedDescription)", speak: false)
@@ -548,8 +656,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, AVAudioPlayerDelegate 
         let keep = Int((detector?.sampleRate ?? 48000) * 1.5)
         preRoll.append(contentsOf: samples)
         if preRoll.count > keep { preRoll.removeFirst(preRoll.count - keep) }
-        let current = DispatchQueue.main.sync { state }
-        if current == .idle { detector?.process(samples) }
+        let (current, quiet) = DispatchQueue.main.sync { (state, Date() < quietUntil) }
+        guard current == .idle, !quiet else { wakeListener?.reset(); return }
+        detector?.process(samples)
+        if wakeEnabled, let segment = wakeListener?.add(samples), !wakeBusy {
+            wakeBusy = true
+            DispatchQueue.main.async { self.checkWake(segment) }
+        }
     }
 
     // --- the conversation loop ---
@@ -579,6 +692,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate, AVAudioPlayerDelegate 
         }
     }
 
+    /// A speech segment heard while idle: act only if it contains the name.
+    private func checkWake(_ wav: Data) {
+        Task { @MainActor in
+            defer { audioQueue.async { self.wakeBusy = false } }
+            guard let text = try? await api.transcribe(wav), state == .idle else { return }
+            guard let request = nameRequest(text) else { DesktopLog.write("wake check: speech without the name"); return }
+            DesktopLog.write("WAKE WORD")
+            NSSound(named: "Tink")?.play()
+            if request.isEmpty { followUp = true; say("Yes?", speak: true); return }
+            await respond(to: request)
+        }
+    }
+
+    /// The words after the name, "" if only the name was said, nil if the name was not said.
+    private func nameRequest(_ text: String) -> String? {
+        let cleaned = text.trimmingCharacters(in: .whitespacesAndNewlines.union(.punctuationCharacters))
+        let pattern = #"(?i)^.*?\b(jarvis|jarvas|jervis|javis|jarviss)\b[\s,.!?:;-]*"#
+        guard let range = cleaned.range(of: pattern, options: .regularExpression) else { return nil }
+        return String(cleaned[range.upperBound...]).trimmingCharacters(in: .whitespacesAndNewlines.union(.punctuationCharacters))
+    }
+
     private func heard(_ wav: Data) {
         setState(.thinking)
         say("…", speak: false)
@@ -592,15 +726,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate, AVAudioPlayerDelegate 
                 }
                 if request.isEmpty {                          // just "Jarvis"
                     followUp = true
-                    say("Yes, sir?", speak: true)
+                    say("Yes?", speak: true)
                     return
                 }
+                await respond(to: request)
+            } catch {
+                setState(.idle)
+                say("Something went wrong: \(error.localizedDescription)", speak: false)
+            }
+        }
+    }
+
+    /// Send a request to JARVIS and speak the answer.
+    @MainActor private func respond(to request: String) async {
+            do {
                 let lowered = request.lowercased()
                 if ["go to sleep", "that's all", "that is all", "goodbye", "never mind"].contains(where: lowered.hasPrefix) {
                     say("Very good, sir. I shall be here.", speak: true)
                     followUp = false
                     return
                 }
+                setState(.thinking)
                 say("“\(request)”", speak: false)
                 let result = try await api.chat(request, conversation: conversation)
                 conversation = result.conversation ?? conversation
@@ -610,7 +756,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, AVAudioPlayerDelegate 
                 setState(.idle)
                 say("Something went wrong: \(error.localizedDescription)", speak: false)
             }
-        }
     }
 
     /// The request with "Jarvis" removed; "" if only the name was said; nil if nothing was said.
@@ -630,8 +775,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, AVAudioPlayerDelegate 
             let audio = try await api.speech(text)
             let player = try AVAudioPlayer(data: audio)
             player.delegate = self
+            player.isMeteringEnabled = true
             self.player = player
             player.play()
+            meter?.invalidate()
+            meter = Timer.scheduledTimer(withTimeInterval: 0.06, repeats: true) { [weak self] _ in
+                guard let self, let player = self.player, player.isPlaying else { return }
+                player.updateMeters()
+                let level = max(0, (player.averagePower(forChannel: 0) + 45) / 45)   // real voice level
+                self.identity.evaluateJavaScript("window.jarvisDesktop && window.jarvisDesktop.setLevel(\(level))")
+            }
         } catch {
             finishSpeaking()
         }
@@ -642,7 +795,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, AVAudioPlayerDelegate 
     }
 
     private func finishSpeaking() {
-        if followUp { listen(); return }        // after "Yes, sir?" listen for the request
+        meter?.invalidate(); meter = nil
+        quietUntil = Date().addingTimeInterval(1.2)
+        if followUp { listen(); return }        // after "Yes?" listen for the request
         setState(muted ? .muted : .idle)
     }
 }
