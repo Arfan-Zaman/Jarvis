@@ -13,6 +13,7 @@ from support import JarvisTestCase
 
 EXPECTED_TOOLS = {
     "claude.work": "workspace", "claude.operate": "system", "claude.research": "web_read", "claude.converse": "web_read", "mac.find_files": "read", "mac.status": "read", "mac.open": "write", "mac.notify": "write", "claude.browse": "system",
+    "schedule.add": "write", "schedule.list": "read", "schedule.cancel": "write",
     "jarvis.info": "read", "system.health": "read", "projects.list": "read", "projects.get": "read",
     "tasks.list": "read", "memory.search": "read",
     "tasks.create": "write", "tasks.update": "write", "tasks.complete": "write",
@@ -344,7 +345,7 @@ class ToolApiTests(ToolCase):
     def test_discover_execute_and_read_history(self):
         status, tools = self.call("GET", "/api/tools")
         self.assertEqual((status, len(tools["items"])), (200, len(EXPECTED_TOOLS)))
-        self.assertEqual(len(self.call("GET", "/api/tools?permission=read")[1]["items"]), 8)   # + mac.find_files, mac.status
+        self.assertEqual(len(self.call("GET", "/api/tools?permission=read")[1]["items"]), 9)   # + mac.find_files, mac.status, schedule.list
 
         status, result = self.call("POST", "/api/tools/tasks.create/execute", {"inputs": {"title": "Via API"}})
         self.assertEqual((status, result["ok"]), (200, True))

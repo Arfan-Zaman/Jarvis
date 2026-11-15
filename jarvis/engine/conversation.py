@@ -95,6 +95,11 @@ ROUTER = """You decide how JARVIS handles the owner's latest message. Reply with
 {"mode": "image", "prompt": "<a full description of the picture to make>", "aspect_ratio": "1:1" | "16:9" | "9:16" | ...}
   when the owner wants a picture, photo, drawing, illustration or other image MADE for them.
 
+{"mode": "schedule", "kind": "reminder" | "job", "when": "<the time words, e.g. 'at 5pm', 'tomorrow
+ morning', 'every weekday at 8am'>", "what": "<what to remind about, or the request JARVIS should carry out then>"}
+  when the owner wants to be reminded of something at a time, or wants JARVIS to do something
+  later or on a repeating schedule. "reminder" tells the owner; "job" means JARVIS does the request.
+
 {"mode": "remember", "fact": "<the fact in the first person, as the owner would say it,
  e.g. 'I prefer short answers' - never 'The user ...'>", "category": "preference" | "personal" | "general"}
   when the owner explicitly asks JARVIS to remember or note something.
@@ -190,13 +195,20 @@ def auto_learn() -> bool:
 
 
 class Conversation:
+    _actor = "user:chat"
+
     def __init__(self, app):
         self.app = app
 
     # --- entry point -------------------------------------------------------
-    def respond(self, conversation_id: int, text: str, voice: bool = False) -> dict:
-        """Produce and store JARVIS's reply to the latest user message."""
+    def respond(self, conversation_id: int, text: str, voice: bool = False, actor: str = "user:chat") -> dict:
+        """Produce and store JARVIS's reply to the latest user message.
+
+        `actor` is who the work is done for in the logs: the owner ("user:chat"),
+        or a scheduled job ("jarvis:schedule"), whose approvals still wait for the owner.
+        """
         self._voice = voice
+        self._actor = actor
         pending = self._pending_question(conversation_id)
         if pending:
             if CANCEL.match(text):
@@ -216,6 +228,10 @@ class Conversation:
 
         if SELF_CHANGE.search(text):
             return self._say(conversation_id, persona.SELF_CHANGE, None)
+        if actor == "user:chat" and "schedule.add" in self.app.tools.names():
+            scheduled = self._schedule(conversation_id, text)      # reminders: understood here, no model needed
+            if scheduled:
+                return scheduled
         files = ATTACHED.findall(text)
         if files and "claude.work" in self.app.tools.names():   # files and photos: Claude Code can see them
             return self._delegate(conversation_id, (
@@ -223,7 +239,7 @@ class Conversation:
                 "Open and look at them (images and PDFs can be read directly). Their request:\n"
                 + ATTACHED.sub("", text).strip()), bool(MAKE_FILES.search(ATTACHED.sub("", text))))
         if MAC_STATUS.search(text) and len(text.split()) < 25 and "mac.status" in self.app.tools.names():
-            status = self.app.tools.execute("mac.status", {}, actor="user:chat")     # instant, no planner
+            status = self.app.tools.execute("mac.status", {}, actor=self._actor)     # instant, no planner
             if status["ok"]:
                 from ..tools.mac import describe_status
                 return self._say(conversation_id, describe_status(status["output"]), status["run_id"])
@@ -233,6 +249,8 @@ class Conversation:
             spoken = self._converse(conversation_id)       # a web question: Claude searches and answers
             if spoken:
                 return spoken
+        if decision.get("mode") == "schedule":
+            return self._schedule_decided(conversation_id, decision)
         if decision.get("mode") == "act":
             return self._act(conversation_id, decision["goal"])
         if decision.get("mode") == "image":
@@ -280,6 +298,11 @@ class Conversation:
         category = decision.get("category") if decision.get("category") in MEMORY_CATEGORIES else "general"
         fact = fact.strip()[:500] if isinstance(fact, str) and fact.strip() else None
         task = decision.get("task")
+        if decision.get("mode") == "schedule" and isinstance(decision.get("when"), str) and decision["when"].strip() \
+                and "schedule.add" in self.app.tools.names():
+            kind = decision.get("kind") if decision.get("kind") in ("reminder", "job") else "reminder"
+            return {"mode": "schedule", "kind": kind, "when": decision["when"].strip()[:200],
+                    "what": str(decision.get("what") or "").strip()[:1000]}
         if decision.get("mode") == "browse" and isinstance(task, str) and task.strip() \
                 and "claude.browse" in self.app.tools.names():
             return {"mode": "act", "goal": f"Use the claude.browse tool to do this in a web browser: {task.strip()[:2000]}"}
@@ -355,7 +378,7 @@ class Conversation:
                              "'Understood' or 'Certainly'. If unsure what they meant, ask one short question.")
         transcript = "\n".join(f"{'OWNER' if m['role'] == 'user' else 'JARVIS'}: {m['content'][:2000]}" for m in history)
         result = self.app.tools.execute("claude.converse", {"conversation": transcript + "\nJARVIS:",
-                                                             "instructions": instructions}, actor="user:chat")
+                                                             "instructions": instructions}, actor=self._actor)
         if not result["ok"] or not (result["output"] or {}).get("reply"):
             log.info("Claude conversation unavailable, using the local model: %s", result.get("error"))
             return None
@@ -420,10 +443,57 @@ class Conversation:
             conversation_id, "assistant", text, status.name, status.model,
             memory_refs=[{"id": saved["id"], "content": saved["content"]}])
 
+    # --- reminders and scheduled jobs ------------------------------------------
+    def schedule_reply(self, conversation_id: int, text: str) -> dict | None:
+        """Handle a reminder request on its own (used when no model is connected)."""
+        self._actor = "user:chat"
+        if "schedule.add" not in self.app.tools.names():
+            return None
+        return self._schedule(conversation_id, text)
+
+    def _schedule(self, conversation_id: int, text: str) -> dict | None:
+        """'remind me at 5pm to ...', 'every weekday at 8am check ...', 'what are my reminders',
+        'cancel the supplier reminder'. None when the message is not about scheduling."""
+        from .. import scheduler as sched
+        if sched.LIST.search(text) and not sched.REMIND.search(text) and not sched.CANCEL.search(text) \
+                and len(text.split()) < 20:
+            listed = self.app.tools.execute("schedule.list", {}, actor=self._actor)
+            if listed["ok"]:
+                return self._say(conversation_id, self.app.scheduler.spoken_list(), listed["run_id"])
+        if sched.CANCEL.search(text) and len(text.split()) < 25:
+            number = re.search(r"\b(?:number|no\.?|#)?\s*(\d+)\b", text)
+            inputs = {"id": int(number.group(1))} if number else {"about": text}
+            done = self.app.tools.execute("schedule.cancel", inputs, actor=self._actor)
+            return self._say(conversation_id, done["output"]["summary"] if done["ok"] else
+                             f"I couldn't cancel that: {done['error']}", done["run_id"])
+        remind = bool(sched.REMIND.search(text))
+        repeat = bool(sched.RECUR.search(text))
+        if not (remind or repeat):
+            return None
+        parsed = sched.parse(text, self.app.scheduler.now())
+        if not parsed or parsed["at"] is None or not parsed["rest"]:
+            return None                          # the router (or a question) will handle it
+        return self._schedule_decided(conversation_id, {
+            "kind": "reminder" if remind else "job", "when": parsed["when"], "what": parsed["rest"]})
+
+    def _schedule_decided(self, conversation_id: int, decision: dict) -> dict:
+        what = decision.get("what") or ""
+        if not what:
+            return self._say(conversation_id, "What should I remind you about?", None)
+        result = self.app.tools.execute("schedule.add", {"kind": decision["kind"], "when": decision["when"],
+                                                          "text": what}, actor=self._actor)
+        if not result["ok"]:
+            return self._say(conversation_id, result["error"] or "I couldn't set that.", result["run_id"])
+        if result["output"]["id"]:
+            self.app.schedules.attach(result["output"]["id"], conversation_id)
+        return self._say(conversation_id, result["output"]["summary"], result["run_id"])
+
     # --- acting ------------------------------------------------------------
     def _act(self, conversation_id: int, goal: str, resume: int | None = None) -> dict:
         try:
-            report = self.app.engine.resume(resume, answer=goal) if resume else self.app.engine.start(goal)
+            engine_actor = {} if self._actor == "user:chat" else {"actor": self._actor}
+            report = (self.app.engine.resume(resume, answer=goal, **engine_actor) if resume
+                      else self.app.engine.start(goal, **engine_actor))
         except (JarvisError, ProviderError) as exc:
             return self.app.conversations.add_message(
                 conversation_id, "system", f"I couldn't start that: {exc}", run_id=resume)
@@ -432,7 +502,7 @@ class Conversation:
 
     def _delegate(self, conversation_id: int, task: str, files: bool) -> dict:
         """Hard work goes to Claude Code (claude.work); its result is JARVIS's reply."""
-        result = self.app.tools.execute("claude.work", {"task": task, "write_files": files}, actor="user:chat")
+        result = self.app.tools.execute("claude.work", {"task": task, "write_files": files}, actor=self._actor)
         if result["ok"]:
             text = (result["output"] or {}).get("result", "").strip() or "Completed."
             return self.app.conversations.add_message(
@@ -450,7 +520,7 @@ class Conversation:
     def _image(self, conversation_id: int, prompt: str, aspect_ratio: str | None) -> dict:
         """Quote the price (spends nothing), then ask the owner before spending credits."""
         inputs = {"prompt": prompt, **({"aspect_ratio": aspect_ratio} if aspect_ratio else {})}
-        quote = self.app.tools.execute("image.quote", inputs, actor="user:chat")
+        quote = self.app.tools.execute("image.quote", inputs, actor=self._actor)
         if not quote["ok"]:
             return self._say(conversation_id, f"I couldn't price that picture: {quote['error']}", None)
         price = quote["output"]
@@ -460,7 +530,7 @@ class Conversation:
                 f"That picture would cost {cost:g} credits, but the Higgsfield account I'm connected to has "
                 f"{balance:g} ({price.get('plan') or 'unknown plan'}). Nothing was spent. If this is the old "
                 "account, reconnect the higgsfield connector with the paid one."), None)
-        result = self.app.tools.execute("image.generate", {**inputs, "max_credits": cost}, actor="user:chat")
+        result = self.app.tools.execute("image.generate", {**inputs, "max_credits": cost}, actor=self._actor)
         if result["status"] != "approval_required":   # approval is always required; anything else is a fault
             return self._image_reply(conversation_id, result)
         left = f" You have {balance:g}." if balance is not None else ""

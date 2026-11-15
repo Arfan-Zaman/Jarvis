@@ -2,6 +2,39 @@
 
 Newest entries first. Record what changed, why, and what was verified.
 
+## 2026-11-16 — Reminders and recurring jobs
+
+- Owner: "remind me at 5pm to call the supplier", "remind me tomorrow
+  morning…", "every weekday at 8am check the used-car prices".
+- `jarvis/scheduler.py`: plain-English time parsing in the owner's local zone
+  (at 5pm / at 9 = the next 9 o'clock / tomorrow at 5 = 5 pm / tonight / this
+  afternoon / in 20 minutes / in half an hour / on Friday / next Monday /
+  20 November / noon; every day / weekday / weekend / Monday and Thursday /
+  morning / daily), and a daemon thread (`app.scheduler`, started in `serve`,
+  every `JARVIS_SCHEDULE_TICK`=20 s, off with `JARVIS_SCHEDULER=0`). A schedule
+  is moved on before it fires, so it never fires twice; missed by >12 h (JARVIS
+  was off) it is skipped and marked "Missed"; a few minutes late it says when it
+  was due.
+- Schema v6: `schedules` and `schedule_alerts` (`jarvis/stores/schedules.py`).
+- Tools `schedule.add` / `schedule.list` / `schedule.cancel`. Chat understands
+  reminders, "what reminders do I have" and "cancel the supplier reminder"
+  without the model (so reminders work even with no model connected); the
+  router has a `schedule` mode for phrasings the patterns miss.
+- A reminder fires as: `mac.notify`, a spoken line on the JARVIS page
+  (`GET /api/reminders/due`, polled every 15 s, each alert handed out once),
+  and a message in the current conversation. A job runs its request through
+  the normal chat handling as `jarvis:schedule` in its own "Scheduled: …"
+  conversation; the result is posted in the current conversation. Anything
+  needing approval waits for the owner (tested with a financial tool).
+- Tasks page: Reminders panel (list, cancel, set one). API: `GET/POST
+  /api/reminders`, `POST /api/reminders/<id>/cancel`.
+- "Remind me to call Sam tomorrow" now sets a reminder rather than a task; two
+  conversation tests were reworded to "Add a task…".
+- Verified live on a throwaway server (port 8779): set by chat and API, the
+  panel listed all three, and at 10:12 the reminder fired: notification run
+  completed as `jarvis:schedule`, the JARVIS page spoke it, the conversation
+  got "Reminder: …". 296 tests pass (14 new, fake clock).
+
 ## 2026-11-16 — Mac access, sandboxed
 
 - `claude.operate` is now Mac access, on by default (`JARVIS_OPERATE=0` turns

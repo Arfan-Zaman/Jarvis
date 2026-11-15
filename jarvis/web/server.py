@@ -223,6 +223,36 @@ def _live(app: Jarvis, req: Request):
     return app.engine.live()
 
 
+# --- reminders and scheduled jobs -------------------------------------------
+@route("GET", "/api/reminders")
+def _reminders(app: Jarvis, req: Request):
+    """Active reminders and jobs, soonest first, with when each fires next in words."""
+    return {"items": app.scheduler.listing(), "scheduler": app.scheduler.status()}
+
+
+@route("POST", "/api/reminders")
+def _reminder_add(app: Jarvis, req: Request):
+    result = app.tools.execute("schedule.add", {"text": req.body.get("text"), "when": req.body.get("when"),
+                                                "kind": req.body.get("kind") or "reminder"})
+    if not result["ok"]:
+        raise ValidationError(result["error"] or "Could not set that")
+    return 201, result["output"]
+
+
+@route("POST", r"/api/reminders/(\d+)/cancel")
+def _reminder_cancel(app: Jarvis, req: Request):
+    result = app.tools.execute("schedule.cancel", {"id": int(req.params[0])})
+    if not result["ok"]:
+        raise NotFoundError(result["error"] or "No such reminder")
+    return result["output"]
+
+
+@route("GET", "/api/reminders/due")
+def _reminders_due(app: Jarvis, req: Request):
+    """Reminders that just fired, for the JARVIS page to say out loud. Each is handed out once."""
+    return {"items": app.scheduler.due_alerts()}
+
+
 IDENTITY_ASSETS = ("base.png", "listening.png", "analysing.png", "planning.png", "executing.png",
                    "concerned.png", "resolute.png", "approval.png", "success.png", "warning.png",
                    "error.png", "critical.png", "idle.mp4", "thinking.mp4", "executing.mp4")

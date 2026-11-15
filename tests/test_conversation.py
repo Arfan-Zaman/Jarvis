@@ -81,7 +81,7 @@ class ActTests(ConversationCase):
     def test_request_is_carried_out_and_reported_from_the_record(self):
         self.scripted([act("Add a task to call Sam tomorrow"), plan(("Create the task", "tasks.create")),
                        inputs(title="Call Sam"), ACHIEVED])
-        reply, _ = self.say("Remind me to call Sam tomorrow")
+        reply, _ = self.say("Add a task to call Sam tomorrow")
         self.assertEqual(reply["content"], "Completed. I added the task “Call Sam”.")
         self.assertTrue(reply["run_id"])
         run = self.app.runs.get(reply["run_id"])
@@ -102,7 +102,7 @@ class ActTests(ConversationCase):
                        plan(("Create", "tasks.create"), ("Set due date", "tasks.update"), ("Note", "memory.save")),
                        inputs(title="Call Sam"), inputs(id=1, due_at="2030-01-02"), inputs(content="Sam likes calls."),
                        ACHIEVED])
-        reply, _ = self.say("Remind me to call Sam tomorrow")
+        reply, _ = self.say("Add a task to call Sam tomorrow")
         self.assertEqual(reply["content"], "Completed. I added the task “Call Sam” and noted “Sam likes calls”.")
 
     def test_the_model_is_told_the_date_and_project_names(self):
