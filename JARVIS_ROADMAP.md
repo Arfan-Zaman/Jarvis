@@ -11,7 +11,7 @@ Business environments: Monsoor Motors, Aureus Detailing.
 | Phase | Name | Status |
 |---|---|---|
 | 1 | Foundation | **Complete** |
-| 2 | Intelligence Core | **In progress**: steps 2.1 and 2.2 complete (149 tests passing); 2.3 is next |
+| 2 | Intelligence Core | **In progress**: steps 2.1 to 2.3 complete (155 tests passing); 2.4 is next |
 | 3 | Autonomous workforce | Not started |
 | 4 | Personal interface (voice) | Not started |
 | 5 | Business intelligence | Not started |
@@ -34,7 +34,7 @@ steps with its tools, ask for approval when needed, and report truthfully.
 |---|---|---|---|
 | 2.1 | **Done.** Tool registry, run log (`runs`, `run_steps`), built-in tools | No | Tools run through the safety layer; every call is logged; tests pass |
 | 2.2 | **Done.** Reasoning engine loop, tested with a scripted stand-in model | No | A scripted run completes, pauses for approval, fails honestly, and resumes; tests pass |
-| 2.3 | Connect one local model (Ollama) | **Yes, owner decision D1** | Chat answers for real; adapter verified against real Ollama |
+| 2.3 | **Done.** Connect one local model (Ollama, Qwen 3.5 9B) | Installed with approval | Chat answers for real; adapter verified against real Ollama |
 | 2.4 | Contextual memory: full-text search and context builder | No | Answers draw on stored memories and lessons, with sources shown |
 | 2.5 | Planning: goals become visible task lists that the engine works through | No | A multi-step goal is planned, executed, checked and reported |
 | 2.6 | Interface: Runs page showing live steps, approvals and results | No | The owner can watch, approve, cancel and resume a run |
@@ -72,5 +72,4 @@ Existing code and tests are preserved.
 
 ## Owner decisions pending
 
-1. **D1:** approve installing Ollama and one small model (roughly 2 to 5 GB)
-   when step 2.3 is reached. Not needed before then.
+None at the moment. D1 was decided: Qwen 3.5 9B in the Ollama desktop app.

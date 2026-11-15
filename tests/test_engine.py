@@ -23,7 +23,7 @@ def inputs(**values):
     return {"inputs": values}
 
 
-SUMMARY = {"summary": "All done."}
+SUMMARY = {"achieved": True, "summary": "All done."}
 ONE_TASK = [plan(("Create the task", "tasks.create")), inputs(title="Call the supplier"), SUMMARY]
 
 
@@ -81,6 +81,7 @@ class GoalTests(EngineCase):
         self.assertEqual(app.list("tasks")[0]["project_id"], project["id"])
         # The model was shown the tool list and the running state.
         self.assertIn("tasks.create", self.model.prompts[0][0].content)
+        self.assertEqual(self.model.json_requests, len(self.model.prompts))   # every engine call asks for JSON
         self.assertEqual(json.loads(self.model.prompts[0][1].content)["request"], "PLAN")
 
     def test_no_model_means_no_run(self):
@@ -202,11 +203,66 @@ class HonestyTests(EngineCase):
         self.sql("DELETE FROM run_steps WHERE run_id = ?", (report["run_id"],))
         self.assertFalse(app.engine.report(report["run_id"])["verified_complete"])
 
-    def test_missing_summary_does_not_undo_verified_work(self):
-        app = self.scripted(ONE_TASK[:2] + ["no json here", "still none"])
+    def test_unconfirmed_goal_is_not_reported_complete(self):
+        app = self.scripted(ONE_TASK[:2] + ["no json here", {"summary": "Done!"}])
         report = app.engine.start("Add a task")
+        self.assertEqual((report["status"], report["verified_complete"]), ("failed", False))
+        self.assertIn("could not confirm", report["error"])
+        self.assertEqual(len(app.list("tasks")), 1)          # the work that did happen is still recorded
+
+    def test_lookup_only_plan_is_caught_and_extended(self):
+        # The real-model failure: the plan only looked things up, then claimed success.
+        app = self.scripted([
+            plan(("Find the project", "projects.list")), inputs(),
+            {"achieved": False, "missing": "The task was not created",
+             "next_steps": [{"description": "Create the task", "tool": "tasks.create"}]},
+            inputs(title="Call the parts supplier"),
+            SUMMARY,
+        ])
+        report = app.engine.start("Add a task to call the parts supplier")
         self.assertEqual((report["status"], report["verified_complete"]), ("completed", True))
-        self.assertIsNone(report["model_summary"])
+        self.assertEqual([s["tool"] for s in report["plan"]], ["projects.list", "tasks.create"])
+        self.assertEqual(report["changes_made"], [{"tool": "tasks.create",
+                                                   "what": f"title: Call the parts supplier (#{app.list('tasks')[0]['id']})"}])
+        self.assertIn("1 change(s) made", report["summary"])
+
+    def test_goal_not_achieved_fails_honestly(self):
+        app = self.scripted([plan(("Find the project", "projects.list")), inputs(),
+                             {"achieved": False, "missing": "Nothing was created", "next_steps": []}])
+        report = app.engine.start("Add a task")
+        self.assertEqual((report["status"], report["verified_complete"]), ("failed", False))
+        self.assertIn("goal was not achieved: Nothing was created", report["error"])
+        self.assertEqual(report["changes_made"], [])
+
+    def test_plan_is_extended_only_once(self):
+        not_yet = {"achieved": False, "missing": "Still missing",
+                   "next_steps": [{"description": "Look again", "tool": "projects.list"}]}
+        app = self.scripted([plan(("Look", "projects.list")), inputs(), not_yet, inputs(), not_yet])
+        report = app.engine.start("Add a task")
+        self.assertEqual(report["status"], "failed")
+        self.assertEqual(len(report["plan"]), 2)
+        self.assertIn("Still missing", report["error"])
+
+    def test_review_cannot_add_unknown_tools(self):
+        bad = {"achieved": False, "missing": "x", "next_steps": [{"description": "Wipe", "tool": "shell.run"}]}
+        app = self.scripted([plan(("Look", "projects.list")), inputs(), bad, bad])
+        report = app.engine.start("Add a task")
+        self.assertEqual(report["status"], "failed")
+        self.assertEqual(len(report["plan"]), 1)
+
+    def test_read_only_goal_reports_no_changes(self):
+        app = self.scripted([plan(("List projects", "projects.list")), inputs(), SUMMARY])
+        report = app.engine.start("Which projects do I have?")
+        self.assertEqual((report["status"], report["changes_made"]), ("completed", []))
+        self.assertIn("no changes were needed or made", report["summary"])
+
+    def test_the_model_is_told_to_ask_rather_than_guess(self):
+        app = self.scripted([{"blocked": "Which business: Monsoor Motors or Aureus Detailing?"}])
+        report = app.engine.start("Add a task for the business")
+        self.assertEqual(report["status"], "blocked")
+        protocol = self.model.prompts[0][0].content
+        self.assertIn("Never guess which project", protocol)
+        self.assertIn("does not by itself add", protocol)
 
 
 class LimitTests(EngineCase):
@@ -248,6 +304,9 @@ class BlockedAndApprovalTests(EngineCase):
         self.assertEqual((done["status"], done["verified_complete"]), ("completed", True))
         answers = json.loads(self.model.prompts[1][1].content)["answers_from_owner"]
         self.assertEqual(answers, [{"question": "Which business is this for?", "answer": "Monsoor Motors"}])
+        shown_goal = json.loads(self.model.prompts[1][1].content)["goal"]
+        self.assertIn('Q: "Which business is this for?" A: "Monsoor Motors"', shown_goal)
+        self.assertEqual(app.runs.get(done["run_id"])["goal"], "Add a task for the business")   # stored goal unchanged
 
     def test_blocked_during_a_step(self):
         app = self.scripted([plan(("Create", "tasks.create")), {"blocked": "What should the task say?"},

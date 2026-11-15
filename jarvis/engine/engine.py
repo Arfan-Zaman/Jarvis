@@ -58,10 +58,26 @@ When asked for an ACTION for a step, reply with either
 or
   {"blocked": "<the question to ask the owner>"}
 
-When asked for a SUMMARY, reply with {"summary": "<one or two sentences>"}.
+When asked for a REVIEW, compare the goal with the recorded results and reply with either
+  {"achieved": true, "summary": "<one or two sentences describing only what the results show>"}
+or, if the goal is not fully achieved yet,
+  {"achieved": false, "missing": "<what is still missing>",
+   "next_steps": [{"description": "...", "tool": "..."}, ...]}
+(leave next_steps empty if the missing part cannot be done with the tools).
 
-Use only the listed tools and only their listed inputs. Keep plans short.
-Never state that something was done unless a result shown to you says so."""
+Rules:
+- A plan must include the steps that actually make the requested change. Looking
+  something up (list, get, search) does not by itself add, create, save or update anything.
+- The owner's projects are listed under "projects" with their ids. If the goal names
+  one, use its id directly. If the goal does not mention a project, leave project_id out:
+  it is optional.
+- Ask only when the goal refers to something that genuinely has more than one possible
+  meaning (for example "the business" when there are several projects) or a REQUIRED
+  input is missing. Then reply {"blocked": "<short question>"}. Never guess which project,
+  person or value the owner means, and never ask about something already answered in
+  "answers_from_owner".
+- Use only the listed tools and only their listed inputs. Use ids from results; never invent them.
+- Keep plans short. Never state that something was done unless a result shown to you says so."""
 
 
 class _Halt(Exception):
@@ -159,6 +175,11 @@ class Engine:
             "running": f"In progress: {len(done)} of {len(plan)} planned step(s) done.",
         }[run["status"]]
         model_summary = (run["result"] or {}).get("model_summary")
+        changes = [{"tool": e["tool"], "what": self._describe(e["output"])} for e in executions
+                   if e["status"] == "succeeded" and e["category"] != "read"]
+        if run["status"] == "completed":
+            headline = (f"Goal achieved and checked: {len(plan)} step(s) succeeded, "
+                        + (f"{len(changes)} change(s) made." if changes else "no changes were needed or made."))
         return {
             "run_id": run_id, "goal": run["goal"], "status": run["status"], "verified_complete": verified,
             "summary": headline, "error": run["error"],
@@ -172,6 +193,7 @@ class Engine:
                                 (s["position"] for s in plan if s["id"] == e["plan_id"]), None),
                             "tool": e["tool"], "status": e["status"], "error": e["error"],
                             "duration_ms": e["duration_ms"]} for e in executions],
+            "changes_made": changes,
             "counts": {status: sum(1 for e in executions if e["status"] == status)
                        for status in ("succeeded", "failed", "refused", "waiting_approval")},
             "context_used": {"memories": [m["id"] for m in (run["context"] or {}).get("memories", [])],
@@ -183,6 +205,15 @@ class Engine:
         }
 
     # --- internals ---------------------------------------------------------
+    @staticmethod
+    def _describe(output) -> str:
+        """A short, factual description of what a write tool produced."""
+        record = output.get("task", output) if isinstance(output, dict) else {}
+        for key in ("title", "content", "name"):
+            if isinstance(record.get(key), str):
+                return f"{key}: {record[key][:120]}" + (f" (#{record['id']})" if "id" in record else "")
+        return json.dumps(output, default=str)[:120]
+
     def _goal_run(self, run_id: int) -> dict:
         run = self.app.runs.get(run_id)
         if run["kind"] != "goal":
@@ -222,7 +253,7 @@ class Engine:
                 raise _Halt("failed", f"Stopped: the limit of {self.app.config.engine_max_model_calls} "
                                       "model calls for one goal was reached")
             budget["calls"] += 1
-            reply = self.app.provider.generate(messages).text
+            reply = self.app.provider.generate(messages, json_output=True).text
             try:
                 return check(parse_json(reply))
             except (ValueError, JarvisError) as exc:
@@ -234,10 +265,16 @@ class Engine:
 
     def _state(self, run: dict) -> dict:
         context = run["context"] or {}
+        answers = context.get("answers", [])
+        goal = run["goal"]
+        if answers:     # fold the owner's answers into the goal itself, so they cannot be overlooked
+            goal += "\n\nThe owner has clarified: " + " ".join(
+                f'Q: "{item["question"]}" A: "{item["answer"]}".' for item in answers)
         return {
-            "goal": run["goal"],
+            "goal": goal,
             "known_memories": context.get("memories", []), "lessons": context.get("lessons", []),
             "answers_from_owner": context.get("answers", []),
+            "projects": [{"id": p["id"], "name": p["name"]} for p in self.app.projects.list(limit=100)],
             "plan": [{"position": s["position"], "description": s["description"], "tool": s["tool"],
                       "status": s["status"]} for s in run["plan"]],
             "results_so_far": [{"tool": e["tool"], "status": e["status"], "error": e["error"],
@@ -254,10 +291,12 @@ class Engine:
             allowed = (run["context"] or {}).get("allowed")
             if not run["plan"]:
                 self._plan(run, budget, allowed)
-            for step in runs.get(run_id)["plan"]:
-                if step["status"] != "completed":
-                    self._step(run_id, step, budget, allowed)
-            self._finish(run_id, budget, allowed)
+            while True:
+                for step in runs.get(run_id)["plan"]:
+                    if step["status"] != "completed":
+                        self._step(run_id, step, budget, allowed)
+                if self._finish(run_id, budget, allowed):
+                    break
         except _Halt as halt:
             runs.update(run_id, status=halt.status, error=halt.reason)
         except ProviderError as exc:
@@ -284,14 +323,7 @@ class Engine:
             plan = reply.get("plan")
             if not isinstance(plan, list) or not plan:
                 raise ValueError('expected {"plan": [...]} with at least one step')
-            if len(plan) > limit:
-                raise ValueError(f"the plan has {len(plan)} steps; the limit is {limit}")
-            for number, item in enumerate(plan, 1):
-                if not isinstance(item, dict) or not isinstance(item.get("description"), str) \
-                        or not item["description"].strip():
-                    raise ValueError(f"step {number} needs a description")
-                if item.get("tool") not in names:
-                    raise ValueError(f"step {number} uses '{item.get('tool')}', which is not an available tool")
+            self._check_steps(plan, names, limit)
             return reply
 
         reply = self._ask("PLAN", self._state(run), check, budget, allowed)
@@ -299,6 +331,17 @@ class Engine:
             raise _Halt("blocked", _question(reply))
         self.app.runs.set_plan(run["id"], [{"description": item["description"].strip()[:500], "tool": item["tool"]}
                                            for item in reply["plan"]])
+
+    @staticmethod
+    def _check_steps(steps: list, names: set, limit: int) -> None:
+        if len(steps) > limit:
+            raise ValueError(f"the plan has {len(steps)} steps; the limit is {limit}")
+        for number, item in enumerate(steps, 1):
+            if not isinstance(item, dict) or not isinstance(item.get("description"), str) \
+                    or not item["description"].strip():
+                raise ValueError(f"step {number} needs a description")
+            if item.get("tool") not in names:
+                raise ValueError(f"step {number} uses '{item.get('tool')}', which is not an available tool")
 
     def _step(self, run_id: int, step: dict, budget: dict, allowed) -> None:
         runs, tool = self.app.runs, self.app.tools.get(step["tool"])
@@ -369,17 +412,45 @@ class Engine:
         unproven = [s["position"] for s in run["plan"] if s["status"] != "completed" or s["id"] not in proven]
         if not run["plan"] or unproven:
             raise _Halt("failed", f"Completion could not be verified for step(s) {unproven}")
-        summary = None
-        try:
-            def check(reply: dict) -> dict:
-                if not isinstance(reply.get("summary"), str) or not reply["summary"].strip():
-                    raise ValueError('expected {"summary": "..."}')
-                return reply
 
-            summary = self._ask("SUMMARY", self._state(run), check, budget, allowed)["summary"].strip()[:1000]
-        except (_Halt, JarvisError) as exc:     # the summary is optional; the work is already verified
-            log.info("No model summary for run %s: %s", run_id, exc)
-        self.app.runs.update(run_id, status="completed", error=None, result={"model_summary": summary})
+        # Every step ran. Now check the GOAL was achieved, not just the plan.
+        names = {tool["name"] for tool in self._tools(allowed)}
+        room = self.app.config.engine_max_steps - len(run["plan"])
+        context = run["context"] or {}
+
+        def check(reply: dict) -> dict:
+            if reply.get("achieved") is True:
+                return reply
+            if reply.get("achieved") is not False:
+                raise ValueError('expected {"achieved": true, ...} or {"achieved": false, ...}')
+            if not isinstance(reply.get("missing"), str) or not reply["missing"].strip():
+                raise ValueError('when "achieved" is false, say what is "missing"')
+            steps = reply.get("next_steps") or []
+            if not isinstance(steps, list):
+                raise ValueError('"next_steps" must be a list')
+            if steps:
+                self._check_steps(steps, names, max(room, 0))
+            return reply
+
+        try:
+            review = self._ask("REVIEW", self._state(run), check, budget, allowed)
+        except _Halt as halt:
+            if "model calls" in halt.reason:
+                raise
+            raise _Halt("failed", "Every planned step succeeded, but the model could not confirm the goal was "
+                                  "achieved, so it is not reported as complete") from None
+        if review["achieved"]:
+            summary = review.get("summary")
+            summary = summary.strip()[:1000] if isinstance(summary, str) and summary.strip() else None
+            self.app.runs.update(run_id, status="completed", error=None, result={"model_summary": summary})
+            return True
+        missing, extra = review["missing"].strip()[:500], review.get("next_steps") or []
+        if extra and not context.get("extended"):        # one chance to add the missing steps
+            self.app.runs.append_plan(run_id, [{"description": item["description"].strip()[:500],
+                                                "tool": item["tool"]} for item in extra])
+            self.app.runs.update(run_id, context={**context, "extended": True})
+            return False
+        raise _Halt("failed", f"The planned steps ran, but the goal was not achieved: {missing}")
 
     def _remember(self, run: dict) -> None:
         """Record the outcome as an experience, once, and only if it is new."""

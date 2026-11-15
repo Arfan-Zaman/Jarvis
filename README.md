@@ -3,11 +3,13 @@
 A local, modular personal assistant core. Milestone 1 is a small, stable
 foundation: persistent data, a safety layer, backups, and a local web
 interface. Phase 2.1 added controlled tools and a run log; Phase 2.2 adds a
-reasoning engine that plans and carries out goals using those tools. It has **no AI model connected yet** and says so wherever that
-matters.
+reasoning engine that plans and carries out goals using those tools. Phase 2.3
+connects a local AI model (Qwen 3.5 9B through Ollama), so JARVIS can now chat
+and carry out goals for real, entirely on this Mac.
 
 - Runs entirely on this Mac. Nothing is sent anywhere.
-- Python standard library only. Nothing to install.
+- Python standard library only. The one outside program is Ollama, which runs
+  the AI model.
 - All data lives in `data/` inside this folder.
 
 ## What currently works
@@ -85,8 +87,11 @@ You give JARVIS a goal in plain language. It works in four stages:
 3. **Check.** A failed step gets one corrected attempt. A refused step stops
    the goal. A sensitive step pauses for your approval. If the model needs
    information, the goal stops with its question.
-4. **Report.** Built from the run log, not from what the model says. A goal
-   is "verified" only if every planned step has a recorded success.
+4. **Review.** The model checks the recorded results against the goal. If
+   something is missing it may add steps once; otherwise the goal fails.
+5. **Report.** Built from the run log, not from what the model says. A goal
+   is "verified" only if every planned step has a recorded success and the
+   review confirms the goal was achieved. The report lists the changes made.
 
 Relevant memories and lessons are shown to the model as context. Each
 finished or failed goal is saved once as an experience. Limits on plan
@@ -94,9 +99,14 @@ length, tool failures and model calls (see `.env.example`) prevent runaway
 loops. A goal interrupted by a crash or shutdown can be continued without
 repeating finished steps.
 
-**Current state:** the engine is built and tested with a scripted stand-in
-model. No real model is connected, so on your Mac the Goals page and the
-`goal` command say so and do nothing.
+The model is shown your project names, so it can use them directly, and is
+told to ask rather than guess when a request is ambiguous.
+
+**Tested with the real model:** adding a task, a multi-step goal (task plus
+memory for a named business), an ambiguous goal that asked "which project?"
+and then finished after the answer, and a read-only question. A typical goal
+takes 5 to 20 seconds. The first request after starting Ollama takes about 15
+seconds longer while the model loads.
 
 ## Tools
 
@@ -227,14 +237,28 @@ communication and financial actions do not exist yet; the gate for them does.
 
 ## AI providers
 
-No model is installed or connected. The interface shows "No AI connected" and
-chat stores your message with a system notice rather than inventing a reply.
+JARVIS uses **Qwen 3.5 9B** running in **Ollama** on this Mac. Nothing is sent
+over the internet, and there is no cost. Ollama is a desktop app that starts at
+login; it must be running for chat and goals to work. If it is not running,
+JARVIS says so instead of answering.
+
+Settings live in `.env` (private, not in Git):
+
+```
+JARVIS_AI_PROVIDER=ollama
+JARVIS_AI_MODEL=qwen3.5:9b
+```
+
+For goals, JARVIS asks Ollama for strict JSON and turns off the model's hidden
+"thinking" output, which keeps replies fast. To switch models, `ollama pull`
+another one and change `JARVIS_AI_MODEL`. To disconnect, set
+`JARVIS_AI_PROVIDER=none`.
 
 `jarvis/providers/base.py` defines the interface. To add a provider, subclass
 `AIProvider` and register it in `jarvis/providers/registry.py`.
 
-- **Ollama**: an adapter exists and is tested against a simulated server only.
-  It has never been run against a real Ollama installation.
+- **Ollama**: connected and verified against the real server (chat, JSON
+  replies, goals, and the "model not installed" message).
 - **Apple MLX**: placeholder only. Selecting it reports that it is not implemented.
 - **External providers**: none exist. They are blocked unless
   `JARVIS_ALLOW_EXTERNAL_AI=true`.
@@ -246,12 +270,14 @@ cd ~/JARVIS
 python3 -m unittest discover -s tests
 ```
 
-149 tests cover database initialisation, memory create/retrieve/delete, task
+155 tests cover database initialisation, memory create/retrieve/delete, task
 creation and completion, project creation, experience storage, configuration
 loading, safety checks, AI provider reporting, backup and restore, the web
 API, the tool registry, tool execution, permissions, the run log, and the
 reasoning engine (planning, failures, invalid plans, missing information,
-approvals, limits, false completion claims, interruption recovery). Each test uses its own temporary database and never touches `data/`.
+approvals, limits, false completion claims, goal review, interruption
+recovery). The automated tests use a scripted stand-in, so they never need
+Ollama. Each test uses its own temporary database and never touches `data/`.
 
 ## Backup and recovery
 
@@ -275,13 +301,15 @@ approvals, limits, false completion claims, interruption recovery). Each test us
 
 ## Current limitations
 
-- No AI model is connected, so chat cannot answer and goals cannot run. The
-  reasoning engine has only been run with a scripted stand-in.
+- The model is small and local: it handles simple goals well but can still
+  make poor plans on complex ones. The review step and the run log catch
+  failures, but they are not perfect.
+- Chat only talks; it does not take actions. Actions go through Goals.
 - Context recall is keyword matching on the goal's words, not meaning-based.
 - Goals run while you wait; there is no background execution.
 - Tools can be executed from the command line and the API. The web interface
   shows tools and their history but has no form to run one.
-- The Ollama adapter is untested against real Ollama. MLX is not implemented.
+- MLX is not implemented.
 - Memory and experience search is plain keyword matching, not semantic.
 - No login. The server accepts connections from this Mac only and rejects
   requests from other websites, but anyone using this Mac account can open it.
@@ -295,6 +323,6 @@ approvals, limits, false completion claims, interruption recovery). Each test us
 
 ## Next recommended milestone
 
-**Phase 2.3: connect one local model.** Install Ollama and one small model
-(your approval needed), verify the adapter against it, and run real goals and
-chat through the engine. See `NEXT_SESSION.md`.
+**Phase 2.4: contextual memory.** Full-text search over memories and lessons,
+and a context builder that gives the model the most relevant facts with their
+sources. No installs needed. See `NEXT_SESSION.md`.

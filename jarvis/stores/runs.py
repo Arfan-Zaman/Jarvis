@@ -144,6 +144,17 @@ class RunStore:
                 "VALUES (?, ?, ?, ?, 'pending', ?)",
                 [(run_id, number, step["description"], step["tool"], now) for number, step in enumerate(steps, 1)])
 
+    def append_plan(self, run_id: int, steps: list[dict]) -> None:
+        now = utcnow()
+        with self.db.connect() as conn:
+            start = conn.execute("SELECT COALESCE(MAX(position), 0) FROM run_plan WHERE run_id = ?",
+                                 (run_id,)).fetchone()[0]
+            conn.executemany(
+                "INSERT INTO run_plan (run_id, position, description, tool, status, updated_at) "
+                "VALUES (?, ?, ?, ?, 'pending', ?)",
+                [(run_id, start + number, step["description"], step["tool"], now)
+                 for number, step in enumerate(steps, 1)])
+
     def update_plan_step(self, plan_id: int, **fields) -> None:
         if "status" in fields and fields["status"] not in PLAN_STATUSES:
             raise ValueError(f"unknown plan status: {fields['status']}")

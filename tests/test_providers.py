@@ -22,7 +22,7 @@ class EchoProvider(AIProvider):
     def status(self):
         return ProviderStatus("echo", "local", True, True, "echo-1", "test provider")
 
-    def generate(self, messages):
+    def generate(self, messages, json_output=False):
         self.seen = messages
         if self.fail:
             raise ProviderError("model crashed")
@@ -143,6 +143,10 @@ class OllamaAdapterTests(unittest.TestCase):
         self.assertEqual(response.text, "hello from fake")
         self.assertEqual(self.server.requests[0]["model"], "tiny")
         self.assertFalse(self.server.requests[0]["stream"])
+        self.assertFalse(self.server.requests[0]["think"])
+        self.assertNotIn("format", self.server.requests[0])
+        provider.generate([ChatMessage("user", "hi")], json_output=True)
+        self.assertEqual(self.server.requests[1]["format"], "json")
 
     def test_missing_model_is_reported(self):
         status = OllamaProvider(self.url, "absent", timeout=5).status()

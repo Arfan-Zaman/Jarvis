@@ -25,8 +25,9 @@ class ScriptedProvider(AIProvider):
         return ProviderStatus("scripted", "local", True, True, "scripted",
                               "Scripted stand-in used for testing. Not a real model.")
 
-    def generate(self, messages: list[ChatMessage]) -> ProviderResponse:
+    def generate(self, messages: list[ChatMessage], json_output: bool = False) -> ProviderResponse:
         self.prompts.append(messages)
+        self.json_requests = getattr(self, "json_requests", 0) + bool(json_output)
         if not self.replies:
             raise ProviderError("The scripted stand-in has no more replies.")
         reply = self.replies.pop(0)

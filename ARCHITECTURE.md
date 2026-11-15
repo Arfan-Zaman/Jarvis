@@ -16,7 +16,7 @@ See `JARVIS_ROADMAP.md` for sequence and `NEXT_SESSION.md` for the next task.
    download needs a stated reason.
 7. **Claude Code builds JARVIS; it is not JARVIS's brain.**
 
-## 2. What exists today (Phase 1, 2.1 and 2.2, complete and tested)
+## 2. What exists today (Phase 1 and 2.1 to 2.3, complete and tested)
 
 ```
 Web interface / command line
@@ -42,8 +42,9 @@ Web interface / command line
 | Tool registry and execution engine | `jarvis/tools/registry.py` | Working (Phase 2.1) |
 | Built-in tools (11) | `jarvis/tools/builtin.py` | Working (Phase 2.1) |
 | Run log and plans | `jarvis/stores/runs.py` | Working, schema v3 |
-| Reasoning engine | `jarvis/engine/engine.py` | Working with a scripted stand-in; no real model yet |
-| Tests | `tests/` | 149 passing |
+| Reasoning engine | `jarvis/engine/engine.py` | Working with the real local model |
+| Local model | Ollama + `qwen3.5:9b` | Connected and verified |
+| Tests | `tests/` | 155 passing |
 
 Tables: memories, experiences, tasks, projects, agents, conversations,
 messages, system_events, settings, approvals, runs, run_steps, run_plan.
@@ -52,7 +53,7 @@ messages, system_events, settings, approvals, runs, run_steps, run_plan.
 
 | # | Decision | Chosen direction | Needs the owner? |
 |---|---|---|---|
-| D1 | Where the brain runs | A small local model through Ollama. The adapter already exists. | **Yes**: it means installing Ollama and one model download of roughly 2 to 5 GB. This is the only install Phase 2 needs. |
+| D1 | Where the brain runs | **Decided:** Qwen 3.5 9B in the Ollama desktop app. | Decided: it means installing Ollama and one model download of roughly 2 to 5 GB. This is the only install Phase 2 needs. |
 | D2 | Which model | One small general model that fits in 16 GB memory. Chosen by a short trial, not by guesswork. | Approve the pick |
 | D3 | Cloud fallback | Built as a slot, switched off. Only free tiers, only with `JARVIS_ALLOW_EXTERNAL_AI=true`, and each use is an "external communication" needing approval. | Later |
 | D4 | How the brain acts | Only through registered tools. The model proposes; the engine checks and executes. The model never touches the database or files directly. | No |
@@ -135,7 +136,9 @@ validated against the allowed tools and the step limit, then stored) → for eac
 step: ACTION (model returns `{"inputs": {...}}`, validated against the tool's
 schema) → `ToolRegistry.execute(..., actor="jarvis-core", run_id, plan_id)` →
 CHECK (success: next step; failure: one corrected attempt; refused: stop;
-approval needed: pause) → REPORT from `run_plan` and `run_steps`.
+approval needed: pause) → REVIEW (model confirms the goal is achieved, or
+names what is missing and may add steps once) → REPORT from `run_plan` and
+`run_steps`, including `changes_made`.
 
 `Engine.resume(run_id, answer)` continues an `interrupted`, `waiting_approval`
 or `blocked` run. `Engine.cancel` ends one. Limits:

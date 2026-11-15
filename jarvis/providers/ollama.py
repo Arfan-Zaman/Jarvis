@@ -55,14 +55,20 @@ class OllamaProvider(AIProvider):
             return result(False, f"Ollama is running but the model '{self.model}' is not installed there.")
         return result(True, f"Connected to Ollama at {self.base_url}.")
 
-    def generate(self, messages: list[ChatMessage]) -> ProviderResponse:
+    def generate(self, messages: list[ChatMessage], json_output: bool = False) -> ProviderResponse:
         if not self.model:
             raise ProviderError("JARVIS_AI_MODEL is not set.")
-        reply = self._request("/api/chat", {
+        payload = {
             "model": self.model,
             "stream": False,
+            # No hidden step-by-step "thinking": JARVIS needs a direct answer, quickly.
+            "think": False,
             "messages": [{"role": message.role, "content": message.content} for message in messages],
-        })
+            "options": {"temperature": 0.2 if json_output else 0.6},
+        }
+        if json_output:
+            payload["format"] = "json"   # Ollama constrains the reply to valid JSON
+        reply = self._request("/api/chat", payload)
         content = (reply.get("message") or {}).get("content", "")
         if not isinstance(content, str) or not content.strip():
             raise ProviderError("Ollama returned an empty response.")

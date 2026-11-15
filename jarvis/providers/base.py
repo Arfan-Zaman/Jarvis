@@ -52,8 +52,12 @@ class AIProvider(ABC):
         """Report honestly whether this provider can answer right now."""
 
     @abstractmethod
-    def generate(self, messages: list[ChatMessage]) -> ProviderResponse:
-        """Return a completion for the conversation, or raise ProviderError."""
+    def generate(self, messages: list[ChatMessage], json_output: bool = False) -> ProviderResponse:
+        """Return a completion for the conversation, or raise ProviderError.
+
+        `json_output=True` asks the model to reply with a JSON object only.
+        Providers that cannot enforce this may ignore it; callers still validate.
+        """
 
 
 class NullProvider(AIProvider):
@@ -70,5 +74,5 @@ class NullProvider(AIProvider):
         return ProviderStatus(name="none", kind="none", configured=False, available=False,
                               model="", detail=self.detail)
 
-    def generate(self, messages: list[ChatMessage]) -> ProviderResponse:
+    def generate(self, messages: list[ChatMessage], json_output: bool = False) -> ProviderResponse:
         raise ProviderError(self.detail)

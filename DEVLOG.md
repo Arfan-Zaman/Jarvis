@@ -2,6 +2,45 @@
 
 Newest entries first. Record what changed, why, and what was verified.
 
+## 2026-11-16 — Phase 2.3: local model connected
+
+### Installed (owner approved)
+- Ollama desktop app 0.40.16 via Homebrew cask `ollama-app`. It starts at login
+  and runs in the background (the owner chose this over on-demand).
+- Model `qwen3.5:9b` (7.6 GB on disk). The first download was cut off when the
+  network dropped and resumed on retry.
+- `.env` created (git-ignored): `JARVIS_AI_PROVIDER=ollama`,
+  `JARVIS_AI_MODEL=qwen3.5:9b`.
+
+### Changed
+- `generate(messages, json_output=False)` across providers. The engine always
+  asks for JSON; Ollama gets `format: "json"`, `think: false`, low temperature.
+- New REVIEW stage. After every step succeeds, the model must confirm the goal
+  was achieved. If not, it may add steps once; otherwise the run fails with
+  what is missing. An unusable review means "not confirmed", never "done".
+- Reports list `changes_made` (successful non-read tool calls) and the headline
+  says how many changes were made.
+- The model sees the project list and the owner's answers folded into the goal
+  text. The protocol says when to ask and forbids guessing.
+- The chat system prompt lists what JARVIS can and cannot do.
+
+### Found by testing with the real model, then fixed
+1. A plan that only looked up projects was reported "verified complete", and
+   the model claimed it had added the task. Fixed by the REVIEW stage.
+2. An ambiguous "the business" was silently assigned to one project. Fixed by
+   the ask-don't-guess rule.
+3. The first fix over-corrected (it asked even when the project was named or
+   not needed). Fixed by showing the model the project list.
+4. After answering a question, the model asked it again. Fixed by putting
+   answers into the goal text.
+5. Chat claimed JARVIS could send email and manage a calendar. Fixed with an
+   accurate capability list; it now declines and points to Goals.
+
+### Verified
+- 155 tests passing (149 existing, 6 new; tests never need Ollama).
+- Real model, throwaway database: four goals, all with the correct outcome
+  (5 to 21 seconds each); chat answers honestly.
+
 ## 2026-11-15 — Phase 2.2: reasoning engine
 
 ### Built
