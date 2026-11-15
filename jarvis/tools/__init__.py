@@ -2,7 +2,8 @@
 
 from .builtin import register_builtin
 from .claude import register_claude
+from .images import register_images
 from .registry import Tool, ToolRegistry
 from .web import register_web
 
-__all__ = ["Tool", "ToolRegistry", "register_builtin", "register_claude", "register_web"]
+__all__ = ["Tool", "ToolRegistry", "register_builtin", "register_claude", "register_images", "register_web"]

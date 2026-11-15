@@ -235,6 +235,22 @@ def _identity_assets(app: Jarvis, req: Request):
             "files": [name for name in IDENTITY_ASSETS if (folder / name).is_file()]}
 
 
+@route("GET", r"/api/files/(.+)")
+def _workspace_file(app: Jarvis, req: Request):
+    """A file JARVIS made (such as a generated picture). Only files inside the workspace."""
+    from urllib.parse import unquote
+    workspace = Path(app.config.workspace_dir).resolve()
+    target = (workspace / unquote(req.params[0])).resolve()
+    if not target.is_relative_to(workspace) or target == workspace:
+        raise PermissionDenied("Only files inside JARVIS's workspace can be served")
+    if not target.is_file():
+        raise NotFoundError("No such file in the workspace")
+    kind = mimetypes.guess_type(target.name)[0] or ""
+    # Never run workspace HTML, SVG or scripts on JARVIS's own origin: only plain pictures show inline.
+    safe = kind in ("image/png", "image/jpeg", "image/webp", "image/gif", "text/plain")
+    return Raw(target.read_bytes(), kind if safe else "application/octet-stream")
+
+
 @route("GET", "/api/runs")
 def _runs(app: Jarvis, req: Request):
     return {"items": app.runs.list(limit=_int(req.query.get("limit", 50), "limit"),

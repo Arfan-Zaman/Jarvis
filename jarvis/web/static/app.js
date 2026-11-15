@@ -7,6 +7,16 @@ const $ = (selector) => document.querySelector(selector);
 const state = { projects: [], conversationId: null, timer: null, navigation: 0, cleanup: [], presenceConversation: null };
 
 // --- helpers ---------------------------------------------------------------
+// Pictures JARVIS made: a workspace image path in a reply is shown as the picture itself.
+const WORKSPACE_IMAGE = /workspace\/(images\/[\w.-]+\.(?:png|jpe?g|webp|gif))/gi;
+function workspaceImages(text) {
+  const names = [...new Set([...String(text || '').matchAll(WORKSPACE_IMAGE)].map((m) => m[1]))];
+  return names.length ? h('div', { class: 'msg-images' }, names.map((name) =>
+    h('a', { href: `/api/files/${name}`, target: '_blank', rel: 'noopener' },
+      h('img', { src: `/api/files/${name}`, alt: 'Picture made by JARVIS', loading: 'lazy',
+        style: 'max-width:100%;max-height:420px;border-radius:10px;margin-top:8px;display:block' })))) : null;
+}
+
 function h(tag, attrs, ...children) {
   const el = document.createElement(tag);
   attrs = attrs || {};
@@ -318,6 +328,7 @@ views.chat = {
       h('div', { class: 'who' }, message.role === 'assistant' ? `JARVIS · ${message.model || message.provider || ''}`
         : message.role === 'system' ? 'System notice' : 'You'),
       h('div', { class: 'wrap' }, message.content),
+      workspaceImages(message.content),
       message.memory_refs && message.memory_refs.length
         ? h('div', { class: 'meta' }, chip('From memory', 'violet'),
           message.memory_refs.map((ref) => h('span', { class: 'chip', title: ref.content },
@@ -1045,6 +1056,7 @@ views.presence = {
         if (result.reply.run_id) offerApproval(result.reply.run_id);
         clearInterval(poll);
         reply.textContent = result.reply.content.replace(/ Approve or deny it on the System page, then press Continue\./, ' Approve or deny it below.');
+        const pictures = workspaceImages(result.reply.content); if (pictures) reply.append(pictures);
         if (result.reply.memory_refs) memoryLine.replaceChildren(chip('From memory', 'violet'), ...result.reply.memory_refs.map((r) => chip(r.content.length > 40 ? r.content.slice(0, 39) + '…' : r.content)));
         const live = await api('GET', '/api/live').catch(() => null);
         if (live && live.run_id && live.run_id > baseline) {

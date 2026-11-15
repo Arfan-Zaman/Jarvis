@@ -18,6 +18,7 @@ EXPECTED_TOOLS = {
     "tasks.create": "write", "tasks.update": "write", "tasks.complete": "write",
     "memory.save": "write", "experience.record": "write",
     "web.search": "web_read", "web.fetch": "web_read",
+    "image.quote": "web_read", "image.generate": "financial",
 }
 
 
@@ -49,8 +50,9 @@ class RegistryTests(ToolCase):
         for tool in tools.values():
             self.assertTrue(tool["description"])
             self.assertIsInstance(tool["inputs"], dict)
-            # Only the full-power Claude Code tool (shell in the workspace) asks first.
-            self.assertEqual(tool["requires_approval"], tool["name"] in ("claude.operate", "claude.browse"))
+            # Only Claude Code with a shell, the browser, and spending picture credits ask first.
+            self.assertEqual(tool["requires_approval"],
+                             tool["name"] in ("claude.operate", "claude.browse", "image.generate"))
         self.assertEqual(tools["tasks.create"]["inputs"]["title"], {
             "type": "string", "description": "What needs doing.", "required": True})
         self.assertEqual({t["name"] for t in self.app.tools.list("write")},
