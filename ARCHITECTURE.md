@@ -49,7 +49,7 @@ Web interface / command line
 | Autonomy levels (`web_read`, `workspace`) | `jarvis/safety.py` | Working (3.3) |
 | Internet (`web.search`, `web.fetch`) | `jarvis/tools/web.py` | Working; keyless search is limited (3.4) |
 | Voice (whisper.cpp in, macOS speech out) | `jarvis/voice.py` | Working, push-to-talk (3.5) |
-| JARVIS Desktop (floating orb, double clap, login item) | `desktop/JARVISDesktop.swift`, `jarvis/desktop.py` | Installed; real claps to be confirmed by the owner |
+| JARVIS Desktop (floating orb, double clap, login item) | `desktop/JARVISDesktop.swift`, `jarvis/desktop.py` | Installed; confirmed working with real claps |
 | Tests | `tests/` | 233 passing |
 
 Tables: memories, experiences, tasks, projects, agents, conversations,

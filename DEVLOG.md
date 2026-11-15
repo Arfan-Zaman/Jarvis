@@ -22,6 +22,9 @@ Newest entries first. Record what changed, why, and what was verified.
   speech is judged against the measured room level (5x, minimum 0.005); 8 s to
   start speaking; the name is optional after a double clap (the clap is the
   call). Recording outcomes are logged.
+- Third real test: the owner confirmed JARVIS woke and answered. The claps
+  themselves, kept in the pre-roll, were transcribed as a stray word ("Amen"),
+  so the pre-roll is now cleared at the moment the double clap is recognised.
 
 ## 2026-11-16 — JARVIS Desktop: floating orb, double clap, auto-start
 

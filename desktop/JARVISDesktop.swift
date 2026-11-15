@@ -503,6 +503,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, AVAudioPlayerDelegate 
         let format = input.inputFormat(forBus: 0)
         let detector = ClapDetector(sampleRate: format.sampleRate)
         detector.onDoubleClap = { [weak self] _ in
+            // Runs on the audio queue: drop the claps themselves from the pre-roll (whisper
+            // turned them into a stray word), keep everything said from here on.
+            self?.preRoll.removeAll()
             DesktopLog.write("DOUBLE CLAP -> waking")
             DispatchQueue.main.async { self?.wake() }
         }

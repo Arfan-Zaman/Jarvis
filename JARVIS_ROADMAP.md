@@ -75,7 +75,7 @@ personality.**
 | 3.3 | **Done.** Autonomy policy (`workspace`, `web_read` automatic; the four hard lines ask) | No | |
 | 3.4 | **Done** (keyless search is limited; optional Brave key). Internet: `web.search`, `web.fetch` with sources | No | |
 | 3.5 | **Done** (push-to-talk). **Voice.** Talk to JARVIS from the browser (push-to-talk) and hear it answer. Speech-to-text with whisper.cpp (installed 2026-11-16, model in `data/models`); spoken replies with the macOS voice (British, butler tone); "go to sleep" / "wake up"; transcripts saved like chat | Done | Speak a request, hear a truthful spoken answer; works offline |
-| 3.5b | **Done** (owner's request). **JARVIS Desktop.** Floating orb on the desktop, starts at login, double clap then "Jarvis" to talk, answers aloud and acts | No | Real claps confirmed by the owner |
+| 3.5b | **Done** (owner's request). **JARVIS Desktop.** Floating orb on the desktop, starts at login, double clap then "Jarvis" to talk, answers aloud and acts | No | **Confirmed by the owner 2026-11-16** |
 | 3.6 | **Living interface (HUD).** An arc-reactor status ring (online, listening, thinking, speaking), the active model shown, live action cards ("Searching…", "Running code…") while a run works | No | The ring and cards follow real state, never animation alone |
 | 3.7 | **Code runner.** Python in the sandboxed workspace (time and output limits, no writes outside) | No | Escapes blocked in tests; real tasks run |
 | 3.8 | **Skills and learn-once, Claude Code bridge.** Claude Code builds a skill the first time; the same kind of task then runs locally | No | Second time needs no Claude |
