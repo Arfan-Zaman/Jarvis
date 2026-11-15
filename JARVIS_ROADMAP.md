@@ -14,7 +14,7 @@ Business-specific work (Monsoor Motors, Aureus Detailing) comes later.**
 |---|---|---|
 | 1 | Foundation | **Complete** |
 | 2 | Intelligence Core: tools, reasoning engine, local model | **Complete** (2.1 to 2.3; 155 tests passing) |
-| 3 | A real JARVIS: one conversation that thinks, remembers and acts | **Next** |
+| 3 | A real JARVIS: one conversation that thinks, remembers and acts | **In progress**: 3.1 done (174 tests passing); 3.2 next |
 | 4 | Voice | Not started |
 | 5 | Autonomous workforce (specialist agents) | Not started |
 | 6 | Business intelligence | Later, by owner's choice |
@@ -43,7 +43,7 @@ information.
 
 | Step | What gets built | Needs install? | Done when |
 |---|---|---|---|
-| 3.1 | **One conversation that thinks and acts.** Chat decides for itself whether to just answer or to carry out an action through the reasoning engine, then replies in natural language based on what actually happened. Goals page stays as the detailed view | No | "Remind me to call Sam tomorrow" in chat creates the task and says so truthfully; "What's 15% of 240?" just answers; refusals and approvals appear in the conversation |
+| 3.1 | **Done.** **One conversation that thinks and acts.** Chat decides for itself whether to just answer or to carry out an action through the reasoning engine, then replies in natural language based on what actually happened. Goals page stays as the detailed view | No | "Remind me to call Sam tomorrow" in chat creates the task and says so truthfully; "What's 15% of 240?" just answers; refusals and approvals appear in the conversation |
 | 3.2 | **Memory of you.** Full-text memory search; a context builder that gives the model the most relevant facts with their sources; conversation history carried forward; JARVIS proposes "Shall I remember that?" for personal facts and preferences, saved only with your yes | No | Tell it a preference once, and later answers use it, citing that it came from memory |
 | 3.3 | **Personality and self-knowledge.** A consistent JARVIS voice (calm, concise, a little dry, addresses you as you prefer); accurate knowledge of its own abilities, generated from the live tool list | No | Asked "what can you do?", it answers from its real tool list; tone is consistent across chat and reports |
 | 3.4 | **Everyday tools.** Date and time, calculations, unit conversion, notes, reminders with due times, reading files you place in a JARVIS inbox folder | No | Each tool tested; reading is confined to the inbox folder |

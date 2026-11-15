@@ -5,7 +5,8 @@ foundation: persistent data, a safety layer, backups, and a local web
 interface. Phase 2.1 added controlled tools and a run log; Phase 2.2 adds a
 reasoning engine that plans and carries out goals using those tools. Phase 2.3
 connects a local AI model (Qwen 3.5 9B through Ollama), so JARVIS can now chat
-and carry out goals for real, entirely on this Mac.
+and carry out goals for real, entirely on this Mac. Phase 3.1 makes chat one
+conversation that both talks and acts.
 
 - Runs entirely on this Mac. Nothing is sent anywhere.
 - Python standard library only. The one outside program is Ollama, which runs
@@ -24,7 +25,7 @@ pages were also exercised by hand in a browser.
 | Experiences | Record what happened, the outcome and the lesson; look lessons up by keyword |
 | Tasks | Create, prioritise, complete, reopen; completing with a lesson stores an experience |
 | Projects | Create, rename, archive; tasks, memories and experiences attach to a project |
-| Conversations | Chat messages are stored; with no model, a clearly labelled system notice is stored instead of a reply |
+| Conversation | One chat that talks and acts. JARVIS decides whether to answer or to carry out a request through the reasoning engine, asks when something is unclear and takes your next message as the answer, and reports actions in fixed wording taken from the record. Each action shows as a card with its status |
 | Safety | Read-only mode, approval for destructive / external / financial / system actions, file-path limits |
 | Audit trail | Every change, approval, denial and refusal is recorded in `system_events` |
 | Configuration | `.env` file with validation, plus runtime settings in the database |
@@ -74,6 +75,28 @@ python3 -m jarvis tools           # list the tools JARVIS can execute
 python3 -m jarvis goal "Add a task to call the supplier"   # plan and run a goal (needs a model)
 python3 -m jarvis tool tasks.create '{"title": "Example"}'   # execute one tool
 ```
+
+## Talking to JARVIS
+
+Just chat. For each message JARVIS decides:
+
+- **Answer:** conversation, questions, maths, advice. Nothing changes.
+- **Act:** you want something done with its tools ("remind me to call Sam
+  tomorrow", "what tasks do I have?", "remember that I prefer short
+  answers"). The request goes through the reasoning engine below.
+
+What JARVIS says it *did* comes from the run log in fixed wording ("Done. I
+added the task …"), so the model cannot add claims. Answers to look-ups are
+phrased by the model from the data the tools returned. If JARVIS needs a
+detail it asks, and your next message is taken as the answer ("never mind"
+cancels). Sensitive steps wait for approval on the System page; saying "yes"
+in chat never approves anything. JARVIS knows today's date and its own real
+abilities, which come from the live tool list.
+
+Real conversation, Qwen 3.5 9B: a greeting, "15% of 240" (36), "remind me to
+call Sam tomorrow" (task created with the correct date), an ambiguous request
+that asked which business, a task list, saving a preference, and declining to
+send email. Replies take 2 to 30 seconds; the first after a restart is slowest.
 
 ## Goals and the reasoning engine
 
@@ -270,13 +293,14 @@ cd ~/JARVIS
 python3 -m unittest discover -s tests
 ```
 
-155 tests cover database initialisation, memory create/retrieve/delete, task
+174 tests cover database initialisation, memory create/retrieve/delete, task
 creation and completion, project creation, experience storage, configuration
 loading, safety checks, AI provider reporting, backup and restore, the web
 API, the tool registry, tool execution, permissions, the run log, and the
 reasoning engine (planning, failures, invalid plans, missing information,
 approvals, limits, false completion claims, goal review, interruption
-recovery). The automated tests use a scripted stand-in, so they never need
+recovery), and the conversation (routing, truthful reporting, follow-up
+questions, approvals in chat). The automated tests use a scripted stand-in, so they never need
 Ollama. Each test uses its own temporary database and never touches `data/`.
 
 ## Backup and recovery
@@ -304,7 +328,10 @@ Ollama. Each test uses its own temporary database and never touches `data/`.
 - The model is small and local: it handles simple goals well but can still
   make poor plans on complex ones. The review step and the run log catch
   failures, but they are not perfect.
-- Chat only talks; it does not take actions. Actions go through Goals.
+- Memory is used only when JARVIS decides to look something up; it does not
+  yet bring relevant memories into every reply (Phase 3.2).
+- Routing can occasionally misjudge whether you wanted an action. When unsure
+  it answers rather than acts.
 - Context recall is keyword matching on the goal's words, not meaning-based.
 - Goals run while you wait; there is no background execution.
 - Tools can be executed from the command line and the API. The web interface
@@ -323,7 +350,7 @@ Ollama. Each test uses its own temporary database and never touches `data/`.
 
 ## Next recommended milestone
 
-**Phase 3.1: one conversation that thinks and acts.** Chat decides for itself
-whether to answer or to carry out an action, and replies truthfully about what
-happened. The priority is a genuinely intelligent general JARVIS; business
-specialisation comes later. See `JARVIS_ROADMAP.md` and `NEXT_SESSION.md`.
+**Phase 3.2: memory of you.** JARVIS brings the most relevant things it knows
+about you into every reply, cites them, and offers "Shall I remember that?"
+for personal facts and preferences, saving only with your yes. No installs.
+See `NEXT_SESSION.md`.

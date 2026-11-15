@@ -29,6 +29,11 @@ def utcnow(offset_minutes: float = 0) -> str:
     return moment.isoformat(timespec="milliseconds")
 
 
+def now_local() -> str:
+    """The owner's local date and time, worded for a model: 'Monday 16 November 2026, 14:05'."""
+    return datetime.now().astimezone().strftime("%A %d %B %Y, %H:%M")
+
+
 def text(field: str, *, required: bool = False, max_len: int = 20000):
     """Validator factory for text fields."""
 

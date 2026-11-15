@@ -297,10 +297,28 @@ views.chat = {
     const input = h('textarea', { placeholder: 'Message JARVIS…', title: 'Enter to send, Shift+Enter for a new line', 'aria-label': 'Message' });
     const send = h('button', { class: 'btn primary', type: 'submit' }, 'Send');
 
+    const runTone = { completed: 'ok', failed: 'bad', blocked: 'warn', waiting_approval: 'pink', interrupted: 'warn', cancelled: null };
+    const actionCard = (runId) => {
+      const card = h('div', { class: 'action-card' }, h('span', { class: 'muted small' }, 'Loading action…'));
+      api('GET', `/api/runs/${runId}`).then(({ report }) => {
+        const resume = act(async () => { await api('POST', `/api/runs/${runId}/resume`); await openThread(); refreshChrome(); });
+        card.replaceChildren(
+          h('div', { class: 'row' }, h('span', { class: 'small muted' }, `Action #${runId}`),
+            chip(label(report.status), runTone[report.status]), report.verified_complete ? chip('verified', 'ok') : null),
+          report.changes_made.length ? h('ul', { class: 'small' }, report.changes_made.map((c) => h('li', null, `${c.tool}: ${c.what}`))) : null,
+          h('div', { class: 'row' },
+            h('a', { class: 'btn sm', href: '#goals' }, 'Details'),
+            report.status === 'waiting_approval' ? h('a', { class: 'btn sm', href: '#system' }, 'Review approval') : null,
+            ['waiting_approval', 'interrupted'].includes(report.status) ? h('button', { class: 'btn sm primary', onclick: resume }, 'Continue') : null));
+      }).catch(() => card.replaceChildren(h('span', { class: 'muted small' }, `Action #${runId}`)));
+      return card;
+    };
+
     const bubble = (message) => h('div', { class: `msg ${message.role}` },
       h('div', { class: 'who' }, message.role === 'assistant' ? `JARVIS · ${message.model || message.provider || ''}`
         : message.role === 'system' ? 'System notice' : 'You'),
-      h('div', { class: 'wrap' }, message.content));
+      h('div', { class: 'wrap' }, message.content),
+      message.run_id ? actionCard(message.run_id) : null);
 
     const showMessages = (list) => {
       messages.replaceChildren(...(list.length ? list.map(bubble)

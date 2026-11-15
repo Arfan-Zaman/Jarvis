@@ -29,7 +29,7 @@ from __future__ import annotations
 import json
 import re
 
-from ..common import JarvisError, NotFoundError, ValidationError, text
+from ..common import JarvisError, NotFoundError, ValidationError, now_local, text
 from ..logging_setup import get_logger
 from ..providers import ChatMessage, ProviderError
 from ..safety import ActionCategory
@@ -69,8 +69,11 @@ Rules:
 - A plan must include the steps that actually make the requested change. Looking
   something up (list, get, search) does not by itself add, create, save or update anything.
 - The owner's projects are listed under "projects" with their ids. If the goal names
-  one, use its id directly. If the goal does not mention a project, leave project_id out:
-  it is optional.
+  one (or the owner named one in a clarification), use its id directly. If no project is
+  named, leave project_id out entirely: it is optional. Never pick a project yourself.
+- "today" gives the current local date and time. Work out dates such as "tomorrow" from
+  it and write them as YYYY-MM-DD. Set every known field when creating something, rather
+  than creating it and then updating it.
 - Ask only when the goal refers to something that genuinely has more than one possible
   meaning (for example "the business" when there are several projects) or a REQUIRED
   input is missing. Then reply {"blocked": "<short question>"}. Never guess which project,
@@ -271,6 +274,7 @@ class Engine:
             goal += "\n\nThe owner has clarified: " + " ".join(
                 f'Q: "{item["question"]}" A: "{item["answer"]}".' for item in answers)
         return {
+            "today": now_local(),
             "goal": goal,
             "known_memories": context.get("memories", []), "lessons": context.get("lessons", []),
             "answers_from_owner": context.get("answers", []),

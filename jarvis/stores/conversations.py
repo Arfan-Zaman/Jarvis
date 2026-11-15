@@ -21,7 +21,7 @@ class ConversationStore(Store):
     order_by = "updated_at DESC, id DESC"
 
     def add_message(self, conversation_id: int, role: str, content: str,
-                    provider: str | None = None, model: str | None = None) -> dict:
+                    provider: str | None = None, model: str | None = None, run_id: int | None = None) -> dict:
         if role not in ROLES:
             raise ValidationError(f"role must be one of: {', '.join(ROLES)}")
         content = text("message", required=True)(content)
@@ -29,9 +29,9 @@ class ConversationStore(Store):
         now = utcnow()
         with self.db.connect() as conn:
             cursor = conn.execute(
-                "INSERT INTO messages (conversation_id, role, content, provider, model, created_at) "
-                "VALUES (?, ?, ?, ?, ?, ?)",
-                (conversation_id, role, content, provider, model, now),
+                "INSERT INTO messages (conversation_id, role, content, provider, model, run_id, created_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (conversation_id, role, content, provider, model, run_id, now),
             )
             conn.execute("UPDATE conversations SET updated_at = ? WHERE id = ?", (now, conversation_id))
             row = conn.execute("SELECT * FROM messages WHERE id = ?", (cursor.lastrowid,)).fetchone()

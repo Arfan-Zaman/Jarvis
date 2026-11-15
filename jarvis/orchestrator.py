@@ -16,8 +16,9 @@ from .common import NotFoundError, ValidationError, utcnow
 from .config import Config, load_config
 from .db import SCHEMA_VERSION, Database
 from .engine import Engine
+from .engine.conversation import Conversation
 from .logging_setup import get_logger
-from .providers import AIProvider, ChatMessage, ProviderError, build_provider
+from .providers import AIProvider, ProviderError, build_provider
 from .safety import ActionCategory, SafetyLayer
 from .stores.runs import RunStore
 from .tools import ToolRegistry, register_builtin
@@ -29,21 +30,9 @@ from .stores import (
 log = get_logger("core")
 
 CORE_AGENT = "jarvis-core"
-SYSTEM_PROMPT = (
-    "You are JARVIS, a private assistant running locally on the owner's Mac. Be concise and accurate.\n"
-    "What JARVIS can actually do today, through the Goals page: list and read projects; list, search, "
-    "create, update and complete tasks; search and save memories; record experiences and lessons; "
-    "report its own system health.\n"
-    "What JARVIS cannot do: send email or messages, use a calendar, browse the web, control devices, "
-    "make payments, or act outside its own database. Never claim or offer these.\n"
-    "In this chat you only talk; you cannot take actions. If the owner wants something done, suggest "
-    "they give it as a goal on the Goals page. Never claim to have performed an action. "
-    "If you do not know something, say so."
-)
 NO_PROVIDER_NOTICE = (
     "No AI model is connected, so JARVIS cannot answer. Your message has been saved. {detail}"
 )
-CONTEXT_MESSAGES = 20
 
 # The only records created automatically. Descriptions are deliberately minimal:
 # JARVIS must not invent business information.
@@ -72,6 +61,7 @@ class Jarvis:
         self.tools = ToolRegistry(self)
         register_builtin(self.tools)
         self.engine = Engine(self)
+        self.conversation = Conversation(self)
         self.started_at = time.time()
         # Record kinds reachable through the generic API below.
         self.stores = {
@@ -233,10 +223,11 @@ class Jarvis:
 
     # --- chat --------------------------------------------------------------
     def chat(self, text: str, conversation_id: int | None = None) -> dict:
-        """Store the user's message and, if a model is connected, its reply.
+        """Store the user's message and JARVIS's reply.
 
-        With no provider, a clearly labelled system notice is stored instead.
-        JARVIS never writes an 'assistant' message that a model did not produce.
+        JARVIS decides whether to just answer or to carry out an action through
+        the reasoning engine (see `engine/conversation.py`). With no provider, a
+        clearly labelled system notice is stored instead.
         """
         if not isinstance(text, str) or not text.strip():
             raise ValidationError("message is required")
@@ -251,14 +242,8 @@ class Jarvis:
             reply = self.conversations.add_message(
                 conversation_id, "system", NO_PROVIDER_NOTICE.format(detail=status.detail).strip())
         else:
-            history = [message for message in self.conversations.messages(conversation_id)
-                       if message["role"] in ("user", "assistant")][-CONTEXT_MESSAGES:]
-            prompt = [ChatMessage("system", SYSTEM_PROMPT)]
-            prompt += [ChatMessage(message["role"], message["content"]) for message in history]
             try:
-                response = self.provider.generate(prompt)
-                reply = self.conversations.add_message(
-                    conversation_id, "assistant", response.text, response.provider, response.model)
+                reply = self.conversation.respond(conversation_id, text)
             except ProviderError as exc:
                 log.warning("AI provider failed: %s", exc)
                 self.events.record("ai", "provider.error", str(exc), level="error")

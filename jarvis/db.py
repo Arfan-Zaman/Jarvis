@@ -223,6 +223,11 @@ MIGRATIONS: list[str] = [
     );
     CREATE INDEX idx_run_plan_run ON run_plan(run_id, position);
     """,
+    # --- version 4: chat messages can point at the action (run) they triggered -
+    """
+    ALTER TABLE messages ADD COLUMN run_id INTEGER REFERENCES runs(id) ON DELETE SET NULL;
+    CREATE INDEX idx_messages_run ON messages(run_id);
+    """,
 ]
 
 SCHEMA_VERSION = len(MIGRATIONS)

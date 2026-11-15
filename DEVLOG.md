@@ -2,6 +2,38 @@
 
 Newest entries first. Record what changed, why, and what was verified.
 
+## 2026-11-16 — Phase 3.1: one conversation that thinks and acts
+
+### Built
+- `jarvis/engine/conversation.py`: for each chat message the model routes to
+  ANSWER or ACT (JSON). ACT runs the reasoning engine on a restated goal.
+- Truthful replies: what JARVIS did is written in fixed wording from the run
+  log ("Done. I added the task …"). The model phrases only look-up answers,
+  from the data the tools returned. Chosen over model-written summaries because
+  the real model was seen inventing actions (Phase 2.3).
+- Follow-ups: when the last reply asked a question, the next message resumes
+  that run as the answer; "never mind" and similar cancel it.
+- Approvals are explained in chat; chat text never approves anything.
+- The chat system prompt is generated from the live tool list and includes the
+  owner's local date and time.
+- Schema v4: `messages.run_id`; chat shows an action card (status, changes,
+  Details, Review approval, Continue).
+
+### Found with the real model, then fixed
+1. No sense of today's date: "tomorrow" became today. The model now gets the
+   local date and time in plans, chat and look-up answers.
+2. It attached a task to a project the owner never mentioned. The protocol now
+   forbids picking a project.
+3. Clumsy reports ("added …, updated …, updated …"). Updates to a task just
+   created are folded into "added"; duplicates are removed.
+4. A look-up labelled a project wrongly. Look-up answers now get project names.
+
+### Verified
+- 174 tests passing (155 existing, 19 new).
+- Real conversation on a throwaway database: small talk, maths, a reminder with
+  the correct date and no guessed project, a clarifying question then
+  completion, a task list, saving a preference, declining email.
+
 ## 2026-11-16 — Phase 2.3: local model connected
 
 ### Installed (owner approved)

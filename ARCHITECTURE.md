@@ -16,7 +16,7 @@ See `JARVIS_ROADMAP.md` for sequence and `NEXT_SESSION.md` for the next task.
    download needs a stated reason.
 7. **Claude Code builds JARVIS; it is not JARVIS's brain.**
 
-## 2. What exists today (Phase 1 and 2.1 to 2.3, complete and tested)
+## 2. What exists today (Phases 1 and 2, step 3.1; complete and tested)
 
 ```
 Web interface / command line
@@ -44,7 +44,8 @@ Web interface / command line
 | Run log and plans | `jarvis/stores/runs.py` | Working, schema v3 |
 | Reasoning engine | `jarvis/engine/engine.py` | Working with the real local model |
 | Local model | Ollama + `qwen3.5:9b` | Connected and verified |
-| Tests | `tests/` | 155 passing |
+| Conversation (talk or act) | `jarvis/engine/conversation.py` | Working with the real local model (3.1) |
+| Tests | `tests/` | 174 passing |
 
 Tables: memories, experiences, tasks, projects, agents, conversations,
 messages, system_events, settings, approvals, runs, run_steps, run_plan.
@@ -143,6 +144,16 @@ names what is missing and may add steps once) → REPORT from `run_plan` and
 `Engine.resume(run_id, answer)` continues an `interrupted`, `waiting_approval`
 or `blocked` run. `Engine.cancel` ends one. Limits:
 `JARVIS_ENGINE_MAX_STEPS`, `_MAX_FAILURES`, `_MAX_MODEL_CALLS`.
+
+### 4.2c How a chat message is handled (built, step 3.1)
+
+`Jarvis.chat` → `Conversation.respond`: if the previous reply asked a question
+for a run that is still `blocked`, the message resumes it (or cancels it).
+Otherwise a JSON routing call chooses `answer` (plain reply; system prompt
+built from the tool list and the current date) or `act` (restated goal →
+`Engine.start`). Act replies are composed from `run_steps` in fixed wording;
+look-ups with no changes are phrased by the model from the tool outputs only.
+The reply is stored with `messages.run_id` (schema v4).
 
 ### 4.3 How one request flows
 
