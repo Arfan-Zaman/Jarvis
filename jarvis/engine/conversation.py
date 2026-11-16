@@ -50,6 +50,9 @@ MEMORY_CATEGORIES = ("preference", "personal", "general")
 SELF_CHANGE = re.compile(r"\b(code|improve|upgrade|rewrite|reprogram|modify|change|update|optimi[sz]e)\s+(yourself|your\s+own\s+(code|program|software|system)|your\s+code)\b", re.I)
 MAC_STATUS = re.compile(r"\b(battery|charge|charging|disk space|storage|free space|how much space|wi-?fi|"
                         r"ip address|uptime)\b", re.I)
+RUN_THINGS = re.compile(r"\b(run|execute|launch|start)\b[^.?!]{0,60}\b(test|tests|test suite|script|code|program|"
+                        r"app|server|agent|benchmark|build|notebook)\b|\b(pip|npm|brew)\s+install\b|\binstall\s+(the\s+)?"
+                        r"(package|library|dependency|dependencies|requirements)\b|\brun\s+(it|them|that)\b", re.I)
 ATTACHED = re.compile(r"\[Attached: (uploads/[A-Za-z0-9][A-Za-z0-9._-]*)\]")
 # Requests that need real skill: sent to Claude Code even if the small router says "answer".
 HARD_WORK = re.compile(
@@ -301,6 +304,11 @@ class Conversation:
         goal, fact = decision.get("goal"), decision.get("fact") or decision.get("remember")
         category = decision.get("category") if decision.get("category") in MEMORY_CATEGORIES else "general"
         fact = fact.strip()[:500] if isinstance(fact, str) and fact.strip() else None
+        # running, testing or installing needs a shell: Mac access (the owner approves the task once)
+        latest_text = next((m["content"] for m in reversed(self._history(conversation_id)) if m["role"] == "user"), "")
+        if RUN_THINGS.search(latest_text) and "claude.operate" in self.app.tools.names() \
+                and os.environ.get("JARVIS_OPERATE", "1") != "0":
+            return {"mode": "act", "goal": f"Use the claude.operate tool to do this on the Mac: {latest_text.strip()[:2000]}"}
         task = decision.get("task")
         if decision.get("mode") == "schedule" and isinstance(decision.get("when"), str) and decision["when"].strip() \
                 and "schedule.add" in self.app.tools.names():
@@ -476,23 +484,41 @@ class Conversation:
         repeat = bool(sched.RECUR.search(text))
         if not (remind or repeat):
             return None
+        # "every Monday do X and every Friday do Y": one schedule per part, never merged
+        body = re.sub(r"^\s*(please\s+)?(set up|create|make|add)\s+(me\s+)?(a\s+)?([\w-]+\s+)?(routine|schedule|plan)s?\s*[:,-]?\s*",
+                      "", text, flags=re.I)
+        parts = [x.strip(" ,;.") for x in re.split(r"(?:,|;|\band\b|\balso\b)\s+(?=every\b|each\b|on\s+(?:mon|tue|wed|thu|fri|sat|sun))",
+                                                   body, flags=re.I) if x.strip(" ,;.")]
+        if len(parts) > 1 and all(sched.RECUR.search(x) or sched.REMIND.search(x) for x in parts):
+            said, last = [], None
+            for part in parts:
+                parsed = sched.parse(part, self.app.scheduler.now())
+                if not parsed or parsed["at"] is None or not parsed["rest"]:
+                    said.append(f"I couldn't work out when for: {part}"); continue
+                last = self._schedule_decided(conversation_id, {"kind": "reminder" if sched.REMIND.search(part) else "job",
+                                                                "when": parsed["when"], "what": parsed["rest"]}, quiet=True)
+                said.append(last)
+            return self._say(conversation_id, "Set up:\n" + "\n".join(f"- {x}" for x in said), None)
+        if body != text:
+            text = body
         parsed = sched.parse(text, self.app.scheduler.now())
         if not parsed or parsed["at"] is None or not parsed["rest"]:
             return None                          # the router (or a question) will handle it
         return self._schedule_decided(conversation_id, {
             "kind": "reminder" if remind else "job", "when": parsed["when"], "what": parsed["rest"]})
 
-    def _schedule_decided(self, conversation_id: int, decision: dict) -> dict:
+    def _schedule_decided(self, conversation_id: int, decision: dict, quiet: bool = False):
         what = decision.get("what") or ""
         if not what:
-            return self._say(conversation_id, "What should I remind you about?", None)
+            return "What should I remind you about?" if quiet else self._say(conversation_id, "What should I remind you about?", None)
         result = self.app.tools.execute("schedule.add", {"kind": decision["kind"], "when": decision["when"],
                                                           "text": what}, actor=self._actor)
         if not result["ok"]:
-            return self._say(conversation_id, result["error"] or "I couldn't set that.", result["run_id"])
+            message = result["error"] or "I couldn't set that."
+            return message if quiet else self._say(conversation_id, message, result["run_id"])
         if result["output"]["id"]:
             self.app.schedules.attach(result["output"]["id"], conversation_id)
-        return self._say(conversation_id, result["output"]["summary"], result["run_id"])
+        return result["output"]["summary"] if quiet else self._say(conversation_id, result["output"]["summary"], result["run_id"])
 
     # --- acting ------------------------------------------------------------
     def _act(self, conversation_id: int, goal: str, resume: int | None = None) -> dict:

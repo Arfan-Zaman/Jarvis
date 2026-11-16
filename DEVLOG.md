@@ -2,6 +2,28 @@
 
 Newest entries first. Record what changed, why, and what was verified.
 
+## 2026-11-16 — JARVIS AI Operating System; stress test and lessons
+
+- `os.html` / `os.css` / `os.js`: a desktop shell. Top bar (live state,
+  battery, Wi-Fi, clock, notifications), live desktop widgets, a dock of apps
+  that open as real JARVIS pages in draggable, resizable, minimisable windows
+  (iframes in `?embed=1` mode; CSP now `frame-ancestors 'self'`), positions
+  remembered, a Cmd-K command bar to open apps or ask JARVIS (no animation:
+  it opens many times a day), toasts for approvals and reminders, a one-time
+  boot. Checked in Chrome: windows, dock, command bar answer, no errors.
+- Stress test on a test copy, 12 tasks: 8 passed (build an agent, live web,
+  research, tasks, memory, reminder, loan maths, picture refusal, browser
+  approval). Fixed the 4 gaps:
+  - `mac.find_files` now searches one folder, by kind (pdf, image, ...),
+    newest first, with dates and sizes ("latest PDF in Downloads").
+  - Run / test / install / "run it" requests go to `claude.operate` (one
+    approval) instead of the no-shell tool.
+  - Multi-part routines ("every Monday X and every Friday Y") become separate
+    schedules.
+  - The builder tells the owner exactly what to say to run what it built.
+- Proof: re-run of the 4 tasks all pass; the built price_watch agent's 5
+  tests pass through Mac access (13 s, sandboxed). 336 tests pass.
+
 ## 2026-11-16 — Interface redesign: motion, HUD reticle, interactive dashboard, better chat
 
 - Skills: installed (after vetting, text only, MIT) Emil Kowalski's animate,
