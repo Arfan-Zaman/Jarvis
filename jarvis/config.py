@@ -170,6 +170,11 @@ def load_config(
     root = Path(root).resolve() if root else PROJECT_ROOT
     environ = dict(os.environ if environ is None else environ)
     file_values = parse_env_file(Path(env_file) if env_file else root / ".env")
+    if env_file is None and root == PROJECT_ROOT:
+        # Switches read straight from the environment (JARVIS_BOOST, JARVIS_BRAIN, JARVIS_CTX, ...) see .env too.
+        for name, value in file_values.items():
+            if name.startswith("JARVIS_") and value != "" and not os.environ.get(name):
+                os.environ[name] = value
 
     def get(name: str) -> str:
         if environ.get(name, "") != "":
