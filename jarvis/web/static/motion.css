@@ -1,0 +1,74 @@
+/* Motion layer (Emil Kowalski's rules via the animate / choreograph / animation-performance skills):
+   transform and opacity only, strong ease-out, under 300 ms for UI, nothing on keyboard-frequency
+   actions, one choreographed entrance, reduced motion respected. Loaded last. */
+:root {
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+  --t-press: 120ms; --t-fast: 160ms; --t-ui: 220ms; --t-enter: 280ms;
+}
+
+/* page swaps: quick fade-and-settle (spatial consistency), not the old 'rise' */
+#view { animation: view-in var(--t-ui) var(--ease-out) both; }
+@keyframes view-in { from { opacity: 0; transform: translateY(6px); } }
+
+/* one choreographed entrance on the JARVIS page, first visit of the session only */
+.deck-enter .dk-left > *, .deck-enter .dk-right > *, .deck-enter .presence-hero, .deck-enter .dk-section {
+  animation: panel-in var(--t-enter) var(--ease-out) both; animation-delay: calc(var(--i, 0) * 45ms); }
+@keyframes panel-in { from { opacity: 0; transform: translateY(10px) scale(0.985); } }
+.deck-enter .presence-hero { animation-duration: 420ms; }
+
+/* press feedback: everything clickable answers the touch */
+.btn, .round-btn, .dk-state, .dk-btn, .thread, .nav a, .reticle-chip {
+  transition: transform var(--t-press) var(--ease-out), background-color var(--t-fast) ease, border-color var(--t-fast) ease, color var(--t-fast) ease; }
+.btn:active, .round-btn:active, .dk-state:active, .dk-btn:active, .thread:active { transform: scale(0.97); }
+
+/* hover: subtle, pointer devices only (touch fires false hovers) */
+@media (hover: hover) and (pointer: fine) {
+  .dk-card, .dk-ability, .glass.panel { transition: border-color var(--t-fast) ease, transform var(--t-ui) var(--ease-out); }
+  .dk-card:hover, .dk-ability:hover { border-color: rgba(244,236,241,.18); }
+  .dk-state:hover { transform: translateY(-2px); }
+  .dk-state:hover .dk-face { transform: scale(1.04); }
+  .dk-face { transition: transform var(--t-ui) var(--ease-out); }
+}
+
+/* data that changed flashes once, so the eye finds it (state indication) */
+.data-flash { animation: data-flash 900ms var(--ease-out) 1; }
+@keyframes data-flash { 0% { background-color: rgba(255,46,136,.16); } 100% { background-color: transparent; } }
+
+/* replies and messages arrive (feedback) */
+.msg-in { animation: msg-in var(--t-ui) var(--ease-out) both; }
+@keyframes msg-in { from { opacity: 0; transform: translateY(8px) scale(0.99); } }
+.approve-row:not(:empty) { animation: msg-in var(--t-ui) var(--ease-out) both; }
+.toast { animation: toast-in var(--t-ui) var(--ease-out) both; }
+@keyframes toast-in { from { opacity: 0; transform: translateY(100%); } }
+
+/* --- the HUD reticle around the face: constant motion is linear and compositor-only --- */
+.presence-stage { position: relative; }
+.reticle { position: absolute; inset: -2%; pointer-events: none; z-index: 2; }
+.reticle svg { width: 100%; height: 100%; overflow: visible; }
+.reticle .ring { transform-box: fill-box; transform-origin: center; }
+.reticle .ring-a { animation: spin calc(90s / var(--r-speed, 1)) linear infinite; }
+.reticle .ring-b { animation: spin calc(140s / var(--r-speed, 1)) linear infinite reverse; }
+.reticle .ring-c { animation: spin calc(60s / var(--r-speed, 1)) linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.reticle .tick { stroke: rgba(244,236,241,.16); stroke-width: 1; }
+.reticle .tick.major { stroke: rgba(var(--jv-accent-rgb, 255,46,136), .7); stroke-width: 1.25; }
+.reticle .arc { fill: none; stroke: rgba(var(--jv-accent-rgb, 255,46,136), .4); stroke-width: 1.25; stroke-linecap: round; transition: stroke var(--t-ui) ease; }
+.reticle .sweep { fill: none; stroke: rgba(var(--jv-accent-rgb, 255,46,136), .95); stroke-width: 2; stroke-linecap: round;
+  stroke-dasharray: 70 930; animation: spin calc(6s / var(--r-speed, 1)) linear infinite; transform-box: fill-box; transform-origin: center; opacity: var(--r-sweep, 0); transition: opacity var(--t-ui) ease; }
+.reticle-label { position: absolute; font: 500 11px/1 var(--mono); letter-spacing: .08em; color: rgba(244,236,241,.45); font-variant-numeric: tabular-nums; }
+.reticle-label.tl { left: 6%; top: 8%; } .reticle-label.tr { right: 6%; top: 8%; text-align: right; }
+.reticle-label.bl { left: 6%; bottom: 8%; } .reticle-label.br { right: 6%; bottom: 8%; text-align: right; }
+.reticle-label b { color: rgba(var(--jv-accent-rgb, 255,46,136), .95); font-weight: 500; }
+
+/* live voice line under the face */
+.voice-wave { width: min(100%, 520px); height: 38px; display: block; margin: -6px auto 2px; }
+
+/* reduced motion: keep comprehension, drop movement */
+@media (prefers-reduced-motion: reduce) {
+  #view, .deck-enter *, .msg-in, .approve-row:not(:empty), .toast { animation-name: fade-only !important; }
+  @keyframes fade-only { from { opacity: 0; } }
+  .reticle .ring, .reticle .sweep { animation: none !important; }
+  .dk-state:hover, .dk-state:hover .dk-face { transform: none; }
+}

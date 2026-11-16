@@ -80,3 +80,40 @@
 @media (max-width: 800px) {
   .presence.deck { grid-template-columns: 1fr; grid-template-areas: "hero" "right" "left" "states" "abilities"; }
 }
+
+/* --- rich replies (chat and the JARVIS page) --- */
+.rich { display: grid; gap: 8px; line-height: 1.55; }
+.rich p { margin: 0; }
+.rich .rt-h { margin: 6px 0 0; font-size: 14px; font-weight: 600; }
+.rich .rt-list { margin: 0; padding-left: 20px; display: grid; gap: 4px; }
+.rich .rt-code { font-family: var(--mono); font-size: .9em; padding: 1px 5px; border-radius: 3px; background: rgba(244,236,241,.07); }
+.rich .rt-link { color: #ff8cc0; text-underline-offset: 2px; }
+.rt-block { border: 1px solid var(--hair); border-radius: 4px; overflow: hidden; background: #0e0d10; }
+.rt-bar { display: flex; justify-content: space-between; align-items: center; padding: 4px 8px 4px 12px; font-size: 11.5px; color: var(--muted); border-bottom: 1px solid var(--hair); }
+.rt-block pre { margin: 0; padding: 12px; overflow-x: auto; font: 12.5px/1.5 var(--mono); }
+.rt-copy { font: inherit; font-size: 11.5px; color: var(--muted); background: transparent; border: 1px solid var(--hair); border-radius: 3px; padding: 2px 8px; cursor: pointer; }
+.rt-copy:hover { color: var(--text); border-color: var(--hair-strong); }
+.msg-tools { display: flex; justify-content: flex-end; margin-top: 6px; opacity: 0; transition: opacity var(--t-fast, 160ms) ease; }
+.msg:hover .msg-tools, .msg:focus-within .msg-tools { opacity: 1; }
+@media (hover: none) { .msg-tools { opacity: 1; } }
+.presence-exchange .reply.rich, .presence-exchange .reply .rich { text-align: left; }
+
+/* --- chat: suggestions, thread search --- */
+.suggest { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 12px; }
+.suggest-chip { font: inherit; font-size: 13px; color: var(--text); background: var(--raise); border: 1px solid var(--hair); border-radius: 999px; padding: 6px 12px; cursor: pointer; }
+.suggest-chip:hover { border-color: var(--pink); }
+.thread-search { width: 100%; margin-bottom: 8px; font: inherit; font-size: 13px; }
+
+/* --- dashboard: tiles are doors, the log filters --- */
+.stat-link { display: block; text-decoration: none; color: inherit; }
+@media (hover: hover) and (pointer: fine) { .stat-link:hover { border-color: var(--hair-strong) !important; transform: translateY(-2px); } }
+.stat-link:focus-visible { outline: 1px solid var(--pink); outline-offset: 2px; }
+.evlog-bar { display: flex; gap: 12px; align-items: center; justify-content: space-between; flex-wrap: wrap; margin-bottom: 10px; }
+.evlog-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.evlog-chip { font: inherit; font-size: 12px; color: var(--muted); background: transparent; border: 1px solid var(--hair); border-radius: 999px; padding: 3px 10px; cursor: pointer; }
+.evlog-chip.on { color: var(--text); border-color: var(--pink); background: rgba(255,46,136,.08); }
+.evlog-search { max-width: 260px; font: inherit; font-size: 13px; }
+.evlog tr.warn td:nth-child(2) { color: #fbbf24; } .evlog tr.bad td:nth-child(2) { color: #fb7185; }
+.evlog tbody tr { transition: background-color var(--t-fast, 160ms) ease; }
+.evlog tbody tr:hover { background: rgba(244,236,241,.03); }
+.evlog-count { margin-top: 8px; font-size: 12px; color: var(--faint); text-align: right; }

@@ -2,6 +2,32 @@
 
 Newest entries first. Record what changed, why, and what was verified.
 
+## 2026-11-16 — Interface redesign: motion, HUD reticle, interactive dashboard, better chat
+
+- Skills: installed (after vetting, text only, MIT) Emil Kowalski's animate,
+  choreograph, improve-animations, animation-performance, review-animations,
+  find-animation-opportunities, animation-vocabulary, emil-design-eng
+  (emilkowalski/skills, 57k stars) and design-motion-principles
+  (kylezantos). Used with unslop, dashboard-design, ux-designer and
+  frontend-design.
+- `motion.css` / `motion.js`: tokens (strong ease-out, 120-280 ms), page
+  fade-and-settle, one choreographed staggered entrance per session, press
+  feedback, pointer-only hover, data flash and count-up on change, toast and
+  reply entrances, reduced motion respected. A HUD reticle around the face
+  (hairline ticks, arcs, sweep; spins faster and sweeps while working; state,
+  timer and signal readouts) and a live voice line driven by the real
+  speech/microphone level that stops drawing when idle.
+- Speed: gallery faces render only when scrolled into view. Measured 120 fps,
+  worst frame 9 ms on the JARVIS page.
+- Dashboard: stat tiles count up and open their page; the activity log has
+  category filters, search and a count.
+- Chat: replies render safely (paragraphs, headings, lists, bold, inline code,
+  links, code blocks with Copy; no innerHTML), a copy button per reply,
+  suggestions from the owner's goals in a new conversation, conversation
+  search, auto-growing message box, only new messages animate. The JARVIS
+  page reply uses the same rendering.
+- 336 tests pass; checked in Chrome with no console errors.
+
 ## 2026-11-16 — The concept is now the JARVIS page
 
 - Owner approved the concept. `deck.js` builds its panels (System, Activity,

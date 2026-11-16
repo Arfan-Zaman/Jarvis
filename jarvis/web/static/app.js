@@ -243,18 +243,22 @@ views.dashboard = {
     const data = await api('GET', '/api/dashboard');
     const { status } = data;
     const counts = status.counts;
-    const stat = (value, text) => h('div', { class: 'glass stat' }, h('div', { class: 'value' }, value), h('div', { class: 'label' }, text));
+    const stat = (value, text, href) => {                 // a tile is a door: click to open that page
+      const v = h('div', { class: 'value' }, '0');
+      requestAnimationFrame(() => JarvisMotion.countTo(v, Number(value) || 0));
+      return h('a', { class: 'glass stat stat-link', href }, v, h('div', { class: 'label' }, text));
+    };
 
     const briefing = h('div', { class: 'glass panel' }, h('h2', null, 'Briefing'), h('div', { class: 'muted' }, 'Preparing today’s briefing…'));
     root.append(h('div', { class: 'stack' },
       aiBanner(status.ai),
       briefing,
       h('div', { class: 'grid stats' },
-        stat(counts.tasks_open, 'Open tasks'),
-        stat(counts.projects, 'Projects'),
-        stat(counts.memories, 'Memories'),
-        stat(counts.experiences, 'Experiences'),
-        stat(counts.pending_approvals, 'Pending approvals')),
+        stat(counts.tasks_open, 'Open tasks', '#tasks'),
+        stat(counts.projects, 'Projects', '#projects'),
+        stat(counts.memories, 'Memories', '#memory'),
+        stat(counts.experiences, 'Experiences', '#experiences'),
+        stat(counts.pending_approvals, 'Pending approvals', '#system')),
       h('div', { class: 'grid two' },
         h('div', { class: 'glass panel' }, h('h2', null, 'Open tasks'),
           data.open_tasks.length
@@ -270,7 +274,7 @@ views.dashboard = {
                 h('div', { class: 'muted small' }, project.description)),
               chip(project.status, 'ok'))))
             : h('div', { class: 'empty' }, 'No projects.'))),
-      h('div', { class: 'glass panel' }, h('h2', null, 'Recent activity'), eventTable(data.recent_events))));
+      h('div', { class: 'glass panel' }, h('h2', null, 'Recent activity'), JarvisUI.eventLog(data.recent_events, when))));
     fillBriefing(briefing);
   },
 };
@@ -377,8 +381,9 @@ views.chat = {
     const bubble = (message) => h('div', { class: `msg ${message.role}` },
       h('div', { class: 'who' }, message.role === 'assistant' ? `JARVIS · ${message.model || message.provider || ''}`
         : message.role === 'system' ? 'System notice' : 'You'),
-      h('div', { class: 'wrap' }, message.content),
+      message.role === 'assistant' ? JarvisUI.richText(message.content) : h('div', { class: 'wrap' }, message.content),
       workspaceImages(message.content),
+      message.role === 'assistant' ? h('div', { class: 'msg-tools' }, JarvisUI.copyButton(message.content)) : null,
       message.memory_refs && message.memory_refs.length
         ? h('div', { class: 'meta' }, chip('From memory', 'violet'),
           message.memory_refs.map((ref) => h('span', { class: 'chip', title: ref.content },
@@ -386,15 +391,34 @@ views.chat = {
         : null,
       message.run_id ? actionCard(message.run_id) : null);
 
+    // suggestions for an empty conversation, from what JARVIS is set up to do for the owner
+    const SUGGEST = ['What should I do this week to grow Monsoor Motors?', 'Plan this week for Aureus Detailing',
+      'What did you learn for me today?', 'How much battery and disk space do I have?', 'Remind me at 5pm to check the stock list'];
+    let seenCount = 0;
     const showMessages = (list) => {
-      messages.replaceChildren(...(list.length ? list.map(bubble)
-        : [h('div', { class: 'empty' }, 'Start a conversation below.')]));
+      if (!list.length) {
+        const ideas = h('div', { class: 'suggest' }, ...SUGGEST.map((text) => {
+          const b = h('button', { class: 'suggest-chip', type: 'button' }, text);
+          b.addEventListener('click', () => { input.value = text; composer.requestSubmit(); });
+          return b;
+        }));
+        messages.replaceChildren(h('div', { class: 'empty' }, h('div', null, 'Ask JARVIS anything, or start with one of these:'), ideas));
+        seenCount = 0; return;
+      }
+      const nodes = list.map(bubble);
+      nodes.forEach((n, i) => { if (i >= seenCount && seenCount) n.classList.add('msg-in'); });   // only what is new animates
+      seenCount = list.length;
+      messages.replaceChildren(...nodes);
       messages.scrollTop = messages.scrollHeight;
     };
 
+    let threadQuery = '';
+    const threadSearch = h('input', { class: 'thread-search', placeholder: 'Search conversations', 'aria-label': 'Search conversations' });
+    threadSearch.addEventListener('input', () => { threadQuery = threadSearch.value.trim().toLowerCase(); loadThreads(); });
     const loadThreads = async () => {
-      const { items } = await api('GET', '/api/conversations');
-      threads.replaceChildren(
+      const all = (await api('GET', '/api/conversations')).items;
+      const items = threadQuery ? all.filter((item) => (item.title || '').toLowerCase().includes(threadQuery)) : all;
+      threads.replaceChildren(threadSearch,
         h('button', { class: 'btn sm', onclick: () => { state.conversationId = null; rememberConversation(null); showMessages([]); loadThreads(); input.focus(); } }, '+ New conversation'),
         ...items.map((item) => h('button', {
           class: 'thread' + (item.id === state.conversationId ? ' active' : ''), title: item.title,
@@ -540,8 +564,9 @@ views.chat = {
         input.focus();
       }
     }));
+    const fitInput = JarvisUI.autoGrow(input);
     input.addEventListener('keydown', (event) => {
-      if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) { event.preventDefault(); composer.requestSubmit(); }
+      if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) { event.preventDefault(); composer.requestSubmit(); setTimeout(fitInput, 0); }
     });
 
     root.append(h('div', { class: 'stack' },
@@ -1171,7 +1196,8 @@ views.presence = {
         rememberConversation(result.conversation.id);
         if (result.reply.run_id) offerApproval(result.reply.run_id);
         clearInterval(poll);
-        reply.textContent = result.reply.content.replace(/ Approve or deny it on the System page, then press Continue\./, ' Approve or deny it below.');
+        const shownText = result.reply.content.replace(/ Approve or deny it on the System page, then press Continue\./, ' Approve or deny it below.');
+        reply.replaceChildren(JarvisUI.richText(shownText)); reply.classList.remove('msg-in'); void reply.offsetWidth; reply.classList.add('msg-in');
         const pictures = workspaceImages(result.reply.content); if (pictures) reply.append(pictures);
         if (result.reply.memory_refs) memoryLine.replaceChildren(chip('From memory', 'violet'), ...result.reply.memory_refs.map((r) => chip(r.content.length > 40 ? r.content.slice(0, 39) + '…' : r.content)));
         const live = await api('GET', '/api/live').catch(() => null);
@@ -1422,7 +1448,11 @@ views.presence = {
       previewTimer = setTimeout(() => identity.setState('calm'), 4000);
     } });
     state.cleanup.push(() => { deck.stop(); clearTimeout(previewTimer); });
-    root.append(h('div', { class: 'presence deck' }, deck.left, hero, deck.right, deck.states, deck.abilities));
+    const layout = h('div', { class: 'presence deck' }, deck.left, hero, deck.right, deck.states, deck.abilities);
+    root.append(layout);
+    const hud = JarvisMotion.attach(stage, identity);               // reticle + live voice line
+    state.cleanup.push(() => hud.destroy());
+    JarvisMotion.enter(layout, [deck.left.children, [hero], deck.right.children, [deck.states, deck.abilities]]);
     identity.setState(connected ? 'calm' : 'offline', connected ? 'Standing by.' : status.ai.detail);
     if (connected) input.focus();
   },

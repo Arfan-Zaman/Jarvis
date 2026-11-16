@@ -18,13 +18,13 @@
   const when = (iso) => new Date(iso).toLocaleString([], { weekday: 'short', hour: 'numeric', minute: '2-digit' });
   const card = (title, cls) => { const c = el('section', 'dk-card' + (cls ? ' ' + cls : '')); const h = el('h2', null, title); c.append(h); return [c, h]; };
   const kvRows = (dl, rows) => dl.replaceChildren(...rows.flatMap(([k, v]) => [el('dt', null, k), el('dd', null, v == null || v === '' ? '—' : String(v))]));
-  const BACKGROUND = /^Tool call: (mac\.status|memory\.search|claude\.converse|web\.(search|fetch))/;
+  const BACKGROUND = /^Tool call: (mac\.status|memory\.search|claude\.converse|image\.quote|schedule\.list|web\.(search|fetch))/;
   const GALLERY = [['calm', 'Standing by'], ['listening', 'Hearing you'], ['analysing', 'Thinking it through'], ['planning', 'Forming a plan'],
     ['executing', 'Doing the work'], ['approval', 'Needs your decision'], ['success', 'Done and checked'], ['warm', 'Good news'],
     ['curious', 'Asking back'], ['sad', 'Bad news, gently'], ['angry', 'Firm, serious'], ['failure', 'Failed, says so']];
 
   function build(options = {}) {
-    const timers = [], minis = [];
+    const timers = [], minis = [], stopWatching = [];
     // --- left: system, activity, this Mac
     const [sys] = card('System');
     const big = el('div', 'dk-big'), asks = el('div', 'dk-hint'), sysKv = el('dl', 'dk-kv');
@@ -58,7 +58,8 @@
       const spec = (window.JarvisIdentity && JarvisIdentity.STATES[name]) || {};
       text.append(el('b', null, spec.label ? spec.label.charAt(0) + spec.label.slice(1).toLowerCase() : name), el('span', null, meaning));
       b.append(thumb, text); grid.append(b);
-      timers.push(setTimeout(() => { const mini = JarvisIdentity.create(thumb, { compact: true }); mini.setState(name); minis.push(mini); }, 300 + i * 120));
+      // render each live face only once it scrolls into view (fast first load)
+      timers.push(setTimeout(() => stopWatching.push(JarvisMotion.whenVisible(thumb, () => { const mini = JarvisIdentity.create(thumb, { compact: true }); mini.setState(name); minis.push(mini); })), 200 + i * 60));
       b.addEventListener('click', () => {
         grid.querySelectorAll('.dk-state').forEach((c) => c.classList.toggle('on', c === b));
         if (options.preview) options.preview(name, meaning);
@@ -74,7 +75,8 @@
       const status = await api('/api/status');
       const ask = status.abilities.filter((a) => a.state === 'asks first').length;
       const on = status.abilities.filter((a) => a.state === 'on').length + ask;
-      big.replaceChildren(String(on), el('small', null, ` of ${status.abilities.length} abilities available`));
+      if (!big.firstChild) big.append(el('span'), el('small'));
+      JarvisMotion.countTo(big.firstChild, on); big.lastChild.textContent = ` of ${status.abilities.length} abilities available`;
       asks.textContent = ask ? `${ask} of them ask you first` : '';
       const c = status.counts || {};
       kvRows(sysKv, [['Model', status.ai.available ? status.ai.model : 'offline'], ['Memories', c.memories], ['Open tasks', c.tasks_open], ['Projects', c.projects], ['Tools', c.tools]]);
@@ -94,7 +96,9 @@
         else if (age < 48) before++;
         if (!last && !BACKGROUND.test(run.goal || '') && ['completed', 'failed'].includes(run.status)) last = run;
       }
-      actBig.replaceChildren(String(total), el('small', null, ' actions'));
+      if (!actBig.firstChild) actBig.append(el('span'), el('small', null, ' actions'));
+      if (actBig.firstChild.dataset.value && Number(actBig.firstChild.dataset.value) !== total) JarvisMotion.flash(act);
+      JarvisMotion.countTo(actBig.firstChild, total);
       actSub.textContent = (total ? `${Math.round(100 * (total - failed) / total)}% worked · ` : '') + `${before} the day before`;
       draw(hours);
       if (last) {
@@ -152,7 +156,7 @@
     const intervals = [setInterval(refresh, 30000), setInterval(macStatus, 120000), setInterval(liveTask, 2000)];
     return {
       left, right, states, abilities, refresh,
-      stop() { intervals.forEach(clearInterval); timers.forEach(clearTimeout); minis.forEach((m) => m.destroy()); },
+      stop() { intervals.forEach(clearInterval); timers.forEach(clearTimeout); stopWatching.forEach((f) => f()); minis.forEach((m) => m.destroy()); },
     };
   }
 
