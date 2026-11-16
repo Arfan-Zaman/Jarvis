@@ -1,0 +1,20 @@
+[Unit]
+Description=JARVIS
+After=network-online.target tailscaled.service
+Wants=network-online.target
+
+[Service]
+User=jarvis
+WorkingDirectory=/opt/jarvis
+ExecStart=/usr/bin/python3 -m jarvis serve
+Restart=always
+RestartSec=5
+# Loopback only; Tailscale publishes it. Lock the service down.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=read-only
+ReadWritePaths=/opt/jarvis /home/jarvis
+
+[Install]
+WantedBy=multi-user.target

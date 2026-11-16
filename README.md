@@ -96,6 +96,15 @@ link is HTTPS. `python3 -m jarvis remote --new-code` signs every device out;
 `--off` turns phone access off. Anyone with the code and your tailnet can
 approve actions on your Mac, so treat the code like a password.
 
+### Running JARVIS on a server instead
+
+To reach JARVIS even when your Mac is off, run it on a Linux VPS you own:
+clone this repo there and run `sudo bash deploy/vps-setup.sh`. It installs
+JARVIS as a service, signs the server in to Tailscale, and prints the same
+address and access code as above. Mac-only features (Mac access, Mail,
+Calendar, the Mac voice) do not exist on a server, and JARVIS's data on the
+server is separate from your Mac's.
+
 ## Talking to JARVIS
 
 Just chat. For each message JARVIS decides:
