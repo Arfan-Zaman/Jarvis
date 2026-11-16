@@ -362,6 +362,26 @@ views.chat = {
     const send = h('button', { class: 'btn primary', type: 'submit' }, 'Send');
 
     const runTone = { completed: 'ok', failed: 'bad', blocked: 'warn', waiting_approval: 'pink', interrupted: 'warn', cancelled: null };
+    // Approve right here in the chat (an owner click in the UI, never words), then JARVIS carries on.
+    const approvalButtons = (runId, report, resume) => {
+      const pending = report.status === 'waiting_approval' && report.approval && report.approval.status === 'pending';
+      if (!pending) return report.status === 'interrupted' ? [h('button', { class: 'btn sm primary', onclick: resume }, 'Continue')] : [];
+      const id = report.approval.id;
+      const yes = h('button', { class: 'btn sm primary' }, 'Approve and continue');
+      const no = h('button', { class: 'btn sm' }, 'Deny');
+      yes.onclick = act(async () => {
+        yes.disabled = no.disabled = true; yes.textContent = 'Working on it…';
+        await api('POST', `/api/approvals/${id}/approve`);
+        await api('POST', `/api/runs/${runId}/resume`); await openThread(); refreshChrome();
+      });
+      no.onclick = act(async () => {
+        yes.disabled = no.disabled = true;
+        await api('POST', `/api/approvals/${id}/deny`); await api('POST', `/api/runs/${runId}/cancel`).catch(() => {});
+        await openThread(); refreshChrome();
+      });
+      return [h('span', { class: 'small grow' }, report.approval.summary || 'Needs your approval'), no, yes];
+    };
+
     const actionCard = (runId) => {
       const card = h('div', { class: 'action-card' }, h('span', { class: 'muted small' }, 'Loading action…'));
       api('GET', `/api/runs/${runId}`).then(({ report }) => {
@@ -372,8 +392,7 @@ views.chat = {
           report.changes_made.length ? h('ul', { class: 'small' }, report.changes_made.map((c) => h('li', null, `${c.tool}: ${c.what}`))) : null,
           h('div', { class: 'row' },
             h('a', { class: 'btn sm', href: '#goals' }, 'Details'),
-            report.status === 'waiting_approval' ? h('a', { class: 'btn sm', href: '#system' }, 'Review approval') : null,
-            ['waiting_approval', 'interrupted'].includes(report.status) ? h('button', { class: 'btn sm primary', onclick: resume }, 'Continue') : null));
+            ...approvalButtons(runId, report, resume)));
       }).catch(() => card.replaceChildren(h('span', { class: 'muted small' }, `Action #${runId}`)));
       return card;
     };
@@ -1215,7 +1234,7 @@ views.presence = {
         rememberConversation(result.conversation.id);
         if (result.reply.run_id) offerApproval(result.reply.run_id);
         clearInterval(poll);
-        const shownText = result.reply.content.replace(/ Approve or deny it on the System page, then press Continue\./, ' Approve or deny it below.');
+        const shownText = result.reply.content.replace(/ Press Approve right below this message \(or on the System page\) and I'll carry on\./, ' Press Approve below and I\'ll carry on.');
         reply.replaceChildren(JarvisUI.richText(shownText)); reply.classList.remove('msg-in'); void reply.offsetWidth; reply.classList.add('msg-in');
         const pictures = workspaceImages(result.reply.content); if (pictures) reply.append(pictures);
         if (result.reply.memory_refs) memoryLine.replaceChildren(chip('From memory', 'violet'), ...result.reply.memory_refs.map((r) => chip(r.content.length > 40 ? r.content.slice(0, 39) + '…' : r.content)));

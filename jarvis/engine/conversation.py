@@ -53,6 +53,10 @@ MAC_STATUS = re.compile(r"\b(battery|charge|charging|disk space|storage|free spa
 RUN_THINGS = re.compile(r"\b(run|execute|launch|start)\b[^.?!]{0,60}\b(test|tests|test suite|script|code|program|"
                         r"app|server|agent|benchmark|build|notebook)\b|\b(pip|npm|brew)\s+install\b|\binstall\s+(the\s+)?"
                         r"(package|library|dependency|dependencies|requirements)\b|\brun\s+(it|them|that)\b", re.I)
+# A message that starts a new request rather than answering JARVIS's question.
+NEW_REQUEST = re.compile(r"^\W*(jarvis\W+)?(can|could|would|will|what|what's|whats|how|who|why|when|which|do|does|did|is|are|"
+                         r"should|tell me|show me|give me|make|build|create|write|open|remind|i want|i need|let's|lets)\b", re.I)
+SAYS_APPROVE = re.compile(r"^\W*(yes\W+)?(i\s+)?(approve[ds]?|approving|i'?m approving|go ahead|confirmed?)\b[\w\s,.!']{0,60}$", re.I)
 ATTACHED = re.compile(r"\[Attached: (uploads/[A-Za-z0-9][A-Za-z0-9._-]*)\]")
 # Requests that need real skill: sent to Claude Code even if the small router says "answer".
 # The local model handles talk, writing, maths, plans and web look-ups itself. Claude is called only for
@@ -246,7 +250,13 @@ class Conversation:
             if CANCEL.match(text):
                 self.app.engine.cancel(pending)
                 return self._say(conversation_id, persona.DROPPED, pending)
-            return self._act(conversation_id, text, resume=pending)
+            if not NEW_REQUEST.match(text):
+                return self._act(conversation_id, text, resume=pending)
+            # a new question, not an answer: drop the old question instead of trapping every message in it
+            self.app.engine.cancel(pending)
+        waiting = self._pending_approval(conversation_id)
+        if waiting and SAYS_APPROVE.match(text):
+            return self._say(conversation_id, persona.APPROVE_BY_CLICK, waiting)
 
         picture = self._pending_image(conversation_id)
         if picture and (YES.match(text) or NO.match(text) or CANCEL.match(text)):
@@ -434,6 +444,14 @@ class Conversation:
             return None
         run = self.app.runs.get(assistant[-1]["run_id"], with_steps=False)
         return run["id"] if run["status"] == "blocked" else None
+
+    def _pending_approval(self, conversation_id: int) -> int | None:
+        """The run JARVIS's previous reply asked the owner to approve, if it is still waiting."""
+        replies = [m for m in self.app.conversations.messages(conversation_id, limit=20) if m["role"] in ("assistant", "system")]
+        if not replies or not replies[-1].get("run_id"):
+            return None
+        run = self.app.runs.get(replies[-1]["run_id"], with_steps=False)
+        return run["id"] if run["status"] == "waiting_approval" else None
 
     def _pending_offer(self, conversation_id: int) -> dict | None:
         """The memory JARVIS offered to keep in its previous reply, if any."""

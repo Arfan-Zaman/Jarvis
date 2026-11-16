@@ -40,7 +40,8 @@ COMPLETED = "Completed. {did}"
 COMPLETED_NOTHING_CHANGED = "Completed. Nothing needed changing."
 NEEDS_INFORMATION = "{did}One decision is needed before I proceed: {question}"
 NEEDS_APPROVAL = ("{did}I'm ready to proceed, but this step needs your approval: {summary}. "
-                  "Approve or deny it on the System page, then press Continue.")
+                  "Press Approve right below this message (or on the System page) and I'll carry on. "
+                  "Saying 'approved' can't approve it: only your click can.")
 FAILED = "The operation failed. {reason}"
 FAILED_NOTHING_CHANGED = " Nothing was changed, and I have not marked it as complete."
 FAILED_PARTIAL = " What did complete: {did} I have not marked the rest as complete."
@@ -58,3 +59,6 @@ TEACHING = ("I can't do that on my own yet, so I've asked Claude to build it int
             "change waits on the System page for your Approve, and after that I'll do it myself.")
 TEACH_NOTED = ("Noted as something to learn. When Claude Code is available, it will build it into me for you "
                "to approve on the System page.")
+
+APPROVE_BY_CLICK = ("For your safety I can't take a spoken or typed approval. Press Approve right below this "
+                    "message and I'll carry on straight away.")

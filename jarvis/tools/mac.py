@@ -12,6 +12,7 @@ web page cannot be turned into extra commands. Bigger jobs on the Mac go to
 
 from __future__ import annotations
 
+import os
 import re
 import shutil
 import subprocess
@@ -63,6 +64,9 @@ def find_files(app, inputs, actor):
         clauses.append(f'(kMDItemFSName == "*{safe}*"cd || kMDItemTextContent == "*{safe}*"cd)')
     found = _run(["mdfind", "-onlyin", str(folder), " && ".join(clauses)], timeout=20).splitlines()
     found = [f for f in found if not HIDDEN.search(f[len(str(home)):])]
+    fuzzy = False
+    if query and not found:              # typos and half-remembered names: "Aureus Dailing" -> "Aureus Detailing"
+        found, fuzzy = _closest(folder, query, kind, limit), True
     if inputs.get("newest", True):
         def mtime(path):
             try:
@@ -79,8 +83,42 @@ def find_files(app, inputs, actor):
                     "size_kb": round(st.st_size / 1024)}
         except OSError:
             return {"path": path.replace(str(home), "~", 1)}
-    return {"query": query, "kind": kind or None, "folder": str(folder).replace(str(home), "~", 1),
-            "files": [info(f) for f in found[:limit]], "total": len(found)}
+    out = {"query": query, "kind": kind or None, "folder": str(folder).replace(str(home), "~", 1),
+           "files": [info(f) for f in found[:limit]], "total": len(found)}
+    if fuzzy:
+        out["note"] = ("No exact name match; these are the closest names (folders end with /)." if found
+                       else "Nothing with that name or a similar one here.")
+    return out
+
+
+def _closest(folder: Path, query: str, kind: str, limit: int) -> list[str]:
+    """Files and folders whose names are closest to the query, typos allowed (walks up to 6 levels)."""
+    from difflib import SequenceMatcher
+    words = [w for w in re.findall(r"[a-z0-9]+", query.lower()) if len(w) > 1 and w not in ("the", "file", "folder", "my")]
+    if not words:
+        return []
+    def score(name: str) -> float:
+        parts = re.findall(r"[a-z0-9]+", name.lower())
+        if not parts:
+            return 0.0
+        return sum(max(SequenceMatcher(None, w, p).ratio() for p in parts) for w in words) / len(words)
+    scored, seen, base = [], 0, len(folder.parts)
+    for root, dirs, files in os.walk(folder):
+        dirs[:] = [d for d in dirs if not d.startswith(".") and d not in ("node_modules", "Library", "__pycache__")]
+        if len(Path(root).parts) - base >= 6:
+            dirs[:] = []
+        for name in dirs + files:
+            seen += 1
+            if kind and name in files and not name.lower().endswith(f".{kind}") and kind not in KINDS:
+                continue
+            value = score(name)
+            if value >= 0.72:
+                path = os.path.join(root, name)
+                scored.append((value, path + ("/" if name in dirs else "")))
+        if seen > 60000:
+            break
+    scored.sort(key=lambda item: -item[0])
+    return [path for _, path in scored[:limit]]
 
 
 def status(app, inputs, actor):
@@ -133,6 +171,66 @@ def notify(app, inputs, actor):
     return {"shown": True}
 
 
+# Never read, whatever the owner's request says: keys, credentials, browser and mail data, JARVIS's own secrets.
+PRIVATE = re.compile(r"/(\.ssh|\.aws|\.gnupg|\.config/gh|\.docker|Library/(Keychains|Mail|Messages|Cookies|"
+                     r"Application Support/(Google|Firefox|BraveSoftware)))(/|$)|/\.(netrc|npmrc|env)$|/JARVIS/(\.env|data)(/|$)")
+TEXTUTIL = (".docx", ".doc", ".rtf", ".rtfd", ".odt", ".html", ".htm", ".webarchive", ".pages")
+PLAIN = (".txt", ".md", ".csv", ".tsv", ".json", ".py", ".js", ".log", ".yaml", ".yml", ".xml", ".ini", ".sh")
+
+
+def _home_path(raw: str) -> Path:
+    home = Path.home().resolve()
+    path = Path(str(raw or "").strip() or "~").expanduser().resolve()
+    if path != home and home not in path.parents:
+        raise ValidationError("JARVIS reads only inside your home folder")
+    if PRIVATE.search(str(path)):
+        raise ValidationError("that is private (keys, passwords, browser or mail data); JARVIS does not read it")
+    return path
+
+
+def list_folder(app, inputs, actor):
+    """What is in a folder: sub-folders and files with dates and sizes, newest first."""
+    from datetime import datetime
+    folder = _home_path(inputs.get("folder"))
+    if not folder.is_dir():
+        raise ValidationError(f"no such folder: {inputs.get('folder')}")
+    items = []
+    for entry in folder.iterdir():
+        if entry.name.startswith("."):
+            continue
+        try:
+            st = entry.stat()
+        except OSError:
+            continue
+        items.append({"name": entry.name + ("/" if entry.is_dir() else ""), "modified": st.st_mtime,
+                      "size_kb": None if entry.is_dir() else round(st.st_size / 1024)})
+    items.sort(key=lambda i: -i["modified"])
+    for i in items:
+        i["modified"] = datetime.fromtimestamp(i["modified"]).strftime("%Y-%m-%d %H:%M")
+    limit = max(1, min(int(inputs.get("limit") or 60), 200))
+    return {"folder": str(folder).replace(str(Path.home()), "~", 1), "items": items[:limit], "total": len(items)}
+
+
+def read_file(app, inputs, actor):
+    """The text of a document on the Mac: Word, PDF, rich text, web pages, Markdown, CSV, code."""
+    path = _home_path(inputs.get("path"))
+    if not path.is_file():
+        raise ValidationError(f"no such file: {inputs.get('path')}")
+    limit = max(500, min(int(inputs.get("max_chars") or 12000), 40000))
+    suffix = path.suffix.lower()
+    if suffix in PLAIN:
+        text = path.read_text(encoding="utf-8", errors="replace")
+    elif suffix in TEXTUTIL:
+        text = _run(["textutil", "-convert", "txt", "-stdout", str(path)], timeout=30)
+    elif suffix == ".pdf" and shutil.which("pdftotext"):
+        text = _run([shutil.which("pdftotext"), "-layout", "-q", str(path), "-"], timeout=30)
+    else:
+        raise ValidationError(f"JARVIS cannot read {suffix or 'that kind of'} files as text yet")
+    text = re.sub(r"\n\s*\n\s*\n+", "\n\n", text).strip()
+    return {"path": str(path).replace(str(Path.home()), "~", 1), "text": text[:limit], "truncated": len(text) > limit,
+            "characters": len(text)}
+
+
 def register_mac(registry: ToolRegistry) -> None:
     S = lambda d, **x: {"type": "string", "description": d, **x}    # noqa: E731
     for tool in (
@@ -144,6 +242,12 @@ def register_mac(registry: ToolRegistry) -> None:
                                 "kind": S("pdf, image, video, audio, spreadsheet, presentation, text, folder or an extension."),
                                 "newest": {"type": "boolean", "description": "Newest first (default true)."},
                                 "limit": {"type": "integer", "description": "Most results (up to 50)."}}),
+        Tool("mac.list_folder", "List what is inside a folder on the Mac (sub-folders end with /), newest first.",
+             READ, list_folder, {"folder": S("The folder, like ~/Documents/Monsoor Motors/Aureus Detailing.", required=True),
+                                 "limit": {"type": "integer", "description": "Most items (up to 200)."}}),
+        Tool("mac.read_file", "Read the text of a document on the Mac: Word, PDF, rich text, Markdown, CSV, web page or code.",
+             READ, read_file, {"path": S("The file, like ~/Documents/plan.docx.", required=True),
+                               "max_chars": {"type": "integer", "description": "How much text (500 to 40000)."}}),
         Tool("mac.status", "Check the Mac: battery, free disk space, network, uptime and open apps.", READ, status),
         Tool("mac.open", "Open a website, an app (by name), or a file or folder in the owner's home folder.", WRITE,
              open_thing, {"target": S("A URL, an app name like Safari, or a path like ~/Downloads/report.pdf.",
