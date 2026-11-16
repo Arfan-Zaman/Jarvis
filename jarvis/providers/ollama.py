@@ -6,7 +6,9 @@ that is already running, over its HTTP API, using the standard library.
 
 from __future__ import annotations
 
+import base64
 import json
+import os
 import urllib.error
 import urllib.request
 
@@ -64,11 +66,36 @@ class OllamaProvider(AIProvider):
             # No hidden step-by-step "thinking": JARVIS needs a direct answer, quickly.
             "think": False,
             "messages": [{"role": message.role, "content": message.content} for message in messages],
-            "options": {"temperature": 0.2 if json_output else 0.6},
+            "options": {"temperature": 0.2 if json_output else 0.6, "num_ctx": self.context()},
+            "keep_alive": "30m",       # stay loaded: the next answer starts at once
         }
         if json_output:
             payload["format"] = "json"   # Ollama constrains the reply to valid JSON
         reply = self._request("/api/chat", payload)
+        content = (reply.get("message") or {}).get("content", "")
+        if not isinstance(content, str) or not content.strip():
+            raise ProviderError("Ollama returned an empty response.")
+        return ProviderResponse(text=content.strip(), provider=self.name, model=self.model)
+
+    @staticmethod
+    def context() -> int:
+        """Context window in tokens (JARVIS_CTX, default 16384): room for web pages and browser snapshots."""
+        try:
+            return max(2048, min(int(os.environ.get("JARVIS_CTX", "16384")), 262144))
+        except ValueError:
+            return 16384
+
+    def see(self, system: str, request: str, image_paths: list[str]) -> ProviderResponse:
+        """Answer about images with the local model's vision (qwen3.5 can see)."""
+        images = []
+        for path in image_paths[:4]:
+            with open(path, "rb") as handle:
+                images.append(base64.b64encode(handle.read()).decode("ascii"))
+        payload = {"model": self.model, "stream": False, "think": False, "keep_alive": "30m",
+                   "messages": [{"role": "system", "content": system},
+                                {"role": "user", "content": request, "images": images}],
+                   "options": {"temperature": 0.4, "num_ctx": self.context()}}
+        reply = self._request("/api/chat", payload, timeout=max(self.timeout, 240))
         content = (reply.get("message") or {}).get("content", "")
         if not isinstance(content, str) or not content.strip():
             raise ProviderError("Ollama returned an empty response.")

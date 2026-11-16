@@ -200,13 +200,13 @@ class SelfReview:
         return "\n\n".join(parts)
 
     # --- one review pass ---------------------------------------------------
-    def once(self) -> dict:
-        """Run one review pass now. Never raises; the outcome is kept in settings."""
+    def once(self, focus: str | None = None) -> dict:
+        """Run one review pass now (`focus`: a teach brief from the gap loop). Never raises; kept in settings."""
         if not self._pass.acquire(blocking=False):
             return {"ok": False, "error": "A self-review pass is already running."}
         started = time.monotonic()
         try:
-            outcome = self._review()
+            outcome = self._review(focus)
         except Exception as exc:  # noqa: BLE001 - a review must never take JARVIS down
             log.exception("Self-review pass failed")
             outcome = {"ok": False, "error": f"{type(exc).__name__}: {exc}"[:400]}
@@ -221,7 +221,7 @@ class SelfReview:
                                level="info" if outcome["ok"] else "warning", details=outcome)
         return outcome
 
-    def _review(self) -> dict:
+    def _review(self, focus: str | None = None) -> dict:
         from .tools.claude import claude_binary
         binary = claude_binary()
         if not binary:
@@ -232,8 +232,8 @@ class SelfReview:
             path = self.root / branch[len(BRANCH_PREFIX):]
             self.root.mkdir(parents=True, exist_ok=True)
             self.git("worktree", "add", "-b", branch, str(path), BASE)
-        prompt = ("Review JARVIS and propose up to 3 small improvements, following your brief.\n\n"
-                  + self.inputs())
+        prompt = (focus + "\n\nContext from JARVIS:\n\n" + self.inputs()) if focus else \
+            ("Review JARVIS and propose up to 3 small improvements, following your brief.\n\n" + self.inputs())
         env = {k: v for k, v in os.environ.items() if not k.startswith("CLAUDE_CODE_")}
         try:
             try:
@@ -394,10 +394,29 @@ class SelfReview:
     def stop(self) -> None:
         self._stop.set()
 
+    def teach(self) -> dict:
+        """The gap loop: hand what JARVIS could not do on its own to Claude Code, to build into JARVIS."""
+        from . import gaps
+        open_ = gaps.open_gaps(self.app)[:6]
+        if not open_:
+            return {"ok": True, "summary": "Nothing to learn: no open gaps."}
+        outcome = self.once(focus=gaps.brief(open_))
+        if outcome.get("ok") or outcome.get("branch"):
+            gaps.take(self.app, open_, outcome.get("branch"))
+        return outcome
+
+    def teach_soon(self) -> None:
+        """Start a teach pass in the background now (the owner asked JARVIS to learn something)."""
+        if not self._pass.locked():
+            threading.Thread(target=self.teach, name="jarvis-teach", daemon=True).start()
+
     def _run(self) -> None:
+        from . import gaps
         if self._stop.wait(300):          # let startup and the first learning pass settle
             return
         while not self._stop.is_set():
-            if self.due() and self.idle():
+            if gaps.due(self.app) and self.idle():
+                self.teach()
+            elif self.due() and self.idle():
                 self.once()
-            self._stop.wait(1800)
+            self._stop.wait(900)

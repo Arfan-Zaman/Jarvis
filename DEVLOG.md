@@ -2,6 +2,27 @@
 
 Newest entries first. Record what changed, why, and what was verified.
 
+## 2026-11-16 — Local-first JARVIS: its own brain, its own Chrome, open data, the gap loop
+
+- The local model is the brain by default (`JARVIS_BRAIN=local`; `claude` restores the old way).
+  Claude is called only for code, builds, deep research, a question its own search could not answer,
+  and teaching. Router, `HARD_WORK` and voice no longer send plans, maths or writing to Claude.
+- `jarvis/tools/browser.py`: JARVIS's own Chrome (Playwright MCP 0.0.85 over stdio, persistent profile
+  `data/browser-profile`, JARVIS's server blocked). `browser.search` (free full-web search, ~5 s),
+  `browser.read`, and `browser.use`, a step-by-step agent run by the local model. One approval per task;
+  it stops before buy/pay/send/post/sign-up clicks and never types passwords or card numbers.
+  Live check: it read three cars and prices off monsoormotors.com.au in one step, matching the site.
+- Web questions are answered locally: search, read the top pages, answer with sources (`_web_answer`).
+- `jarvis/tools/opendata.py`: free keyless APIs: Open-Meteo weather, Frankfurter + open.er-api currency,
+  Nager.Date holidays, NHTSA VIN decoding, Free Dictionary, Google News. Each checked live.
+- Photos: the local model's vision answers about attached pictures (`OllamaProvider.see`).
+- Local model: 16k context (`JARVIS_CTX`) and kept loaded for 30 minutes, so replies start at once.
+- Learning is local and every 10 minutes (its Chrome + local model); the briefing uses `open.news`.
+- The gap loop (`jarvis/gaps.py`): what JARVIS could not do becomes a gap, and the self-review hands the
+  gaps to Claude Code to build into JARVIS with tests, on a branch the owner approves. Runs every
+  `JARVIS_TEACH_HOURS` (6) or right away when the owner says "learn to ...".
+- `CLAUDE.md`: the standing rules (local first, the gap loop, hard lines) for every future session.
+
 ## 2026-11-16 — The OS is the default page
 
 - `/` now opens JARVIS AI Operating System; the single-page interface moved

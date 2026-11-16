@@ -46,8 +46,9 @@ def enabled() -> bool:
 
 
 def use_claude(app) -> bool:
-    """Learn through Claude Code's web search when it is available (JARVIS_LEARN_SOURCE=web turns it off)."""
-    if os.environ.get("JARVIS_LEARN_SOURCE", "claude") == "web" or "claude.research" not in app.tools.names():
+    """Learn through Claude Code only when JARVIS_LEARN_SOURCE=claude. By default JARVIS learns on its own:
+    its Chrome searches the whole web, its local model reads the pages and keeps the facts."""
+    if os.environ.get("JARVIS_LEARN_SOURCE", "local") != "claude" or "claude.research" not in app.tools.names():
         return False
     from .tools.claude import claude_binary
     return bool(claude_binary())
@@ -55,9 +56,9 @@ def use_claude(app) -> bool:
 
 def interval_seconds() -> int:
     try:
-        return max(5, int(os.environ.get("JARVIS_LEARN_MINUTES", "30"))) * 60
+        return max(2, int(os.environ.get("JARVIS_LEARN_MINUTES", "10"))) * 60   # local learning is free
     except ValueError:
-        return 1800
+        return 600
 
 
 def _json(text: str) -> dict:
@@ -127,7 +128,11 @@ class Learner:
                 saved, read = deep
                 found = {"ok": False}
             else:
-                found = self.app.tools.execute("web.search", {"query": choice["query"], "limit": 5}, actor=ACTOR)
+                from .engine.conversation import browser_on
+                engine = "browser.search" if browser_on(self.app) else "web.search"
+                found = self.app.tools.execute(engine, {"query": choice["query"], "limit": 5}, actor=ACTOR)
+                if not found["ok"] and engine != "web.search":
+                    found = self.app.tools.execute("web.search", {"query": choice["query"], "limit": 5}, actor=ACTOR)
             results = ((found.get("output") or {}).get("results") or []) if found["ok"] else []
             if deep is None:
                 saved, read = [], []

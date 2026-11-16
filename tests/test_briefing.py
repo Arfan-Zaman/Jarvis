@@ -46,6 +46,11 @@ class BriefingTests(JarvisTestCase):
             self.research_calls += 1
             return self.research(app, inputs, actor)
         self.fake("claude.research", research)
+
+        def news(app, inputs, actor):             # the local briefing reads open.news; same fixture, its shape
+            found = research(app, inputs, actor)
+            return {"topic": inputs["topic"], "headlines": [{"title": f["fact"], "url": f["url"]} for f in found["facts"]]}
+        self.fake("open.news", news)
         self.fake("mac.status", lambda app, inputs, actor: MAC)
         patch = mock.patch.object(self.app.selfreview, "proposals",
                                   return_value=[{"branch": "jarvis/self-review-2026-11-15"}])

@@ -22,6 +22,8 @@ from .providers import AIProvider, ProviderError, build_provider
 from .safety import ActionCategory, SafetyLayer
 from .voice import Voice
 from .stores.runs import RunStore
+from .tools.browser import register_browser
+from .tools.opendata import register_opendata
 from .tools import ToolRegistry, register_builtin, register_claude, register_images, register_mac, register_mail_calendar, register_schedule, register_web
 from .stores import (
     AgentStore, ConversationStore, EventLog, ExperienceStore,
@@ -64,6 +66,8 @@ class Jarvis:
         register_builtin(self.tools)
         register_web(self.tools)
         register_claude(self.tools)
+        register_browser(self.tools)
+        register_opendata(self.tools)
         register_mac(self.tools)
         register_mail_calendar(self.tools)
         register_images(self.tools)
@@ -359,17 +363,19 @@ class Jarvis:
         rows = [
             row("Read", "on", "its own records, memories, files you give it"),
             row("Write", "on" if self.config.allow_writes else "read-only", "tasks, memories, projects, notes"),
-            row("Web", "on" if claude else "basic", "full-web search and reading" if claude else "Wikipedia and instant answers"),
+            row("Web", has("browser.search"), "searches and reads the whole web itself in its own Chrome, free"),
+            row("Open data", has("open.weather"), "weather, currency, public holidays, VIN decoding, dictionary, news: free open APIs"),
             row("Code", has("claude.work") if claude else "needs Claude Code", "writes, fixes and explains code in its workspace"),
             row("Build", has("claude.work") if claude else "needs Claude Code", "makes scripts, pages, documents and apps as files"),
             row("Commands", ("off" if os.environ.get("JARVIS_OPERATE", "1") == "0" else has("claude.operate", "asks first"))
                 if claude else "needs Claude Code", "runs commands, scripts and installs on your Mac, one approval per task, sandboxed"),
             row("Mac", has("mac.status"), "finds files, opens apps and sites, battery, disk, notifications"),
-            row("Browser", has("claude.browse", "asks first"), "uses a real browser like a person (never buys, signs in or posts)"),
-            row("Co-work", "on" if claude and os.environ.get("JARVIS_BRAIN", "claude") == "claude" else "local only",
-                "Claude as its conversational brain and partner for hard work"),
+            row("Browser", has("browser.use", "asks first"), "its local model works in its own Chrome like a person "
+                "(keeps your sign-ins; never buys, sends or types passwords)"),
+            row("Brain", "local" if os.environ.get("JARVIS_BRAIN", "local") != "claude" else "Claude",
+                "its own local model answers and acts; Claude is called only for code, builds and deep research"),
             row("Autonomous", "on" if getattr(self, "learner", None) else "off",
-                "learns from the web every 30 minutes, reviews its own code weekly (you approve changes)"),
+                "learns from every chat and from the web every 10 minutes; what it cannot do, Claude builds into it (you approve)"),
             row("Voice", "on" if voice.get("listening") and voice.get("speaking") else "partly",
                 "wake word, hands-free conversation, interrupt by name"),
             row("Pictures", has("image.generate", "asks first"), "makes images on Higgsfield (you approve the cost)"),
