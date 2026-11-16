@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 os.environ.setdefault("JARVIS_BRAIN", "local")      # tests never call the real Claude
 os.environ.setdefault("JARVIS_EMBED_MODEL", "no-embeddings-in-tests")   # nor the real embedding model
+os.environ.setdefault("JARVIS_BROWSER", "off")   # tests never open JARVIS's Chrome
 
 import logging
 import sqlite3

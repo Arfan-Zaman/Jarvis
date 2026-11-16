@@ -243,18 +243,22 @@ views.dashboard = {
     const data = await api('GET', '/api/dashboard');
     const { status } = data;
     const counts = status.counts;
-    const stat = (value, text) => h('div', { class: 'glass stat' }, h('div', { class: 'value' }, value), h('div', { class: 'label' }, text));
+    const stat = (value, text, href) => {                 // a tile is a door: click to open that page
+      const v = h('div', { class: 'value' }, '0');
+      requestAnimationFrame(() => JarvisMotion.countTo(v, Number(value) || 0));
+      return h('a', { class: 'glass stat stat-link', href }, v, h('div', { class: 'label' }, text));
+    };
 
     const briefing = h('div', { class: 'glass panel' }, h('h2', null, 'Briefing'), h('div', { class: 'muted' }, 'Preparing today’s briefing…'));
     root.append(h('div', { class: 'stack' },
       aiBanner(status.ai),
       briefing,
       h('div', { class: 'grid stats' },
-        stat(counts.tasks_open, 'Open tasks'),
-        stat(counts.projects, 'Projects'),
-        stat(counts.memories, 'Memories'),
-        stat(counts.experiences, 'Experiences'),
-        stat(counts.pending_approvals, 'Pending approvals')),
+        stat(counts.tasks_open, 'Open tasks', '#tasks'),
+        stat(counts.projects, 'Projects', '#projects'),
+        stat(counts.memories, 'Memories', '#memory'),
+        stat(counts.experiences, 'Experiences', '#experiences'),
+        stat(counts.pending_approvals, 'Pending approvals', '#system')),
       h('div', { class: 'grid two' },
         h('div', { class: 'glass panel' }, h('h2', null, 'Open tasks'),
           data.open_tasks.length
@@ -270,7 +274,7 @@ views.dashboard = {
                 h('div', { class: 'muted small' }, project.description)),
               chip(project.status, 'ok'))))
             : h('div', { class: 'empty' }, 'No projects.'))),
-      h('div', { class: 'glass panel' }, h('h2', null, 'Recent activity'), eventTable(data.recent_events))));
+      h('div', { class: 'glass panel' }, h('h2', null, 'Recent activity'), JarvisUI.eventLog(data.recent_events, when))));
     fillBriefing(briefing);
   },
 };
@@ -377,8 +381,9 @@ views.chat = {
     const bubble = (message) => h('div', { class: `msg ${message.role}` },
       h('div', { class: 'who' }, message.role === 'assistant' ? `JARVIS · ${message.model || message.provider || ''}`
         : message.role === 'system' ? 'System notice' : 'You'),
-      h('div', { class: 'wrap' }, message.content),
+      message.role === 'assistant' ? JarvisUI.richText(message.content) : h('div', { class: 'wrap' }, message.content),
       workspaceImages(message.content),
+      message.role === 'assistant' ? h('div', { class: 'msg-tools' }, JarvisUI.copyButton(message.content)) : null,
       message.memory_refs && message.memory_refs.length
         ? h('div', { class: 'meta' }, chip('From memory', 'violet'),
           message.memory_refs.map((ref) => h('span', { class: 'chip', title: ref.content },
@@ -386,15 +391,34 @@ views.chat = {
         : null,
       message.run_id ? actionCard(message.run_id) : null);
 
+    // suggestions for an empty conversation, from what JARVIS is set up to do for the owner
+    const SUGGEST = ['What should I do this week to grow Monsoor Motors?', 'Plan this week for Aureus Detailing',
+      'What did you learn for me today?', 'How much battery and disk space do I have?', 'Remind me at 5pm to check the stock list'];
+    let seenCount = 0;
     const showMessages = (list) => {
-      messages.replaceChildren(...(list.length ? list.map(bubble)
-        : [h('div', { class: 'empty' }, 'Start a conversation below.')]));
+      if (!list.length) {
+        const ideas = h('div', { class: 'suggest' }, ...SUGGEST.map((text) => {
+          const b = h('button', { class: 'suggest-chip', type: 'button' }, text);
+          b.addEventListener('click', () => { input.value = text; composer.requestSubmit(); });
+          return b;
+        }));
+        messages.replaceChildren(h('div', { class: 'empty' }, h('div', null, 'Ask JARVIS anything, or start with one of these:'), ideas));
+        seenCount = 0; return;
+      }
+      const nodes = list.map(bubble);
+      nodes.forEach((n, i) => { if (i >= seenCount && seenCount) n.classList.add('msg-in'); });   // only what is new animates
+      seenCount = list.length;
+      messages.replaceChildren(...nodes);
       messages.scrollTop = messages.scrollHeight;
     };
 
+    let threadQuery = '';
+    const threadSearch = h('input', { class: 'thread-search', placeholder: 'Search conversations', 'aria-label': 'Search conversations' });
+    threadSearch.addEventListener('input', () => { threadQuery = threadSearch.value.trim().toLowerCase(); loadThreads(); });
     const loadThreads = async () => {
-      const { items } = await api('GET', '/api/conversations');
-      threads.replaceChildren(
+      const all = (await api('GET', '/api/conversations')).items;
+      const items = threadQuery ? all.filter((item) => (item.title || '').toLowerCase().includes(threadQuery)) : all;
+      threads.replaceChildren(threadSearch,
         h('button', { class: 'btn sm', onclick: () => { state.conversationId = null; rememberConversation(null); showMessages([]); loadThreads(); input.focus(); } }, '+ New conversation'),
         ...items.map((item) => h('button', {
           class: 'thread' + (item.id === state.conversationId ? ' active' : ''), title: item.title,
@@ -520,9 +544,13 @@ views.chat = {
         try {
           const live = await api('GET', '/api/live');
           const line = messages.querySelector('.thinking .thinking-line');
-          if (line && live.step && live.step.description) line.textContent = live.step.description;
+          if (line && live.draft) {                 // the reply as JARVIS writes it
+            line.textContent = live.draft; line.classList.add('drafting');
+            line.parentElement.querySelector('.muted')?.remove();
+            messages.scrollTop = messages.scrollHeight;
+          } else if (line && live.step && live.step.description) line.textContent = live.step.description;
         } catch (e) { /* try again */ }
-      }, 2000);
+      }, 500);
       try {
         const result = await api('POST', '/api/chat', { message: text, attachments: files, conversation_id: state.conversationId, voice: voice.speakNext });
         state.conversationId = result.conversation.id;
@@ -540,8 +568,9 @@ views.chat = {
         input.focus();
       }
     }));
+    const fitInput = JarvisUI.autoGrow(input);
     input.addEventListener('keydown', (event) => {
-      if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) { event.preventDefault(); composer.requestSubmit(); }
+      if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) { event.preventDefault(); composer.requestSubmit(); setTimeout(fitInput, 0); }
     });
 
     root.append(h('div', { class: 'stack' },
@@ -800,25 +829,39 @@ views.experiences = {
 function selfReviewPanel() {
   const body = h('div', { class: 'stack' }, h('div', { class: 'muted small' }, 'Loading…'));
   const runBtn = h('button', { class: 'btn sm', type: 'button' }, 'Review now');
-  const decide = (branch, verb) => act(async () => {
+  // The outcome shows right under the buttons (merging runs the whole test suite, about a minute).
+  const decide = (branch, verb, status, buttons) => async () => {
     if (verb === 'approve' && !(await dialog({ title: 'Merge this self-review?', text: branch,
       note: 'The tests run on the merged result first; nothing is merged if they fail. Nothing is pushed.', okLabel: 'Approve and merge' }))) return;
     if (verb === 'reject' && !(await dialog({ title: 'Reject this self-review?', text: branch,
       note: 'Deletes the branch and its worktree.', okLabel: 'Reject and delete', danger: true }))) return;
-    const out = await api('POST', `/api/self-review/${branch}/${verb}`);
-    toast(out.message || 'Done');
-    await load();
-  });
-  const proposal = (p) => h('div', { class: 'item' },
-    h('div', { class: 'grow stack' },
-      h('div', { class: 'title mono' }, p.branch),
-      h('div', { class: 'meta' }, p.tests_ok === undefined ? null : chip(p.tests_ok ? 'tests pass' : 'tests fail', p.tests_ok ? 'ok' : 'bad'),
-        p.at ? chip(when(p.at)) : null),
-      p.self_review ? h('pre', { class: 'wrap small' }, p.self_review) : h('div', { class: 'muted small' }, 'No SELF_REVIEW.md on this branch.'),
-      p.diff_stat ? h('pre', { class: 'mono small scroll-x' }, p.diff_stat) : null),
-    h('div', { class: 'actions' },
-      h('button', { class: 'btn sm', onclick: decide(p.branch, 'reject') }, 'Reject'),
-      h('button', { class: 'btn sm danger', onclick: decide(p.branch, 'approve') }, 'Approve')));
+    buttons.forEach((b) => { b.disabled = true; });
+    status.className = 'review-status'; status.hidden = false;
+    status.textContent = verb === 'approve' ? 'Merging and running the tests on the result… about a minute.' : 'Rejecting…';
+    try {
+      const out = await api('POST', `/api/self-review/${branch}/${verb}`);
+      if (out.ok === false) throw new Error(out.error || 'Not done');
+      status.classList.add('ok'); status.textContent = out.message || 'Done';
+      setTimeout(load, 2500);
+    } catch (error) {
+      status.classList.add('bad'); status.textContent = error.message;
+      buttons.forEach((b) => { b.disabled = false; });
+    }
+  };
+  const proposal = (p) => {
+    const status = h('div', { class: 'review-status', role: 'status', 'aria-live': 'polite', hidden: true });
+    const reject = h('button', { class: 'btn sm' }, 'Reject'), approve = h('button', { class: 'btn sm danger' }, 'Approve');
+    reject.onclick = decide(p.branch, 'reject', status, [reject, approve]);
+    approve.onclick = decide(p.branch, 'approve', status, [reject, approve]);
+    return h('div', { class: 'item' },
+      h('div', { class: 'grow stack' },
+        h('div', { class: 'title mono' }, p.branch),
+        h('div', { class: 'meta' }, p.tests_ok === undefined ? null : chip(p.tests_ok ? 'tests pass' : 'tests fail', p.tests_ok ? 'ok' : 'bad'),
+          p.at ? chip(when(p.at)) : null),
+        p.self_review ? h('pre', { class: 'wrap small' }, p.self_review) : h('div', { class: 'muted small' }, 'No SELF_REVIEW.md on this branch.'),
+        p.diff_stat ? h('pre', { class: 'mono small scroll-x' }, p.diff_stat) : null),
+      h('div', { class: 'actions review-actions' }, h('div', { class: 'row' }, reject, approve), status));
+  };
   const load = async () => {
     const s = await api('GET', '/api/self-review');
     const last = s.last || {};
@@ -1164,6 +1207,7 @@ views.presence = {
             if (!['success', 'failure', 'calm'].includes(s)) identity.setState(s, l);
             showActivity(live.activity || []);
           }
+          if (live.draft) reply.textContent = live.draft;      // the reply as JARVIS writes it
         } catch (e) { /* the next poll will try again */ }
       }, 450);
       try {
@@ -1171,7 +1215,8 @@ views.presence = {
         rememberConversation(result.conversation.id);
         if (result.reply.run_id) offerApproval(result.reply.run_id);
         clearInterval(poll);
-        reply.textContent = result.reply.content.replace(/ Approve or deny it on the System page, then press Continue\./, ' Approve or deny it below.');
+        const shownText = result.reply.content.replace(/ Approve or deny it on the System page, then press Continue\./, ' Approve or deny it below.');
+        reply.replaceChildren(JarvisUI.richText(shownText)); reply.classList.remove('msg-in'); void reply.offsetWidth; reply.classList.add('msg-in');
         const pictures = workspaceImages(result.reply.content); if (pictures) reply.append(pictures);
         if (result.reply.memory_refs) memoryLine.replaceChildren(chip('From memory', 'violet'), ...result.reply.memory_refs.map((r) => chip(r.content.length > 40 ? r.content.slice(0, 39) + '…' : r.content)));
         const live = await api('GET', '/api/live').catch(() => null);
@@ -1405,25 +1450,28 @@ views.presence = {
 
     hero.append(
       h('div', { class: 'presence-head' },
-        h('div', { class: 'presence-mark' }, h('div', null, h('div', { class: 'name' }, 'JARVIS'), h('div', { class: 'motto' }, 'Reason first. Resolve always.'))),
+        h('div', { class: 'presence-mark' }, h('div', null, h('div', { class: 'name' }, 'JARVIS'), h('div', { class: 'motto' }, 'Your private executive intelligence'))),
         h('div', { class: 'presence-clock' }, time, date)),
-      h('div', { class: 'hud' },
-        callout('tl', 'System health', `${health}%`, `${checks.filter(Boolean).length} of ${checks.length} checks passing`),
-        callout('tr', 'Open tasks', status.counts.tasks_open, `${status.counts.tasks_completed} completed`),
-        stage,
-        callout('bl', 'Memories', status.counts.memories, `${status.counts.experiences} lessons recorded`),
-        callout('br', 'Tools', status.counts.tools, okRate == null ? 'No tool runs yet' : `${okRate}% of the last ${runs} runs worked`)),
+      stage,
       h('div', { class: 'presence-state' }, label, line),
       form,
       attachRow,
       h('div', { class: 'presence-exchange' }, you, reply, decision, memoryLine),
       h('div', { class: 'row end presence-tools' }, convoBtn, simBadge, previewBtn));
 
-    const side = h('aside', { class: 'presence-side' },
-      h('div', { class: 'log-head' }, 'Activity'), stream,
-      h('div', { class: 'log-model' }, status.ai.available ? `Thinking locally with ${status.ai.model}` : status.ai.detail));
-
-    root.append(h('div', { class: 'presence' }, hero, side));
+    // the concept's panels around the face: system, activity, Mac, task, result, schedule, decisions
+    let previewTimer = null;
+    const deck = JarvisDeck.build({ preview: (name, meaning) => {
+      clearTimeout(previewTimer);
+      identity.setState(name, `Preview: ${meaning.toLowerCase()}`);
+      previewTimer = setTimeout(() => identity.setState('calm'), 4000);
+    } });
+    state.cleanup.push(() => { deck.stop(); clearTimeout(previewTimer); });
+    const layout = h('div', { class: 'presence deck' }, deck.left, hero, deck.right, deck.states, deck.abilities);
+    root.append(layout);
+    const hud = JarvisMotion.attach(stage, identity);               // reticle + live voice line
+    state.cleanup.push(() => hud.destroy());
+    JarvisMotion.enter(layout, [deck.left.children, [hero], deck.right.children, [deck.states, deck.abilities]]);
     identity.setState(connected ? 'calm' : 'offline', connected ? 'Standing by.' : status.ai.detail);
     if (connected) input.focus();
   },
@@ -1514,7 +1562,10 @@ function startHeaderOrb() {
   }, 3000);
 }
 
-const route = async () => { startHeaderOrb(); await show(location.hash.replace('#', '') || 'presence'); window.scrollTo(0, 0); };
+// Inside a JARVIS OS window: no sidebar or header orb, the page fills the window.
+const EMBEDDED = new URLSearchParams(location.search).has('embed');
+if (EMBEDDED) document.documentElement.classList.add('embedded');
+const route = async () => { if (!EMBEDDED) startHeaderOrb(); await show(location.hash.replace('#', '') || 'presence'); window.scrollTo(0, 0); };
 window.addEventListener('hashchange', route);
 route();
 refreshChrome();

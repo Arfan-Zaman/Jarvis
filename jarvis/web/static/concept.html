@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>JARVIS · Concept</title>
+  <link rel="stylesheet" href="/static/identity.css">
+  <link rel="stylesheet" href="/static/concept.css">
+</head>
+<body>
+  <div class="room" aria-hidden="true"></div>
+  <div class="concept-banner">Concept preview: live data, separate from your current interface. <a href="/">Back to JARVIS</a></div>
+
+  <div class="app">
+    <nav class="rail" aria-label="Sections">
+      <a class="rail-mark" href="/#presence" title="JARVIS"><span></span></a>
+      <a href="/#dashboard" title="Dashboard" aria-label="Dashboard"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg></a>
+      <a href="/#chat" title="Chat" aria-label="Chat"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></a>
+      <a href="/#tasks" title="Tasks" aria-label="Tasks"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11"/><path d="m3 6 1 1 2-2M3 12l1 1 2-2M3 18l1 1 2-2"/></svg></a>
+      <a href="/#memory" title="Memory" aria-label="Memory"><svg viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v6c0 1.7 3.6 3 8 3s8-1.3 8-3V5"/><path d="M4 11v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/></svg></a>
+      <a href="/#system" title="System" aria-label="System"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l7 3v5c0 4.4-3 8.2-7 10-4-1.8-7-5.6-7-10V6z"/></svg></a>
+    </nav>
+
+    <aside class="col-left">
+      <header class="intro">
+        <h1>JARVIS</h1>
+        <p class="lede">Your private executive intelligence.</p>
+        <p class="muted">Leads with the answer, challenges weak ideas, never claims what it did not do.</p>
+      </header>
+
+      <section class="card" id="vitals">
+        <h2>System</h2>
+        <div class="big"><span id="v-abilities">–</span><small>of <span id="v-total">–</span> abilities available</small></div>
+        <div class="hint" id="v-asks"></div>
+        <dl class="kv" id="v-kv"></dl>
+      </section>
+
+      <section class="card" id="activity">
+        <h2>Activity <span class="hint">last 24 hours</span></h2>
+        <div class="big"><span id="a-runs">–</span><small>actions</small> <span class="delta" id="a-ok"></span></div>
+        <canvas id="a-chart" height="90" aria-label="Actions per hour, last 24 hours"></canvas>
+        <div class="legend"><span class="dot pink"></span>actions <span class="dot red"></span>failed</div>
+      </section>
+
+      <section class="card" id="mac">
+        <h2>This Mac</h2>
+        <dl class="kv" id="m-kv"><dt>Checking…</dt><dd></dd></dl>
+      </section>
+    </aside>
+
+    <main class="stage-col">
+      <div class="stage-head">
+        <div><div class="eyebrowless">System state</div><div class="state-name" id="s-label">—</div></div>
+        <div class="clock" id="clock"></div>
+      </div>
+      <div class="stage" id="stage"></div>
+      <div class="state-line" id="s-line" aria-live="polite"></div>
+      <form class="command" id="command">
+        <input id="cmd" placeholder="Type to JARVIS… (voice lives on the main page)" aria-label="Message JARVIS" autocomplete="off">
+        <button type="submit" aria-label="Send">➤</button>
+      </form>
+      <div class="reply" id="reply"></div>
+    </main>
+
+    <aside class="col-right">
+      <section class="card bracket" id="task">
+        <h2>Current task <span class="pill" id="t-pill">idle</span></h2>
+        <ol class="steps" id="t-steps"><li class="muted">No task running. Standing by.</li></ol>
+      </section>
+      <section class="card bracket" id="result">
+        <h2>Last result <span class="pill ok" id="r-pill"></span></h2>
+        <p class="result-text" id="r-text">—</p>
+        <p class="result-when" id="r-when"></p>
+        <a class="btn" href="/#goals">All results</a>
+      </section>
+      <section class="card" id="next">
+        <h2>Coming up</h2>
+        <ul class="list" id="n-list"><li class="muted">Nothing scheduled.</li></ul>
+      </section>
+      <section class="card" id="decide">
+        <h2>Needs you</h2>
+        <ul class="list" id="d-list"><li class="muted">Nothing waiting.</li></ul>
+      </section>
+    </aside>
+
+    <section class="states" aria-label="How JARVIS looks in each state">
+      <div class="states-head"><h2>States</h2><span class="muted">Motion only with a cause. Live renders of the real face.</span></div>
+      <div class="state-grid" id="gallery"></div>
+    </section>
+
+    <section class="features" aria-label="What JARVIS can do">
+      <div class="states-head"><h2>Abilities</h2><span class="muted">Worked out live from what JARVIS can do right now.</span></div>
+      <div class="feature-grid" id="features"></div>
+    </section>
+  </div>
+
+  <script src="/static/identity.js" defer></script>
+  <script src="/static/concept.js" defer></script>
+</body>
+</html>

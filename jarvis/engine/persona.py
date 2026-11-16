@@ -53,3 +53,8 @@ WONT_KEEP = "Understood. I won't keep that."
 SELF_CHANGE = ("I can't rewrite my own code from a conversation: that would change me without your review. "
                "Open the System page and press Review now in Self-review: I'll study my code and logs, propose "
                "up to three improvements on a separate branch, and nothing changes until you approve them.")
+
+TEACHING = ("I can't do that on my own yet, so I've asked Claude to build it into me. When it's ready, the "
+            "change waits on the System page for your Approve, and after that I'll do it myself.")
+TEACH_NOTED = ("Noted as something to learn. When Claude Code is available, it will build it into me for you "
+               "to approve on the System page.")

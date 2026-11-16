@@ -37,7 +37,9 @@ WRITE_ALLOW = ["Edit(./**)", "Write(./**)", "MultiEdit(./**)", "NotebookEdit(./*
 PLAYWRIGHT_MCP = "@playwright/mcp@0.0.85"                             # pinned, not @latest
 NEVER = ["Bash", "BashOutput", "KillShell", "Task", "Agent"]
 BRIEF = ("You are working as the deep mind of JARVIS, a personal assistant. Do the task fully and "
-         "well. You cannot run shell commands. {files} Reply with the finished result itself "
+         "well. You cannot run shell commands here, but JARVIS can, with the owner's one-click approval: when what "
+         "you built should be run or tested, end by telling the owner exactly what to say, e.g. 'Run the tests "
+         "in workspace/price_watch'. {files} Reply with the finished result itself "
          "(the answer, the analysis, or a summary of the files you made and where), concise and "
          "ready to show the owner. Say plainly if something could not be done or verified.")
 

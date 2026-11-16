@@ -11,7 +11,10 @@ The owner wants every step pushed and nothing reported as working without proof.
    If a test pins old behaviour the owner changed on purpose, update that test
    and say so; never delete coverage.
 2. **Syntax for front-end files:** `node --check jarvis/web/static/<file>.js`.
-3. **Python changes need a server restart** (static files do not):
+3. **Python changes need a server restart** (static files do not). First wait until no
+   self-review or teach pass is running, including the test run after Claude Code exits:
+   `while curl -s http://localhost:8765/api/self-review | grep -q '"running": true' || pgrep -f "local/bin/claude -p" >/dev/null; do sleep 15; done`
+   (run it in the background). Then
    `python3 -m jarvis stop; (nohup python3 -m jarvis serve >/dev/null 2>&1 &)`,
    then `curl -s -o /dev/null -w "%{http_code}" http://localhost:8765/api/tools` → 200.
 4. **See it:** in Claude in Chrome open `http://localhost:8765/#<page>`, run

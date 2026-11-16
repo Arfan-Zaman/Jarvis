@@ -2,6 +2,150 @@
 
 Newest entries first. Record what changed, why, and what was verified.
 
+## 2026-11-16 — Speed: streaming replies, a two-call path for open data, a lean router
+
+- Measured, not guessed: the 9b writes ~11 tokens/s; routing took 5.8 s; weather took 45 s (planner).
+- Replies stream: `OllamaProvider.generate(on_token=...)`, the text so far is in `/api/live` as `draft`,
+  and Chat and Presence show it as it is written.
+- Open-data questions (weather, currency, holidays, VIN, words, news) go one-pick -> tool -> answer
+  (`_quick_tool`): weather in Perth 45 s -> 12 s.
+- The router sees only the first sentence of each tool: 9b routing 5.8 s -> 2.7 s, 10/10 right on the
+  benchmark. A separate router model was tested and NOT used: qwen3.5:4b routed in 2.1 s but got 8/10,
+  and 16 GB cannot hold it beside the 9b, so every swap reloads a model (6-8 s). `JARVIS_ROUTER_MODEL`
+  remains as an option for a bigger Mac.
+- Self-review Approve: merges even with unrelated unsaved work (refuses only when the same files are
+  dirty, and says which); the result now shows right under the buttons, with progress while the tests run.
+
+## 2026-11-16 — Local-first JARVIS: its own brain, its own Chrome, open data, the gap loop
+
+- The local model is the brain by default (`JARVIS_BRAIN=local`; `claude` restores the old way).
+  Claude is called only for code, builds, deep research, a question its own search could not answer,
+  and teaching. Router, `HARD_WORK` and voice no longer send plans, maths or writing to Claude.
+- `jarvis/tools/browser.py`: JARVIS's own Chrome (Playwright MCP 0.0.85 over stdio, persistent profile
+  `data/browser-profile`, JARVIS's server blocked). `browser.search` (free full-web search, ~5 s),
+  `browser.read`, and `browser.use`, a step-by-step agent run by the local model. One approval per task;
+  it stops before buy/pay/send/post/sign-up clicks and never types passwords or card numbers.
+  Live check: it read three cars and prices off monsoormotors.com.au in one step, matching the site.
+- Web questions are answered locally: search, read the top pages, answer with sources (`_web_answer`).
+- `jarvis/tools/opendata.py`: free keyless APIs: Open-Meteo weather, Frankfurter + open.er-api currency,
+  Nager.Date holidays, NHTSA VIN decoding, Free Dictionary, Google News. Each checked live.
+- Photos: the local model's vision answers about attached pictures (`OllamaProvider.see`).
+- Local model: 16k context (`JARVIS_CTX`) and kept loaded for 30 minutes, so replies start at once.
+- Learning is local and every 10 minutes (its Chrome + local model); the briefing uses `open.news`.
+- The gap loop (`jarvis/gaps.py`): what JARVIS could not do becomes a gap, and the self-review hands the
+  gaps to Claude Code to build into JARVIS with tests, on a branch the owner approves. Runs every
+  `JARVIS_TEACH_HOURS` (6) or right away when the owner says "learn to ...".
+- `CLAUDE.md`: the standing rules (local first, the gap loop, hard lines) for every future session.
+
+## 2026-11-16 — The OS is the default page
+
+- `/` now opens JARVIS AI Operating System; the single-page interface moved
+  to `/classic` (the OS windows embed it from there). `/static/os.html` still works.
+
+## 2026-11-16 — JARVIS AI Operating System; stress test and lessons
+
+- `os.html` / `os.css` / `os.js`: a desktop shell. Top bar (live state,
+  battery, Wi-Fi, clock, notifications), live desktop widgets, a dock of apps
+  that open as real JARVIS pages in draggable, resizable, minimisable windows
+  (iframes in `?embed=1` mode; CSP now `frame-ancestors 'self'`), positions
+  remembered, a Cmd-K command bar to open apps or ask JARVIS (no animation:
+  it opens many times a day), toasts for approvals and reminders, a one-time
+  boot. Checked in Chrome: windows, dock, command bar answer, no errors.
+- Stress test on a test copy, 12 tasks: 8 passed (build an agent, live web,
+  research, tasks, memory, reminder, loan maths, picture refusal, browser
+  approval). Fixed the 4 gaps:
+  - `mac.find_files` now searches one folder, by kind (pdf, image, ...),
+    newest first, with dates and sizes ("latest PDF in Downloads").
+  - Run / test / install / "run it" requests go to `claude.operate` (one
+    approval) instead of the no-shell tool.
+  - Multi-part routines ("every Monday X and every Friday Y") become separate
+    schedules.
+  - The builder tells the owner exactly what to say to run what it built.
+- Proof: re-run of the 4 tasks all pass; the built price_watch agent's 5
+  tests pass through Mac access (13 s, sandboxed). 336 tests pass.
+
+## 2026-11-16 — Interface redesign: motion, HUD reticle, interactive dashboard, better chat
+
+- Skills: installed (after vetting, text only, MIT) Emil Kowalski's animate,
+  choreograph, improve-animations, animation-performance, review-animations,
+  find-animation-opportunities, animation-vocabulary, emil-design-eng
+  (emilkowalski/skills, 57k stars) and design-motion-principles
+  (kylezantos). Used with unslop, dashboard-design, ux-designer and
+  frontend-design.
+- `motion.css` / `motion.js`: tokens (strong ease-out, 120-280 ms), page
+  fade-and-settle, one choreographed staggered entrance per session, press
+  feedback, pointer-only hover, data flash and count-up on change, toast and
+  reply entrances, reduced motion respected. A HUD reticle around the face
+  (hairline ticks, arcs, sweep; spins faster and sweeps while working; state,
+  timer and signal readouts) and a live voice line driven by the real
+  speech/microphone level that stops drawing when idle.
+- Speed: gallery faces render only when scrolled into view. Measured 120 fps,
+  worst frame 9 ms on the JARVIS page.
+- Dashboard: stat tiles count up and open their page; the activity log has
+  category filters, search and a count.
+- Chat: replies render safely (paragraphs, headings, lists, bold, inline code,
+  links, code blocks with Copy; no innerHTML), a copy button per reply,
+  suggestions from the owner's goals in a new conversation, conversation
+  search, auto-growing message box, only new messages animate. The JARVIS
+  page reply uses the same rendering.
+- 336 tests pass; checked in Chrome with no console errors.
+
+## 2026-11-16 — The concept is now the JARVIS page
+
+- Owner approved the concept. `deck.js` builds its panels (System, Activity,
+  This Mac, Current task, Last result, Coming up, Needs you, the live States
+  gallery and Abilities) around the existing JARVIS page centre, so voice,
+  wake word, interrupt, files, the Approve card and the shared conversation
+  are unchanged. `deck.css` lays it out (three columns, then states and
+  abilities; folds to two and one column) and carries the quiet style to every
+  page: neutral graphite panels and hairlines, off-white primary buttons,
+  magenta kept for the face, live state and selection.
+- Checked in Chrome: JARVIS page, Dashboard and Chat render with no console
+  errors; the test tab was closed so only one hands-free listener runs.
+  concept.html stays as a standalone preview.
+
+## 2026-11-16 — Vetted GitHub skills installed and used on the concept
+
+- Installed for Claude Code (~/.claude/skills) and JARVIS
+  (workspace/.claude/skills), after reading them in a quarantine folder:
+  unslop (heydamir, 16.7k stars, text only; its helper scripts, which start
+  Chrome and run commands, were left out), dashboard-design (abdiraimov-otabek;
+  its promotional sign-off section removed), ux-designer (szilu), and
+  Anthropic's official theme-factory, mcp-builder and doc-coauthoring. A
+  16-star 21 MB repo was rejected.
+- Used on the concept page (unslop polish mode + dashboard-design critique):
+  neutral graphite surfaces and hairlines, magenta kept for the face, the live
+  state and the selection; line icons in the rail; 500-weight title; honest
+  counts ("16 of 16 available, 3 ask first", activity with the day before);
+  one-line Last result that skips background reads.
+- New read-only `GET /api/mac/status` (not logged as an action) so the page
+  does not fill the activity log; fixed a negative index in the fallback face
+  drawing that threw occasionally. 336 tests pass; no console errors.
+
+## 2026-11-16 — JARVIS set up around the owner's goal: grow all the businesses
+
+- Owner's goal saved as personal facts (grow Monsoor Motors, Aureus Detailing
+  and OwnWay; proactive, prioritised actions with numbers; Australia). Project
+  profiles written for all three (OwnWay added) with their growth levers.
+- Standing jobs: weekly growth review per business (Mon 8:00 / 8:15 / 8:30)
+  and a Friday 4pm wrap-up across all three.
+- Learning takes turns across the businesses and asks for current
+  information (picks: detailing pricing benchmarks 2026, used car pricing
+  strategy Nov 2026, best selling products for seniors 2026).
+- Real request "What should I do this week to grow Aureus Detailing?": a full
+  plan in workspace/aureus-detailing/weekly-growth-strategy.md (111 s, deep
+  model), honest that real numbers are unknown, with 8 questions to tune it.
+
+## 2026-11-16 — Owner's skills available to JARVIS; first self-review started
+
+- The owner's 20 Claude Code skills (ceo-operator, finance-analyst,
+  shopify-store-builder, meta/google ads, compliance-au, ...; written for the
+  OwnWay store) are copied into `workspace/.claude/skills/` (git-ignored), so
+  JARVIS's Claude Code loads them; confirmed with a real run. Refresh with
+  `rsync -a ~/.claude/skills/ ~/JARVIS/workspace/.claude/skills/`.
+- Status: all 16 abilities on; "not built yet" is empty. First self-review
+  pass started from the API; proposals appear on the System page.
+
 ## 2026-11-16 — Merged reminders, email and calendar, morning briefing; model tiers
 
 - Merged `claude/unruffled-heisenberg-1318a6` (reminders and recurring jobs),

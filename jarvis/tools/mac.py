@@ -35,17 +35,52 @@ def _run(args: list[str], timeout: int = 15) -> str:
     return done.stdout.strip()
 
 
+KINDS = {"pdf": "com.adobe.pdf", "image": "public.image", "photo": "public.image", "video": "public.movie",
+         "audio": "public.audio", "document": "public.content", "spreadsheet": "public.spreadsheet",
+         "presentation": "public.presentation", "text": "public.text", "folder": "public.folder", "app": "com.apple.application"}
+
+
 def find_files(app, inputs, actor):
-    query = inputs["query"].strip()
-    if not query:
-        raise ValidationError("mac.find_files: 'query' is empty")
-    home = str(Path.home())
+    """Spotlight search in the owner's home folder: by name or content, optionally in one folder,
+    of one kind (pdf, image, video, ...), newest first."""
+    query = (inputs.get("query") or "").strip()
+    kind = (inputs.get("kind") or "").strip().lower().rstrip("s")
+    home = Path.home()
+    folder = Path(inputs.get("folder") or "~").expanduser().resolve()
+    if folder != home.resolve() and home.resolve() not in folder.parents:
+        raise ValidationError("JARVIS searches only inside your home folder")
+    if not folder.is_dir():
+        raise ValidationError(f"no such folder: {inputs.get('folder')}")
+    if not query and not kind:
+        raise ValidationError("mac.find_files: give a query, a kind, or both")
     limit = max(1, min(inputs.get("limit", 20), 50))
-    found = _run(["mdfind", "-onlyin", home, "-name", query]).splitlines()
-    if len(found) < limit:                                   # then by contents
-        found += [p for p in _run(["mdfind", "-onlyin", home, query]).splitlines() if p not in found]
-    clean = [p for p in found if not HIDDEN.search(p[len(home):])][:limit]
-    return {"query": query, "files": [p.replace(home, "~", 1) for p in clean], "more": len(found) > len(clean)}
+    clauses = []
+    if kind:
+        uti = KINDS.get(kind)
+        clauses.append(f'kMDItemContentTypeTree == "{uti}"' if uti else f'kMDItemFSName == "*.{kind}"c')
+    if query:
+        safe = query.replace("\\", " ").replace('"', " ")
+        clauses.append(f'(kMDItemFSName == "*{safe}*"cd || kMDItemTextContent == "*{safe}*"cd)')
+    found = _run(["mdfind", "-onlyin", str(folder), " && ".join(clauses)], timeout=20).splitlines()
+    found = [f for f in found if not HIDDEN.search(f[len(str(home)):])]
+    if inputs.get("newest", True):
+        def mtime(path):
+            try:
+                return Path(path).stat().st_mtime
+            except OSError:
+                return 0
+        named = (lambda f: query.lower() in Path(f).name.lower()) if query else (lambda f: True)
+        found.sort(key=lambda f: (named(f), mtime(f)), reverse=True)          # name matches first, then newest
+    from datetime import datetime
+    def info(path):
+        try:
+            st = Path(path).stat()
+            return {"path": path.replace(str(home), "~", 1), "modified": datetime.fromtimestamp(st.st_mtime).strftime("%Y-%m-%d %H:%M"),
+                    "size_kb": round(st.st_size / 1024)}
+        except OSError:
+            return {"path": path.replace(str(home), "~", 1)}
+    return {"query": query, "kind": kind or None, "folder": str(folder).replace(str(home), "~", 1),
+            "files": [info(f) for f in found[:limit]], "total": len(found)}
 
 
 def status(app, inputs, actor):
@@ -101,9 +136,14 @@ def notify(app, inputs, actor):
 def register_mac(registry: ToolRegistry) -> None:
     S = lambda d, **x: {"type": "string", "description": d, **x}    # noqa: E731
     for tool in (
-        Tool("mac.find_files", "Find files and folders on the owner's Mac by name or content (Spotlight).", READ,
-             find_files, {"query": S("What to look for.", required=True),
-                          "limit": {"type": "integer", "description": "Most results (up to 50)."}}),
+        Tool("mac.find_files", "Find files on the owner's Mac (Spotlight), newest first: by name or content, in one "
+             "folder (e.g. ~/Downloads, ~/Desktop, ~/Documents), of one kind (pdf, image, video, audio, spreadsheet, "
+             "presentation, text, folder, or a file extension). 'The latest PDF in Downloads' = kind pdf, folder ~/Downloads, limit 1.",
+             READ, find_files, {"query": S("Words in the name or content (optional)."),
+                                "folder": S("Folder to search, like ~/Downloads (default: the whole home folder)."),
+                                "kind": S("pdf, image, video, audio, spreadsheet, presentation, text, folder or an extension."),
+                                "newest": {"type": "boolean", "description": "Newest first (default true)."},
+                                "limit": {"type": "integer", "description": "Most results (up to 50)."}}),
         Tool("mac.status", "Check the Mac: battery, free disk space, network, uptime and open apps.", READ, status),
         Tool("mac.open", "Open a website, an app (by name), or a file or folder in the owner's home folder.", WRITE,
              open_thing, {"target": S("A URL, an app name like Safari, or a path like ~/Downloads/report.pdf.",

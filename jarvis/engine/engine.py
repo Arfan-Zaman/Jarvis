@@ -114,13 +114,6 @@ def _question(reply: dict) -> str | None:
     return blocked.strip() if isinstance(blocked, str) and blocked.strip() else None
 
 
-def _input_hint(tool) -> str:
-    """The tool's inputs in one line, so a retry knows exactly what to send."""
-    fields = [f"{name} ({spec['type']}{', required' if spec.get('required') else ''})"
-              for name, spec in tool.inputs.items()]
-    return f'{tool.name} takes {{"inputs": {{...}}}} with: {", ".join(fields) or "no inputs"}'
-
-
 class Engine:
     def __init__(self, app):
         self.app = app
@@ -431,15 +424,15 @@ class Engine:
             def check(reply: dict) -> dict:
                 if _question(reply):
                     return reply
-                # Small models often put the tool's inputs beside "inputs" instead of inside it.
-                loose = {k: v for k, v in reply.items() if k != "inputs" and k in tool.inputs}
-                given = reply.get("inputs", {} if loose else None)
+                given = reply.get("inputs", {})
                 if not isinstance(given, dict):
                     raise ValueError('expected {"inputs": {...}}')
-                try:
-                    return {"inputs": ToolRegistry.validate(tool, {**loose, **given})}
-                except ValidationError as exc:
-                    raise ValidationError(f"{exc} ({_input_hint(tool)})") from None
+                # Small models often put an input beside "inputs" instead of in it: {"query": "..."}.
+                # Lift only the tool's own input names; everything is still validated below.
+                lifted = {k: v for k, v in reply.items() if k in tool.inputs and given.get(k) is None}
+                if "inputs" not in reply and not lifted:
+                    raise ValueError('expected {"inputs": {...}}')
+                return {"inputs": ToolRegistry.validate(tool, {**given, **lifted})}
 
             state = self._state(runs.get(run_id))
             reply = self._ask("ACTION", {**state, "step": {"position": step["position"],

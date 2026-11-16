@@ -1,5 +1,8 @@
 # Self-review 2026-11-16 (2)
 
+> Updated onto main after self-review -3 was merged. Change 1 (goal-engine inputs) is now main's version from -3,
+> so this branch adds change 2 (`web.fetch` focus) and change 3 (`jarvis.info` commit).
+
 Three small changes. `python3 -m unittest discover -s tests`: 333 tests pass (4 new or extended).
 
 ## 1. Goal steps: accept inputs placed beside `"inputs"`, and say what the tool takes on retry

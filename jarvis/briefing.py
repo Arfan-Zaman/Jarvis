@@ -5,7 +5,7 @@ It gathers, from what JARVIS already has:
 - what it learned since yesterday (memories saved by the learner, source `jarvis:learn`);
 - approvals waiting for the owner and self-review proposals;
 - the Mac (`mac.status`): battery and free disk space;
-- two or three headlines on the owner's interests (`claude.research`, read-only, each with its URL).
+- two or three headlines on the owner's interests (`open.news`; `claude.research` when JARVIS_BRAIN=claude).
 
 The local model turns those facts into a short spoken script; if it is unavailable the
 briefing is put together from plain sentences instead, so there is always one to play.
@@ -189,11 +189,16 @@ class Briefing:
         def work():
             try:
                 day = self.today()
-                result = self.app.tools.execute("claude.research", {
-                    "query": f"The most important news from the last two days ({day}) about: {topics()}",
-                    "why": "Two or three headlines for the owner's spoken morning briefing.",
-                    "count": 3}, actor=ACTOR)
-                items = (result["output"] or {}).get("facts", [])[:3] if result["ok"] else []
+                if os.environ.get("JARVIS_BRAIN", "local") == "claude" and "claude.research" in self.app.tools.names():
+                    result = self.app.tools.execute("claude.research", {
+                        "query": f"The most important news from the last two days ({day}) about: {topics()}",
+                        "why": "Two or three headlines for the owner's spoken morning briefing.",
+                        "count": 3}, actor=ACTOR)
+                    items = (result["output"] or {}).get("facts", [])[:3] if result["ok"] else []
+                else:                                   # free and local: Google News headlines, no Claude
+                    result = self.app.tools.execute("open.news", {"topic": topics(), "limit": 3}, actor=ACTOR)
+                    items = [{"fact": h["title"], "url": h["url"]} for h in
+                             (result["output"] or {}).get("headlines", [])[:3]] if result["ok"] else []
                 if not result["ok"]:
                     log.info("Briefing headlines unavailable: %s", result.get("error"))
                 self.app.settings.set(HEADLINES_KEY, {"day": day, "items": items}, category="briefing",

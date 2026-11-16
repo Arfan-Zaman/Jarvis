@@ -215,8 +215,11 @@ def web_fetch(app, inputs, actor):
     url = check_url(inputs["url"])
     limit = max(500, min(inputs.get("max_chars", 8000), 20000))
     body, content_type, final_url = _get(url)
-    charset = re.search(r"charset=([\w-]+)", content_type)
-    text = body.decode(charset.group(1) if charset else "utf-8", "replace")
+    charset = re.search(r"charset=[\"']?([\w-]+)", content_type)
+    try:
+        text = body.decode(charset.group(1) if charset else "utf-8", "replace")
+    except LookupError:                 # a charset Python does not know (e.g. "utf8mb4"): read it as UTF-8
+        text = body.decode("utf-8", "replace")
     kind = content_type.split(";")[0].strip().lower()
     if kind in ("text/html", "application/xhtml+xml", ""):
         parser = _TextExtractor()

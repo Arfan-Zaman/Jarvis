@@ -29,7 +29,7 @@ INT_FILTERS = ("project_id", "task_id")
 SECURITY_HEADERS = {
     "X-Content-Type-Options": "nosniff",
     "Referrer-Policy": "no-referrer",
-    "Content-Security-Policy": ("default-src 'self'; media-src 'self' blob:; frame-ancestors 'none'; "
+    "Content-Security-Policy": ("default-src 'self'; media-src 'self' blob:; frame-ancestors 'self'; "
                                 "base-uri 'none'; form-action 'self'"),
 }
 
@@ -224,10 +224,22 @@ def _selfreview_decide(app: Jarvis, req: Request):
     return (200 if result.get("ok") else 409), result
 
 
+@route("GET", "/api/mac/status")
+def _mac_status(app: Jarvis, req: Request):
+    """Battery, disk, network and open apps for the interface. Read-only and not logged as an
+    action, so a page refreshing it does not fill JARVIS's activity log."""
+    from ..tools.mac import status
+    return status(app, {}, "interface")
+
+
 @route("GET", "/api/live")
 def _live(app: Jarvis, req: Request):
     """JARVIS's current state for the face and core, derived from real runs."""
-    return app.engine.live()
+    live = app.engine.live()
+    draft = getattr(app, "draft", None)
+    if draft and __import__("time").time() - draft["at"] < 120:
+        live = dict(live, draft=draft["text"][-4000:])     # the reply so far, while it is being written
+    return live
 
 
 # --- reminders and scheduled jobs -------------------------------------------
@@ -483,9 +495,11 @@ class Handler(BaseHTTPRequestHandler):
             self._error(500, "Internal error. See data/logs/jarvis.log.")
 
     def _static(self, path: str):
-        name = "index.html" if path in ("", "/") else path.removeprefix("/static/")
+        # "/" is the JARVIS AI Operating System; "/classic" is the single-page interface it embeds.
+        pages = {"": "os.html", "/": "os.html", "/classic": "index.html"}
+        name = pages.get(path) or path.removeprefix("/static/")
         target = (STATIC_DIR / name).resolve()
-        if (path not in ("", "/") and not path.startswith("/static/")) \
+        if (path not in pages and not path.startswith("/static/")) \
                 or STATIC_DIR not in target.parents or not target.is_file():
             return self._error(404, "not found")
         content_type = mimetypes.guess_type(target.name)[0] or "application/octet-stream"
