@@ -191,6 +191,13 @@ def _learn_now(app: Jarvis, req: Request):
     return {"started": True}
 
 
+@route("GET", "/api/briefing")
+def _briefing(app: Jarvis, req: Request):
+    """Today's spoken briefing (kept for the day; ?refresh=1 makes a new one), with its sources."""
+    refresh = str(req.query.get("refresh", "")).lower() in ("1", "true", "yes")
+    return app.briefing.get(refresh=refresh)
+
+
 @route("GET", "/api/self-review")
 def _selfreview_status(app: Jarvis, req: Request):
     """Weekly self-review: on or off, the last pass, and proposal branches waiting for the owner."""

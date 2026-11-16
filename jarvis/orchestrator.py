@@ -77,6 +77,8 @@ class Jarvis:
         self.selfreview = SelfReview(self)
         from .scheduler import Scheduler
         self.scheduler = Scheduler(self)
+        from .briefing import Briefing
+        self.briefing = Briefing(self)
         self.voice = Voice(self.config)
         self.conversation = Conversation(self)
         self.started_at = time.time()

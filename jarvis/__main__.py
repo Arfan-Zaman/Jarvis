@@ -60,6 +60,7 @@ def cmd_serve(config, args) -> int:
     app.learner.start()                       # continuous learning while the server runs
     app.selfreview.start()                    # weekly self-review; proposals wait for the owner
     app.scheduler.start()                     # reminders and recurring jobs
+    app.briefing.start()                      # the day's headlines ready before the first "Jarvis"
     try:
         server.serve_forever()
     except KeyboardInterrupt:
