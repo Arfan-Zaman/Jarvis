@@ -131,6 +131,7 @@ class OpenAICompatible(AIProvider):
             with self._call("/chat/completions", payload) as response:
                 data = json.loads(response.read())
             content = ((data.get("choices") or [{}])[0].get("message") or {}).get("content") or ""
+        content = __import__("re").sub(r"\s*【[^】]{0,40}】", "", content)      # gpt-oss citation marks
         if not content.strip():
             raise ProviderError("the boost platform returned an empty answer")
         return ProviderResponse(text=content.strip(), provider=self.name, model=self.model)
