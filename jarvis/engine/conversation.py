@@ -294,7 +294,9 @@ class Conversation:
             # a web question: JARVIS searches and reads the web itself; Claude only if that finds nothing
             if brain() == "claude":
                 spoken = self._converse(conversation_id)
-            elif self.DOINGS.search(decision["goal"]) or OPEN_DATA.search(decision["goal"]) or not browser_on(self.app):
+            elif OPEN_DATA.search(decision["goal"]) and not self.DOINGS.search(decision["goal"]):
+                spoken = self._quick_tool(conversation_id, decision["goal"])   # one pick, one call, one answer
+            elif self.DOINGS.search(decision["goal"]) or not browser_on(self.app):
                 spoken = None             # an action, or no browser: the local planner handles it with its tools
             else:
                 spoken = self._web_answer(conversation_id, decision["goal"]) or self._converse(conversation_id, force=True)
@@ -331,15 +333,49 @@ class Conversation:
         return [m for m in self.app.conversations.messages(conversation_id)
                 if m["role"] in ("user", "assistant")][-HISTORY:]
 
+    def _write(self, messages):
+        """The main model's spoken/written reply, shown in the UI as it is written (app.draft)."""
+        provider = self.app.provider
+        if not getattr(provider, "streams", False):
+            return provider.generate(messages)
+        def show(text):
+            self.app.draft = {"text": MEMORY_MARK.sub("", text), "at": __import__("time").time()}
+        return provider.generate(messages, on_token=show)
+
+    def router(self):
+        """The model that decides how to handle a message: a small fast one (JARVIS_ROUTER_MODEL, e.g.
+        qwen3.5:4b) when installed, so the big model is free for the thinking. Falls back to the main model."""
+        name = os.environ.get("JARVIS_ROUTER_MODEL", "").strip()
+        main = self.app.provider
+        if not name or getattr(main, "name", "") != "ollama" or name == getattr(main, "model", ""):
+            return main
+        cached = getattr(self, "_router", None)
+        if cached is None or cached.model != name:
+            from ..providers.ollama import OllamaProvider
+            cached = self._router = OllamaProvider(main.base_url, name, timeout=60)
+        return cached
+
     def _route(self, conversation_id: int) -> dict:
-        tools = "\n".join(f"- {t['name']}: {t['description']}" for t in self.app.tools.list())
+        # first sentence of each tool only: the router decides the MODE, the planner reads the full details
+        tools = "\n".join(f"- {t['name']}: {re.split(r'(?<=[.:])\s', t['description'], maxsplit=1)[0][:110]}"
+                          for t in self.app.tools.list())
         transcript = "\n".join(f"{m['role'].upper()}: {m['content'][:1000]}" for m in self._history(conversation_id))
         try:
-            reply = self.app.provider.generate(
-                [ChatMessage("system", ROUTER + tools),
-                 ChatMessage("user", f"CONVERSATION (latest message last):\n{transcript}")],
-                json_output=True).text
-            decision = parse_json(reply)
+            try:
+                reply = self.router().generate(
+                    [ChatMessage("system", ROUTER + tools),
+                     ChatMessage("user", f"CONVERSATION (latest message last):\n{transcript}")],
+                    json_output=True).text
+                decision = parse_json(reply)
+            except (ValueError, ProviderError) as exc:
+                if self.router() is self.app.provider:
+                    raise
+                log.info("Fast router failed, asking the main model: %s", exc)
+                reply = self.app.provider.generate(
+                    [ChatMessage("system", ROUTER + tools),
+                     ChatMessage("user", f"CONVERSATION (latest message last):\n{transcript}")],
+                    json_output=True).text
+                decision = parse_json(reply)
         except (ValueError, ProviderError) as exc:
             log.info("Routing fell back to answer: %s", exc)
             return {"mode": "answer"}
@@ -417,6 +453,41 @@ class Conversation:
     DOINGS = re.compile(r"\b(send|pay|buy|order|book|post|publish|message|text|call|email|transfer|delete|"
                         r"sign (up|in)|subscribe|submit|reply)\b|https?://", re.I)
 
+    QUICK = """Pick the ONE tool that answers the request and its inputs. Reply with ONE JSON object:
+{"tool": "<tool name>", "inputs": {...}}   or   {"tool": null} if none of these fits.
+It is now {today}. Tools:
+"""
+
+    def _quick_tool(self, conversation_id: int, goal: str) -> dict | None:
+        """Open-data questions (weather, money, holidays, VIN, words, news): the fast model picks the tool,
+        JARVIS runs it, the main model answers from the data. None to let the planner do it instead."""
+        tools = [t for t in self.app.tools.list() if t["name"].startswith("open.")]
+        if not tools:
+            return None
+        listing = "\n".join(f"- {t['name']}: {t['description']} Inputs: {json.dumps(t['inputs'])}" for t in tools)
+        try:
+            pick = parse_json(self.router().generate([ChatMessage("system", self.QUICK.replace("{today}", now_local()) + listing),
+                                                      ChatMessage("user", goal)], json_output=True).text)
+        except (ValueError, ProviderError):
+            return None
+        name = pick.get("tool")
+        if name not in {t["name"] for t in tools} or not isinstance(pick.get("inputs"), dict):
+            return None
+        result = self.app.tools.execute(name, pick["inputs"], actor=self._actor)
+        if not result["ok"]:
+            return None
+        latest = next((m["content"] for m in reversed(self._history(conversation_id)) if m["role"] == "user"), goal)
+        instructions = ANSWER_FROM_DATA.format(projects="none", today=now_local())
+        if getattr(self, "_voice", False):
+            instructions = "This is SPOKEN: one to three short sentences.\n" + instructions
+        try:
+            response = self._write([ChatMessage("system", instructions + json.dumps(result["output"], default=str)[:8000]),
+                                    ChatMessage("user", latest)])
+        except ProviderError:
+            return None
+        return self.app.conversations.add_message(conversation_id, "assistant", response.text, response.provider,
+                                                  response.model, run_id=result["run_id"])
+
     def _web_answer(self, conversation_id: int, goal: str) -> dict | None:
         """Answer a web question locally: search (JARVIS's Chrome, then the basic search), read the top
         pages, and let the local model answer from what they say. None if nothing useful was found."""
@@ -449,7 +520,7 @@ class Conversation:
         if getattr(self, "_voice", False):
             instructions += "\nThis is SPOKEN: one to three short sentences, no lists, no addresses read out."
         try:
-            response = self.app.provider.generate([
+            response = self._write([
                 ChatMessage("system", instructions),
                 ChatMessage("user", f"REQUEST: {latest}\n\nSEARCH RESULTS:\n{listing}\n\n" + "\n\n".join(pages))])
         except ProviderError as exc:
@@ -531,7 +602,7 @@ class Conversation:
                              "and do not ask whether to: that question is asked separately.")
         prompt = [ChatMessage("system", instructions)]
         prompt += [ChatMessage(m["role"], m["content"]) for m in history]
-        response = self.app.provider.generate(prompt)
+        response = self._write(prompt) if not offer else self.app.provider.generate(prompt)
         text, refs = response.text, []
         mark = MEMORY_MARK.search(text)
         if mark:                     # keep only ids that were really supplied
@@ -780,8 +851,8 @@ class Conversation:
         try:
             projects = ", ".join(f"{p['id']} = {p['name']}" for p in self.app.projects.list(active=None, limit=100))
             instructions = ANSWER_FROM_DATA.format(projects=projects or "none", today=now_local())
-            reply = self.app.provider.generate([ChatMessage("system", instructions + results),
-                                                ChatMessage("user", question)]).text.strip()
+            reply = self._write([ChatMessage("system", instructions + results),
+                                 ChatMessage("user", question)]).text.strip()
         except ProviderError as exc:
             log.info("Could not phrase look-up answer: %s", exc)
             return None

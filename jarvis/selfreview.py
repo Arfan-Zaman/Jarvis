@@ -310,8 +310,12 @@ class SelfReview:
             current = self.git("rev-parse", "--abbrev-ref", "HEAD")
             if current != BASE:
                 return {"ok": False, "error": f"{self.repo} is on {current!r}, not {BASE}; switch it to {BASE} first."}
-            if self.git("status", "--porcelain", "--untracked-files=no"):
-                return {"ok": False, "error": f"{self.repo} has uncommitted changes; commit or stash them first."}
+            dirty = {line[3:].split(" -> ")[-1] for line in
+                     self.git("status", "--porcelain", "--untracked-files=no").splitlines() if line.strip()}
+            clash = sorted(dirty & set(self.git("diff", "--name-only", f"{BASE}...{branch}").splitlines()))
+            if clash:       # unsaved work elsewhere is fine; only the same files would be overwritten
+                return {"ok": False, "error": "Not merged yet: work in progress has unsaved changes to the same "
+                        f"files ({', '.join(clash[:4])}). Save that work first, then press Approve again."}
             trial = self.root / f"_approve-{int(time.time())}"
             self.root.mkdir(parents=True, exist_ok=True)
             self.git("worktree", "add", "--detach", str(trial), BASE)

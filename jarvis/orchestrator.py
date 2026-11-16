@@ -267,6 +267,7 @@ class Jarvis:
             conversation_id = self.conversations.create({"title": title, "source": "user"})["id"]
         user_message = self.conversations.add_message(conversation_id, "user", text)
 
+        self.draft = None                     # the reply as it is being written (shown live by /api/live)
         status = self.provider.status()
         if not (status.configured and status.available):
             # reminders are understood without a model, so they still work when none is connected
@@ -281,6 +282,7 @@ class Jarvis:
                 reply = self.conversations.add_message(
                     conversation_id, "system", f"The AI provider failed, so there is no answer: {exc}")
 
+        self.draft = None
         return {
             "conversation": self.conversations.get(conversation_id),
             "user_message": user_message,

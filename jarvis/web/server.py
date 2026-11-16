@@ -235,7 +235,11 @@ def _mac_status(app: Jarvis, req: Request):
 @route("GET", "/api/live")
 def _live(app: Jarvis, req: Request):
     """JARVIS's current state for the face and core, derived from real runs."""
-    return app.engine.live()
+    live = app.engine.live()
+    draft = getattr(app, "draft", None)
+    if draft and __import__("time").time() - draft["at"] < 120:
+        live = dict(live, draft=draft["text"][-4000:])     # the reply so far, while it is being written
+    return live
 
 
 # --- reminders and scheduled jobs -------------------------------------------

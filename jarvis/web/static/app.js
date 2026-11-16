@@ -544,9 +544,13 @@ views.chat = {
         try {
           const live = await api('GET', '/api/live');
           const line = messages.querySelector('.thinking .thinking-line');
-          if (line && live.step && live.step.description) line.textContent = live.step.description;
+          if (line && live.draft) {                 // the reply as JARVIS writes it
+            line.textContent = live.draft; line.classList.add('drafting');
+            line.parentElement.querySelector('.muted')?.remove();
+            messages.scrollTop = messages.scrollHeight;
+          } else if (line && live.step && live.step.description) line.textContent = live.step.description;
         } catch (e) { /* try again */ }
-      }, 2000);
+      }, 500);
       try {
         const result = await api('POST', '/api/chat', { message: text, attachments: files, conversation_id: state.conversationId, voice: voice.speakNext });
         state.conversationId = result.conversation.id;
@@ -825,25 +829,39 @@ views.experiences = {
 function selfReviewPanel() {
   const body = h('div', { class: 'stack' }, h('div', { class: 'muted small' }, 'Loading…'));
   const runBtn = h('button', { class: 'btn sm', type: 'button' }, 'Review now');
-  const decide = (branch, verb) => act(async () => {
+  // The outcome shows right under the buttons (merging runs the whole test suite, about a minute).
+  const decide = (branch, verb, status, buttons) => async () => {
     if (verb === 'approve' && !(await dialog({ title: 'Merge this self-review?', text: branch,
       note: 'The tests run on the merged result first; nothing is merged if they fail. Nothing is pushed.', okLabel: 'Approve and merge' }))) return;
     if (verb === 'reject' && !(await dialog({ title: 'Reject this self-review?', text: branch,
       note: 'Deletes the branch and its worktree.', okLabel: 'Reject and delete', danger: true }))) return;
-    const out = await api('POST', `/api/self-review/${branch}/${verb}`);
-    toast(out.message || 'Done');
-    await load();
-  });
-  const proposal = (p) => h('div', { class: 'item' },
-    h('div', { class: 'grow stack' },
-      h('div', { class: 'title mono' }, p.branch),
-      h('div', { class: 'meta' }, p.tests_ok === undefined ? null : chip(p.tests_ok ? 'tests pass' : 'tests fail', p.tests_ok ? 'ok' : 'bad'),
-        p.at ? chip(when(p.at)) : null),
-      p.self_review ? h('pre', { class: 'wrap small' }, p.self_review) : h('div', { class: 'muted small' }, 'No SELF_REVIEW.md on this branch.'),
-      p.diff_stat ? h('pre', { class: 'mono small scroll-x' }, p.diff_stat) : null),
-    h('div', { class: 'actions' },
-      h('button', { class: 'btn sm', onclick: decide(p.branch, 'reject') }, 'Reject'),
-      h('button', { class: 'btn sm danger', onclick: decide(p.branch, 'approve') }, 'Approve')));
+    buttons.forEach((b) => { b.disabled = true; });
+    status.className = 'review-status'; status.hidden = false;
+    status.textContent = verb === 'approve' ? 'Merging and running the tests on the result… about a minute.' : 'Rejecting…';
+    try {
+      const out = await api('POST', `/api/self-review/${branch}/${verb}`);
+      if (out.ok === false) throw new Error(out.error || 'Not done');
+      status.classList.add('ok'); status.textContent = out.message || 'Done';
+      setTimeout(load, 2500);
+    } catch (error) {
+      status.classList.add('bad'); status.textContent = error.message;
+      buttons.forEach((b) => { b.disabled = false; });
+    }
+  };
+  const proposal = (p) => {
+    const status = h('div', { class: 'review-status', role: 'status', 'aria-live': 'polite', hidden: true });
+    const reject = h('button', { class: 'btn sm' }, 'Reject'), approve = h('button', { class: 'btn sm danger' }, 'Approve');
+    reject.onclick = decide(p.branch, 'reject', status, [reject, approve]);
+    approve.onclick = decide(p.branch, 'approve', status, [reject, approve]);
+    return h('div', { class: 'item' },
+      h('div', { class: 'grow stack' },
+        h('div', { class: 'title mono' }, p.branch),
+        h('div', { class: 'meta' }, p.tests_ok === undefined ? null : chip(p.tests_ok ? 'tests pass' : 'tests fail', p.tests_ok ? 'ok' : 'bad'),
+          p.at ? chip(when(p.at)) : null),
+        p.self_review ? h('pre', { class: 'wrap small' }, p.self_review) : h('div', { class: 'muted small' }, 'No SELF_REVIEW.md on this branch.'),
+        p.diff_stat ? h('pre', { class: 'mono small scroll-x' }, p.diff_stat) : null),
+      h('div', { class: 'actions review-actions' }, h('div', { class: 'row' }, reject, approve), status));
+  };
   const load = async () => {
     const s = await api('GET', '/api/self-review');
     const last = s.last || {};
@@ -1189,6 +1207,7 @@ views.presence = {
             if (!['success', 'failure', 'calm'].includes(s)) identity.setState(s, l);
             showActivity(live.activity || []);
           }
+          if (live.draft) reply.textContent = live.draft;      // the reply as JARVIS writes it
         } catch (e) { /* the next poll will try again */ }
       }, 450);
       try {

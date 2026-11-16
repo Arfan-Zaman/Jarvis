@@ -2,6 +2,20 @@
 
 Newest entries first. Record what changed, why, and what was verified.
 
+## 2026-11-16 — Speed: streaming replies, a two-call path for open data, a lean router
+
+- Measured, not guessed: the 9b writes ~11 tokens/s; routing took 5.8 s; weather took 45 s (planner).
+- Replies stream: `OllamaProvider.generate(on_token=...)`, the text so far is in `/api/live` as `draft`,
+  and Chat and Presence show it as it is written.
+- Open-data questions (weather, currency, holidays, VIN, words, news) go one-pick -> tool -> answer
+  (`_quick_tool`): weather in Perth 45 s -> 12 s.
+- The router sees only the first sentence of each tool: 9b routing 5.8 s -> 2.7 s, 10/10 right on the
+  benchmark. A separate router model was tested and NOT used: qwen3.5:4b routed in 2.1 s but got 8/10,
+  and 16 GB cannot hold it beside the 9b, so every swap reloads a model (6-8 s). `JARVIS_ROUTER_MODEL`
+  remains as an option for a bigger Mac.
+- Self-review Approve: merges even with unrelated unsaved work (refuses only when the same files are
+  dirty, and says which); the result now shows right under the buttons, with progress while the tests run.
+
 ## 2026-11-16 — Local-first JARVIS: its own brain, its own Chrome, open data, the gap loop
 
 - The local model is the brain by default (`JARVIS_BRAIN=local`; `claude` restores the old way).

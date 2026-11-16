@@ -294,3 +294,10 @@ dl.kv dd { margin: 0; overflow-wrap: anywhere; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+.msg.thinking:has(.drafting) { animation: none; }
+.thinking-line.drafting { white-space: pre-wrap; }
+.review-actions { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; position: sticky; top: 12px; align-self: flex-start; }
+.review-actions .row { display: flex; gap: 8px; }
+.review-status { max-width: 280px; font-size: 13px; line-height: 1.4; padding: 8px 10px; border-radius: 8px; color: var(--text); background: rgba(244,236,241,.05); border: 1px solid var(--hair); }
+.review-status.ok { border-color: rgba(80,200,120,.45); }
+.review-status.bad { border-color: rgba(255,90,90,.5); }

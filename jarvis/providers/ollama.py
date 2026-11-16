@@ -9,6 +9,7 @@ from __future__ import annotations
 import base64
 import json
 import os
+import time
 import urllib.error
 import urllib.request
 
@@ -57,7 +58,9 @@ class OllamaProvider(AIProvider):
             return result(False, f"Ollama is running but the model '{self.model}' is not installed there.")
         return result(True, f"Connected to Ollama at {self.base_url}.")
 
-    def generate(self, messages: list[ChatMessage], json_output: bool = False) -> ProviderResponse:
+    streams = True    # generate() can report the reply as it is written (on_token)
+
+    def generate(self, messages: list[ChatMessage], json_output: bool = False, on_token=None) -> ProviderResponse:
         if not self.model:
             raise ProviderError("JARVIS_AI_MODEL is not set.")
         payload = {
@@ -71,11 +74,47 @@ class OllamaProvider(AIProvider):
         }
         if json_output:
             payload["format"] = "json"   # Ollama constrains the reply to valid JSON
+        if on_token and not json_output:
+            return self._stream(payload, on_token)
         reply = self._request("/api/chat", payload)
         content = (reply.get("message") or {}).get("content", "")
         if not isinstance(content, str) or not content.strip():
             raise ProviderError("Ollama returned an empty response.")
         return ProviderResponse(text=content.strip(), provider=self.name, model=self.model)
+
+    def _stream(self, payload: dict, on_token) -> ProviderResponse:
+        """Read the reply token by token; on_token gets the text so far (the UI shows it as it is written)."""
+        payload = dict(payload, stream=True)
+        request = urllib.request.Request(self.base_url + "/api/chat", data=json.dumps(payload).encode("utf-8"),
+                                         headers={"Content-Type": "application/json"}, method="POST")
+        text, last = "", 0.0
+        try:
+            with urllib.request.urlopen(request, timeout=self.timeout) as response:
+                for line in response:
+                    if not line.strip():
+                        continue
+                    part = json.loads(line.decode("utf-8"))
+                    if part.get("error"):
+                        raise ProviderError(f"Ollama: {part['error']}")
+                    text += (part.get("message") or {}).get("content", "")
+                    now = time.monotonic()
+                    if now - last > 0.15 or part.get("done"):
+                        last = now
+                        try:
+                            on_token(text)
+                        except Exception:  # noqa: BLE001 - showing progress must never break the answer
+                            pass
+                    if part.get("done"):
+                        break
+        except urllib.error.HTTPError as exc:
+            raise ProviderError(f"Ollama returned HTTP {exc.code}") from exc
+        except (urllib.error.URLError, TimeoutError, OSError) as exc:
+            raise ProviderError(f"Cannot reach Ollama at {self.base_url}: {exc}") from exc
+        except ValueError as exc:
+            raise ProviderError("Ollama streamed something that is not JSON") from exc
+        if not text.strip():
+            raise ProviderError("Ollama returned an empty response.")
+        return ProviderResponse(text=text.strip(), provider=self.name, model=self.model)
 
     @staticmethod
     def context() -> int:
