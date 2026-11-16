@@ -117,3 +117,10 @@
 .evlog tbody tr { transition: background-color var(--t-fast, 160ms) ease; }
 .evlog tbody tr:hover { background: rgba(244,236,241,.03); }
 .evlog-count { margin-top: 8px; font-size: 12px; color: var(--faint); text-align: right; }
+
+/* embedded in a JARVIS OS window */
+.embedded .sidebar, .embedded .backdrop { display: none; }
+.embedded body, .embedded .shell { background: transparent; }
+.embedded .shell { display: block; padding: 12px 16px; }
+.embedded .topbar { padding-top: 0; }
+.embedded .topbar-orb { display: none; }

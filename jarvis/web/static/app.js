@@ -1543,7 +1543,10 @@ function startHeaderOrb() {
   }, 3000);
 }
 
-const route = async () => { startHeaderOrb(); await show(location.hash.replace('#', '') || 'presence'); window.scrollTo(0, 0); };
+// Inside a JARVIS OS window: no sidebar or header orb, the page fills the window.
+const EMBEDDED = new URLSearchParams(location.search).has('embed');
+if (EMBEDDED) document.documentElement.classList.add('embedded');
+const route = async () => { if (!EMBEDDED) startHeaderOrb(); await show(location.hash.replace('#', '') || 'presence'); window.scrollTo(0, 0); };
 window.addEventListener('hashchange', route);
 route();
 refreshChrome();

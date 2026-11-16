@@ -29,7 +29,7 @@ INT_FILTERS = ("project_id", "task_id")
 SECURITY_HEADERS = {
     "X-Content-Type-Options": "nosniff",
     "Referrer-Policy": "no-referrer",
-    "Content-Security-Policy": ("default-src 'self'; media-src 'self' blob:; frame-ancestors 'none'; "
+    "Content-Security-Policy": ("default-src 'self'; media-src 'self' blob:; frame-ancestors 'self'; "
                                 "base-uri 'none'; form-action 'self'"),
 }
 
