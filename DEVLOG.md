@@ -2,6 +2,20 @@
 
 Newest entries first. Record what changed, why, and what was verified.
 
+## 2026-11-16 — JARVIS set up around the owner's goal: grow all the businesses
+
+- Owner's goal saved as personal facts (grow Monsoor Motors, Aureus Detailing
+  and OwnWay; proactive, prioritised actions with numbers; Australia). Project
+  profiles written for all three (OwnWay added) with their growth levers.
+- Standing jobs: weekly growth review per business (Mon 8:00 / 8:15 / 8:30)
+  and a Friday 4pm wrap-up across all three.
+- Learning takes turns across the businesses and asks for current
+  information (picks: detailing pricing benchmarks 2026, used car pricing
+  strategy Nov 2026, best selling products for seniors 2026).
+- Real request "What should I do this week to grow Aureus Detailing?": a full
+  plan in workspace/aureus-detailing/weekly-growth-strategy.md (111 s, deep
+  model), honest that real numbers are unknown, with 8 questions to tune it.
+
 ## 2026-11-16 — Owner's skills available to JARVIS; first self-review started
 
 - The owner's 20 Claude Code skills (ceo-operator, finance-analyst,

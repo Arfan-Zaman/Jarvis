@@ -94,7 +94,18 @@ class Learner:
 
     def pick(self) -> dict:
         recent = self.recent()
-        prompt = f"{self.context()}\n\nRecently read (do not repeat):\n" + "\n".join(f"- {q}" for q in recent[-25:])
+        # Take turns across the owner's businesses so no single topic crowds out the others.
+        projects = [p["name"] for p in self.app.projects.list()[:10]]
+        focus = ""
+        if projects:
+            turn = int(self.app.settings.get("learn.turn", 0) or 0)
+            self.app.settings.set("learn.turn", turn + 1, category="learning", source="jarvis")
+            focus = (f"\n\nThis time, focus on: {projects[turn % len(projects)]}. Pick a topic that helps it grow "
+                     "(customers, sales, pricing, marketing, operations), different from recent ones.")
+        from datetime import date
+        prompt = (f"{self.context()}{focus}\n\nToday is {date.today():%d %B %Y}: prefer current information and "
+                  f"never put an old year in the query.\n\nRecently read (do not repeat):\n"
+                  + "\n".join(f"- {q}" for q in recent[-25:]))
         reply = self.app.provider.generate([ChatMessage("system", PICK), ChatMessage("user", prompt)],
                                            json_output=True).text
         choice = _json(reply)
