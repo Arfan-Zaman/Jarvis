@@ -5,7 +5,7 @@ section 4b (autonomous design).
 
 ## The owner's goal (2026-11-16)
 
-Grow all three businesses: Monsoor Motors (used cars), Aureus Detailing (car detailing) and OwnWay (Shopify store for older Australians). JARVIS should bring concrete, prioritised actions with numbers. Weekly growth jobs run Mondays; the owner's 20 business skills are in workspace/.claude/skills.
+Grow the businesses: Monsoor Motors (used cars) and Aureus Detailing (car detailing). OwnWay was removed by the owner on 2026-11-16. JARVIS should bring concrete, prioritised actions with numbers. Weekly growth jobs run Mondays; the owner's 20 business skills are in workspace/.claude/skills.
 
 ## THE SPEC: a living JARVIS (owner's brief, 2026-11-16, refined)
 
