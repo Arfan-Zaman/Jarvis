@@ -2,6 +2,11 @@
 
 Newest entries first. Record what changed, why, and what was verified.
 
+## 2026-11-16 — The OS is the default page
+
+- `/` now opens JARVIS AI Operating System; the single-page interface moved
+  to `/classic` (the OS windows embed it from there). `/static/os.html` still works.
+
 ## 2026-11-16 — JARVIS AI Operating System; stress test and lessons
 
 - `os.html` / `os.css` / `os.js`: a desktop shell. Top bar (live state,

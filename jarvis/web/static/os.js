@@ -69,7 +69,7 @@
     close.setAttribute('aria-label', `Close ${app.name}`); min.setAttribute('aria-label', `Minimise ${app.name}`); max.setAttribute('aria-label', `Maximise ${app.name}`);
     lights.append(close, min, max); bar.append(lights, el('span', 'win-title', app.name));
     const body = el('div', 'win-body'), frame = el('iframe');
-    frame.src = `/?embed=1#${id}`; frame.title = app.name;
+    frame.src = `/classic?embed=1#${id}`; frame.title = app.name;
     frame.setAttribute('allow', 'microphone; clipboard-write');
     body.append(frame); w.node.append(bar, body);
     $('windows').append(w.node); wins.set(id, w); place(w); focus(id); markRunning();

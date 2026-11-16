@@ -491,9 +491,11 @@ class Handler(BaseHTTPRequestHandler):
             self._error(500, "Internal error. See data/logs/jarvis.log.")
 
     def _static(self, path: str):
-        name = "index.html" if path in ("", "/") else path.removeprefix("/static/")
+        # "/" is the JARVIS AI Operating System; "/classic" is the single-page interface it embeds.
+        pages = {"": "os.html", "/": "os.html", "/classic": "index.html"}
+        name = pages.get(path) or path.removeprefix("/static/")
         target = (STATIC_DIR / name).resolve()
-        if (path not in ("", "/") and not path.startswith("/static/")) \
+        if (path not in pages and not path.startswith("/static/")) \
                 or STATIC_DIR not in target.parents or not target.is_file():
             return self._error(404, "not found")
         content_type = mimetypes.guess_type(target.name)[0] or "application/octet-stream"

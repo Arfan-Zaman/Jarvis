@@ -105,7 +105,10 @@ class WebTests(JarvisTestCase):
     def test_static_files(self):
         status, html = self.call("GET", "/")
         self.assertEqual(status, 200)
-        self.assertIn("JARVIS", html)
+        self.assertIn("JARVIS AI Operating System", html)
+        status, classic = self.call("GET", "/classic")
+        self.assertEqual(status, 200)
+        self.assertIn('src="/static/app.js"', classic)
         self.assertEqual(self.call("GET", "/static/app.js")[0], 200)
         for asset in ("/static/identity.js", "/static/identity.css"):
             self.assertEqual(self.call("GET", asset)[0], 200)
