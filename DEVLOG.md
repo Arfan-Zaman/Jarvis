@@ -2,6 +2,24 @@
 
 Newest entries first. Record what changed, why, and what was verified.
 
+## 2026-11-16 — Vetted GitHub skills installed and used on the concept
+
+- Installed for Claude Code (~/.claude/skills) and JARVIS
+  (workspace/.claude/skills), after reading them in a quarantine folder:
+  unslop (heydamir, 16.7k stars, text only; its helper scripts, which start
+  Chrome and run commands, were left out), dashboard-design (abdiraimov-otabek;
+  its promotional sign-off section removed), ux-designer (szilu), and
+  Anthropic's official theme-factory, mcp-builder and doc-coauthoring. A
+  16-star 21 MB repo was rejected.
+- Used on the concept page (unslop polish mode + dashboard-design critique):
+  neutral graphite surfaces and hairlines, magenta kept for the face, the live
+  state and the selection; line icons in the rail; 500-weight title; honest
+  counts ("16 of 16 available, 3 ask first", activity with the day before);
+  one-line Last result that skips background reads.
+- New read-only `GET /api/mac/status` (not logged as an action) so the page
+  does not fill the activity log; fixed a negative index in the fallback face
+  drawing that threw occasionally. 336 tests pass; no console errors.
+
 ## 2026-11-16 — JARVIS set up around the owner's goal: grow all the businesses
 
 - Owner's goal saved as personal facts (grow Monsoor Motors, Aureus Detailing

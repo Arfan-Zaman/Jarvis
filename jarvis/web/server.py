@@ -224,6 +224,14 @@ def _selfreview_decide(app: Jarvis, req: Request):
     return (200 if result.get("ok") else 409), result
 
 
+@route("GET", "/api/mac/status")
+def _mac_status(app: Jarvis, req: Request):
+    """Battery, disk, network and open apps for the interface. Read-only and not logged as an
+    action, so a page refreshing it does not fill JARVIS's activity log."""
+    from ..tools.mac import status
+    return status(app, {}, "interface")
+
+
 @route("GET", "/api/live")
 def _live(app: Jarvis, req: Request):
     """JARVIS's current state for the face and core, derived from real runs."""

@@ -633,7 +633,7 @@
       if (spec.particles && paths.length) {
         for (let n = 0; n < spec.particles; n++) {
           const path = paths[n % paths.length];
-          const pos = ((t * (spec.still ? 0.4 : 1.2) + n / spec.particles) % 1) * (path.length - 1);
+          const pos = ((((t * (spec.still ? 0.4 : 1.2) + n / spec.particles) % 1) + 1) % 1) * (path.length - 1);   // never negative
           const s = Math.floor(pos), f = pos - s, a = pts[path[s]], b = pts[path[Math.min(s + 1, path.length - 1)]];
           ctx.fillStyle = rgba(color, 0.95);
           ctx.beginPath(); ctx.arc(a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f, 1.8 * dpr, 0, Math.PI * 2); ctx.fill();

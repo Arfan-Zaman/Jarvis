@@ -50,8 +50,10 @@
   // --- system, activity, result, coming up, needs you --------------------------------------
   async function vitals() {
     const status = await api('GET', '/api/status');
-    const on = status.abilities.filter((a) => a.state === 'on' || a.state === 'asks first').length;
+    const asks = status.abilities.filter((a) => a.state === 'asks first').length;
+    const on = status.abilities.filter((a) => a.state === 'on').length + asks;
     $('v-abilities').textContent = on; $('v-total').textContent = status.abilities.length;
+    $('v-asks').textContent = asks ? `${asks} of them ask you first` : '';
     const c = status.counts || {};
     const kv = [['Model', status.ai.available ? status.ai.model : 'offline'], ['Memories', c.memories],
       ['Open tasks', c.tasks_open], ['Projects', c.projects], ['Tools', c.tools]];
@@ -69,24 +71,28 @@
   async function activity() {
     const { items } = await api('GET', '/api/runs?limit=200');
     const now = Date.now(), hours = Array.from({ length: 24 }, () => ({ all: 0, bad: 0 }));
-    let total = 0, failed = 0, last = null;
+    let total = 0, failed = 0, last = null, before = 0;
     for (const run of items) {
       const age = (now - new Date(run.created_at).getTime()) / 3600000;
+      if (age >= 24 && age < 48) before++;
       if (age < 24) {
         const bucket = hours[23 - Math.floor(age)];
         bucket.all++; total++;
         if (['failed', 'refused'].includes(run.status)) { bucket.bad++; failed++; }
       }
-      if (!last && ['completed', 'failed'].includes(run.status)) last = run;
+      const background = /^Tool call: (mac\.status|memory\.search|claude\.converse|web\.(search|fetch))/.test(run.goal || '');
+      if (!last && !background && ['completed', 'failed'].includes(run.status)) last = run;   // real work, not background reads
     }
     $('a-runs').textContent = total;
-    $('a-ok').textContent = total ? `${Math.round(100 * (total - failed) / total)}% worked` : '';
+    $('a-ok').textContent = total ? `${Math.round(100 * (total - failed) / total)}% worked · ${before} the day before` : (before ? `${before} the day before` : '');
     draw(hours);
     if (last) {
       const r = last.result || {};
       const text = typeof r === 'string' ? r : r.result || r.summary || r.reply || last.goal;
-      $('r-text').textContent = String(text).replace(/[#*`]/g, '').slice(0, 420);
-      $('r-pill').textContent = `${last.status} · ${ago(last.updated_at || last.created_at)}`;
+      const first = String(text).replace(/[#*`>]/g, '').split(/(?<=[.!?])\s|\n/).map((x) => x.trim()).find((x) => x.length > 12) || last.goal;
+      $('r-text').textContent = first.length > 160 ? first.slice(0, 157) + '…' : first;     // one line, the rest is a click away
+      $('r-when').textContent = `${(last.goal || '').replace('Tool call: ', '')} · ${ago(last.updated_at || last.created_at)}`;
+      $('r-pill').textContent = last.status;
       $('r-pill').className = 'pill ' + (last.status === 'completed' ? 'ok' : 'bad');
     }
   }
@@ -107,8 +113,7 @@
 
   async function mac() {
     try {
-      const out = await api('POST', '/api/tools/mac.status/execute', { inputs: {} });
-      const m = out.output || {};
+      const m = await api('GET', '/api/mac/status');
       $('m-kv').replaceChildren(...[['Battery', (m.battery || '').split(';')[0]], ['Free disk', `${m.disk_free} of ${m.disk_total}`],
         ['Wi-Fi', m.wifi_ip], ['Open apps', (m.open_apps || []).length]].flatMap(([k, v]) => [el('dt', null, k), el('dd', null, String(v))]));
     } catch (e) { $('m-kv').replaceChildren(el('dt', null, 'Unavailable'), el('dd', null, '')); }
