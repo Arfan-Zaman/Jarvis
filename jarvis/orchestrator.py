@@ -22,10 +22,10 @@ from .providers import AIProvider, ProviderError, build_provider
 from .safety import ActionCategory, SafetyLayer
 from .voice import Voice
 from .stores.runs import RunStore
-from .tools import ToolRegistry, register_builtin, register_claude, register_images, register_mac, register_web
+from .tools import ToolRegistry, register_builtin, register_claude, register_images, register_mac, register_schedule, register_web
 from .stores import (
     AgentStore, ConversationStore, EventLog, ExperienceStore,
-    MemoryStore, ProjectStore, SettingsStore, TaskStore,
+    MemoryStore, ProjectStore, ScheduleStore, SettingsStore, TaskStore,
 )
 
 log = get_logger("core")
@@ -59,12 +59,14 @@ class Jarvis:
         self.backups = BackupManager(self.db, self.config, self.events)
         self.provider = provider or build_provider(self.config)
         self.runs = RunStore(self.db)
+        self.schedules = ScheduleStore(self.db)
         self.tools = ToolRegistry(self)
         register_builtin(self.tools)
         register_web(self.tools)
         register_claude(self.tools)
         register_mac(self.tools)
         register_images(self.tools)
+        register_schedule(self.tools)
         self.engine = Engine(self)
         from .learner import Learner
         self.learner = Learner(self)
@@ -72,6 +74,8 @@ class Jarvis:
         self.semantic = Semantic(self)
         from .selfreview import SelfReview
         self.selfreview = SelfReview(self)
+        from .scheduler import Scheduler
+        self.scheduler = Scheduler(self)
         self.voice = Voice(self.config)
         self.conversation = Conversation(self)
         self.started_at = time.time()
@@ -258,7 +262,8 @@ class Jarvis:
 
         status = self.provider.status()
         if not (status.configured and status.available):
-            reply = self.conversations.add_message(
+            # reminders are understood without a model, so they still work when none is connected
+            reply = self.conversation.schedule_reply(conversation_id, text) or self.conversations.add_message(
                 conversation_id, "system", NO_PROVIDER_NOTICE.format(detail=status.detail).strip())
         else:
             try:
@@ -307,6 +312,7 @@ class Jarvis:
             "tools": len(self.tools.names()),
             "tool_executions": self.runs.count_steps(),
             "pending_approvals": len(self.safety.list_approvals("pending")),
+            "reminders_active": self.schedules.count("active"),
         }
 
     def status(self) -> dict:

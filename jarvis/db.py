@@ -262,6 +262,36 @@ MIGRATIONS: list[str] = [
     ALTER TABLE messages ADD COLUMN memory_refs TEXT;
     ALTER TABLE messages ADD COLUMN memory_offer TEXT;
     """,
+    # --- version 6: reminders and recurring scheduled jobs --------------------
+    """
+    CREATE TABLE schedules (
+        id              INTEGER PRIMARY KEY,
+        kind            TEXT NOT NULL CHECK (kind IN ('reminder','job')),
+        text            TEXT NOT NULL,
+        when_text       TEXT NOT NULL DEFAULT '',
+        next_at         TEXT,
+        recur           TEXT,
+        status          TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','done','cancelled')),
+        conversation_id INTEGER REFERENCES conversations(id) ON DELETE SET NULL,
+        job_conversation_id INTEGER REFERENCES conversations(id) ON DELETE SET NULL,
+        source          TEXT NOT NULL DEFAULT 'user',
+        fire_count      INTEGER NOT NULL DEFAULT 0,
+        last_fired_at   TEXT,
+        last_result     TEXT,
+        created_at      TEXT NOT NULL,
+        updated_at      TEXT NOT NULL
+    );
+    CREATE INDEX idx_schedules_due ON schedules(status, next_at);
+
+    CREATE TABLE schedule_alerts (
+        id           INTEGER PRIMARY KEY,
+        schedule_id  INTEGER REFERENCES schedules(id) ON DELETE CASCADE,
+        text         TEXT NOT NULL,
+        fired_at     TEXT NOT NULL,
+        delivered_at TEXT
+    );
+    CREATE INDEX idx_schedule_alerts_open ON schedule_alerts(delivered_at, id);
+    """,
 ]
 
 SCHEMA_VERSION = len(MIGRATIONS)

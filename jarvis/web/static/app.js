@@ -677,10 +677,33 @@ views.tasks = {
           { name: 'project_id', label: 'Project', type: 'select', options: projectOptions(), value: '' },
           { name: 'due_at', label: 'Due date', type: 'date' },
         ], 'Add task', async (data) => { await api('POST', '/api/tasks', data); toast('Task added'); await reload(); })),
+      remindersPanel(),
       panel));
     await reload();
   },
 };
+
+/** Reminders and scheduled jobs: what is set, when each fires next, and a way to cancel. */
+function remindersPanel() {
+  const body = h('div', { class: 'list' });
+  const reload = act(async () => {
+    const { items } = await api('GET', '/api/reminders');
+    body.replaceChildren(...(items.length ? items.map((item) => h('div', { class: 'item' },
+      h('div', { class: 'grow' }, h('div', { class: 'title' }, item.text),
+        h('div', { class: 'meta' }, chip(item.kind === 'job' ? 'job' : 'reminder', item.kind === 'job' ? 'violet' : 'ok'),
+          chip(item.when), item.last_result && item.kind === 'job' ? h('span', { class: 'muted small wrap' }, `Last run: ${item.last_result.slice(0, 140)}`) : null)),
+      h('div', { class: 'actions' }, h('button', { class: 'btn sm danger', onclick: act(async () => {
+        await api('POST', `/api/reminders/${item.id}/cancel`); toast('Cancelled'); await reload(); }) }, 'Cancel'))))
+      : [h('div', { class: 'empty' }, 'No reminders. Say “Jarvis, remind me at 5pm to call the supplier”.')]));
+  });
+  const add = form([
+    { name: 'text', label: 'What', required: true, wide: true },
+    { name: 'when', label: 'When (e.g. at 5pm, tomorrow morning, every weekday at 8am)', required: true, wide: true },
+    { name: 'kind', label: 'Type', type: 'select', options: ['reminder', 'job'], value: 'reminder' },
+  ], 'Set', async (data) => { const made = await api('POST', '/api/reminders', data); toast(made.summary); await reload(); });
+  reload();
+  return h('div', { class: 'glass panel' }, h('h2', null, 'Reminders'), body, h('details', null, h('summary', { class: 'small muted' }, 'Set one here'), add));
+}
 
 views.projects = {
   title: 'Projects',
@@ -1151,6 +1174,25 @@ views.presence = {
       }
     }
     form.addEventListener('submit', (event) => { event.preventDefault(); submit(input.value.trim()); });
+
+    // --- reminders: when one fires while this page is open, JARVIS says it ---
+    let announcing = false;
+    async function announceReminders() {
+      if (busy || announcing) return;
+      announcing = true;
+      try {
+        const { items } = await api('GET', '/api/reminders/due');
+        if (!items.length) return;
+        const said = items.map((a) => a.text).join(' ');
+        you.textContent = ''; reply.textContent = said; memoryLine.replaceChildren(chip('Reminder', 'violet'));
+        identity.setState('resolute', said);
+        if (voiceOk.speaking) await speakWith(identity, said).catch(() => {});   // the browser may block sound until a click
+        refreshChrome();
+        clearTimeout(settle); settle = setTimeout(() => { if (!busy) identity.setState('calm'); }, 6000);
+      } catch (e) { /* the next check will try again */ } finally { announcing = false; }
+    }
+    const reminderPoll = setInterval(announceReminders, 15000); state.cleanup.push(() => clearInterval(reminderPoll));
+    setTimeout(announceReminders, 1500);
 
     async function transcribe(blob) {
       const response = await fetch('/api/voice/transcribe', { method: 'POST', headers: { 'Content-Type': blob.type || 'audio/webm' }, body: blob });
