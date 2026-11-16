@@ -54,6 +54,24 @@ class Tool:
                 "inputs": self.inputs}
 
 
+def approval_summary(name: str, inputs: dict) -> str:
+    """What the owner is approving, in words: the tool and the inputs that matter (shown on the Approve button)."""
+    plain = {
+        "skills.install": lambda i: f"Install the skill from {i.get('source')}" + (f" (only '{i['name']}')" if i.get("name") else ""),
+        "system.install": lambda i: f"Install {i.get('package')} with {i.get('manager')}",
+        "browser.use": lambda i: f"Use JARVIS's Chrome to: {i.get('task')}",
+        "claude.operate": lambda i: f"Mac access for: {i.get('task')}",
+        "claude.browse": lambda i: f"Browser task: {i.get('task')}",
+        "mail.send": lambda i: f"Send an email to {i.get('to')}: {i.get('subject')}",
+    }
+    try:
+        text = plain[name](inputs) if name in plain else f"Run tool {name}"
+    except Exception:  # noqa: BLE001
+        text = f"Run tool {name}"
+    text = " ".join(str(text).split())
+    return text if len(text) <= 240 else text[:239] + "…"
+
+
 class ToolRegistry:
     def __init__(self, app):
         self.app = app
@@ -140,7 +158,7 @@ class ToolRegistry:
                 raise PermissionDenied(f"{actor} is not permitted to use the tool {name}")
             clean = recorded_inputs = self.validate(tool, inputs)
             decision = self.app.safety.authorize(
-                f"tool.{name}", tool.category, f"Run tool {name}",
+                f"tool.{name}", tool.category, approval_summary(name, clean),
                 details={"tool": name, "inputs": clean}, actor=actor, approval_id=approval_id)
             if decision.requires_approval:
                 status, approval = "waiting_approval", decision.approval
