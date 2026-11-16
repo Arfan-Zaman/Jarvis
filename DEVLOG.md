@@ -2,6 +2,15 @@
 
 Newest entries first. Record what changed, why, and what was verified.
 
+## 2026-11-16 — Self-review: domain lookups (gap from run #237)
+
+- `open.domain` (RDAP via IANA's registry list, free, read-only): registered or available, registrar,
+  holder if public, dates, nameservers; `.au` notes auDA's ABN/ACN rule.
+- Domain questions ("is x.com.au available", "who owns ...", "whois ...") go straight to it
+  (`DOMAIN_CHECK` → `_quick_tool`) instead of the browser agent.
+- Browser agent reads refs written as `[ref=e5]`, `ref=e5` or under `target`.
+- Tests: 353 OK. Live RDAP not checked yet (no network in the review session).
+
 ## 2026-11-16 — Fixes from the owner's real chats ("worse than a school project")
 
 Read the last 70 messages. What was broken, and what changed:

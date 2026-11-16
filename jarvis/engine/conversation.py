@@ -75,6 +75,11 @@ HARD_WORK = re.compile(
 OPEN_DATA = re.compile(r"\b(weather|forecast|temperature|rain|exchange rate|convert\b.{0,30}\b(aud|usd|eur|gbp|jpy|"
                        r"bdt|inr|dollars?|euros?|yen|taka)|currency|public holidays?|bank holidays?|vin\b|"
                        r"define|definition|meaning of|synonyms?)\b", re.I)
+# "Is aureusdetailing.com.au available?", "who owns example.com": open.domain answers (RDAP), not the browser.
+_DOMAIN_NAME = r"\b[a-z0-9-]+(?:\.[a-z0-9-]+)*\.(?!(?:pdf|docx?|xlsx?|csv|txt|pages|png|jpe?g|py|json|html?)\b)[a-z]{2,24}\b(?!\.\w)"
+_DOMAIN_ASK = r"\b(?:availab\w*|registered|registrar|taken|owns?|owners?|ownership|expir\w*|free to register)\b"
+DOMAIN_CHECK = re.compile(rf"\b(?:whois|rdap)\b|{_DOMAIN_NAME}.{{0,80}}?{_DOMAIN_ASK}"
+                          rf"|{_DOMAIN_ASK}.{{0,40}}?(?:\bdomain\b|{_DOMAIN_NAME})", re.I | re.S)
 IMAGE_FILE = re.compile(r"\.(png|jpe?g|webp|gif|heic)$", re.I)
 MAKE_FILES = re.compile(r"\b(save|file|files|folder|page|website|site|app|project|script|document|"
                         r"\.(py|html|js|md|css|json|txt|csv))\b", re.I)
@@ -306,6 +311,11 @@ class Conversation:
             if status["ok"]:
                 from ..tools.mac import describe_status
                 return self._say(conversation_id, describe_status(status["output"]), status["run_id"])
+        if DOMAIN_CHECK.search(text) and not files and not self.DOINGS.search(re.sub(r"https?://", "", text)) \
+                and "open.domain" in self.app.tools.names():
+            spoken = self._quick_tool(conversation_id, text)    # the registry answers; no browser agent needed
+            if spoken:
+                return spoken
         decision = self._route(conversation_id)
         if decision.get("mode") == "act" and not self.OWN_DATA.search(decision["goal"]) \
                 and not decision["goal"].startswith(("Use the claude.browse tool", "Use the browser.use tool")):

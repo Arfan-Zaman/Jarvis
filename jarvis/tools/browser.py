@@ -301,6 +301,14 @@ def _ref_line(page: str, ref: str) -> str:
     return ""
 
 
+def _ref(step: dict) -> str:
+    """The element ref the model meant: it copies "[ref=e5]" or "ref=e5" from the snapshot, or calls it
+    "target" like Playwright does. All of these are e5."""
+    raw = str(step.get("ref") or step.get("target") or "").strip()
+    found = re.search(r"\b(e\d+)\b", raw)
+    return found.group(1) if found else raw
+
+
 def browser_use(app, inputs, actor):
     with Browser._lock:                              # the agent owns the browser for the whole task
         return _browser_use(app, inputs)
@@ -326,7 +334,7 @@ def _browser_use(app, inputs):
         if action in ("done", "stop"):
             return {"done": action == "done", "result": str(step.get("answer", "")).strip(), "steps": steps,
                     "page": page.splitlines()[0][5:] if page.startswith("URL: ") else ""}
-        ref, element = str(step.get("ref", "")), str(step.get("element", ""))[:120]
+        ref, element = _ref(step), str(step.get("element", ""))[:120]
         target = _ref_line(page, ref) if ref else ""
         try:
             if action == "navigate":

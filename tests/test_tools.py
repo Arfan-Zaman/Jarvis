@@ -12,7 +12,7 @@ from jarvis.web import create_server
 from support import JarvisTestCase
 
 EXPECTED_TOOLS = {
-    "claude.work": "workspace", "claude.operate": "system", "claude.research": "web_read", "claude.converse": "web_read", "mac.find_files": "read", "mac.list_folder": "read", "mac.read_file": "read", "mac.status": "read", "mac.open": "write", "mac.notify": "write", "claude.browse": "system", "browser.search": "web_read", "browser.read": "web_read", "browser.use": "system", "open.weather": "web_read", "open.currency": "web_read", "open.holidays": "web_read", "open.vin": "web_read", "open.define": "web_read", "open.news": "web_read",
+    "claude.work": "workspace", "claude.operate": "system", "claude.research": "web_read", "claude.converse": "web_read", "mac.find_files": "read", "mac.list_folder": "read", "mac.read_file": "read", "mac.status": "read", "mac.open": "write", "mac.notify": "write", "claude.browse": "system", "browser.search": "web_read", "browser.read": "web_read", "browser.use": "system", "open.weather": "web_read", "open.currency": "web_read", "open.holidays": "web_read", "open.vin": "web_read", "open.define": "web_read", "open.news": "web_read", "open.domain": "web_read",
     "schedule.add": "write", "schedule.list": "read", "schedule.cancel": "write",
     "mail.recent": "read", "mail.search": "read", "mail.read": "read", "mail.draft": "write",
     "mail.send": "external_communication", "calendar.today": "read", "calendar.upcoming": "read",
