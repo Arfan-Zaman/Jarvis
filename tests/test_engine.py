@@ -159,6 +159,22 @@ class FailureTests(EngineCase):
         self.assertIn("unusable action twice", report["error"])
         self.assertEqual(report["executions"], [])
 
+    def test_inputs_beside_the_inputs_key_are_accepted(self):
+        for reply in ({"title": "Call the supplier"}, {"inputs": {}, "title": "Call the supplier"}):
+            with self.subTest(reply=reply):
+                app = self.scripted([plan(("Create the task", "tasks.create")), reply, SUMMARY])
+                report = app.engine.start("Add a task to call the supplier")
+                self.assertEqual(report["status"], "completed")
+                self.assertEqual(app.list("tasks")[0]["title"], "Call the supplier")
+
+    def test_retry_after_missing_input_names_the_tool_inputs(self):
+        app = self.scripted([plan(("Create the task", "tasks.create")), inputs(), inputs(title="Call"), SUMMARY])
+        report = app.engine.start("Add a task")
+        self.assertEqual(report["status"], "completed")
+        retry = self.model.prompts[2][-1].content
+        self.assertIn("'title' is required", retry)
+        self.assertIn("title (string, required)", retry)
+
     def test_model_error_fails_the_run(self):
         app = self.scripted([plan(("Create", "tasks.create")), ProviderError("model went away")])
         report = app.engine.start("Add a task")

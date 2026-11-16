@@ -234,14 +234,20 @@ def web_fetch(app, inputs, actor):
 
 
 def _focus(text: str, focus: str, limit: int) -> str:
-    """Keep the lines of a long page that mention the focus words, in page order."""
+    """Keep the lines of a long page that mention the focus words, in page order.
+
+    A line repeated on the page (menus, banners, share buttons) is kept once, and a
+    line too long for the space left is skipped rather than ending the search."""
     words = {w for w in re.findall(r"[a-z0-9]{3,}", focus.lower())}
     lines = text.splitlines()
     scored = sorted(range(len(lines)), key=lambda i: -sum(w in lines[i].lower() for w in words))
-    keep, size = set(), 0
+    keep, seen, size = set(), set(), 0
     for i in scored:
-        if not any(w in lines[i].lower() for w in words) or size + len(lines[i]) > limit:
-            break
+        if not any(w in lines[i].lower() for w in words):
+            break                                   # sorted: no later line mentions them either
+        if lines[i] in seen or size + len(lines[i]) > limit:
+            continue
+        seen.add(lines[i])
         keep.add(i)
         size += len(lines[i]) + 1
     return "\n".join(lines[i] for i in sorted(keep)) or text

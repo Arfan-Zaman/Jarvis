@@ -3,6 +3,9 @@ existing validation, safety checks and audit trail all still apply."""
 
 from __future__ import annotations
 
+import subprocess
+from pathlib import Path
+
 from .. import __version__
 from ..common import NotFoundError, ValidationError
 from ..safety import ActionCategory
@@ -36,8 +39,21 @@ def _project(app, inputs: dict) -> dict:
 
 
 # --- handlers ---------------------------------------------------------------
+def _git_commit() -> str | None:
+    """The short git commit of the code this process loaded, or None outside a git checkout."""
+    try:
+        done = subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=Path(__file__).resolve().parent,
+                              capture_output=True, text=True, timeout=5)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return (done.stdout.strip() or None) if done.returncode == 0 else None
+
+
+BUILD_COMMIT = _git_commit()     # read once at start-up: the build that is running, not the latest on disk
+
+
 def jarvis_info(app, inputs, actor):
-    return {"name": "JARVIS", "version": __version__, "environment": app.config.env,
+    return {"name": "JARVIS", "version": __version__, "commit": BUILD_COMMIT, "environment": app.config.env,
             "ai_connected": app.provider.status().available, "counts": app.counts(),
             "tools": app.tools.names(), "not_built_yet": app.status()["not_built_yet"]}
 
@@ -135,7 +151,8 @@ def experience_record(app, inputs, actor):
 
 def register_builtin(registry: ToolRegistry) -> None:
     for tool in (
-        Tool("jarvis.info", "What JARVIS is, its version, what it holds and which tools it has.", READ, jarvis_info),
+        Tool("jarvis.info", "What JARVIS is, its version and running git commit, what it holds and which tools it has.",
+             READ, jarvis_info),
         Tool("system.health", "Check database integrity, backups, safety mode and AI connection.", READ, system_health),
         Tool("projects.list", "List projects.", READ, projects_list,
              {"include_archived": B("Also return archived projects.")}),
