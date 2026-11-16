@@ -12,7 +12,7 @@ from jarvis.web import create_server
 from support import JarvisTestCase
 
 EXPECTED_TOOLS = {
-    "claude.work": "workspace", "claude.operate": "system", "claude.research": "web_read", "claude.converse": "web_read", "mac.find_files": "read", "mac.list_folder": "read", "mac.read_file": "read", "mac.status": "read", "mac.open": "write", "mac.notify": "write", "claude.browse": "system", "browser.search": "web_read", "browser.read": "web_read", "browser.use": "system", "open.weather": "web_read", "open.currency": "web_read", "open.holidays": "web_read", "open.vin": "web_read", "open.define": "web_read", "open.news": "web_read", "open.domain": "web_read",
+    "claude.work": "workspace", "claude.operate": "system", "claude.research": "web_read", "claude.converse": "web_read", "mac.find_files": "read", "mac.list_folder": "read", "mac.read_file": "read", "mac.status": "read", "mac.open": "write", "mac.notify": "write", "claude.browse": "system", "browser.search": "web_read", "browser.read": "web_read", "browser.use": "system", "skills.list": "read", "skills.search": "web_read", "skills.install": "system", "system.install": "system", "open.weather": "web_read", "open.currency": "web_read", "open.holidays": "web_read", "open.vin": "web_read", "open.define": "web_read", "open.news": "web_read", "open.domain": "web_read",
     "schedule.add": "write", "schedule.list": "read", "schedule.cancel": "write",
     "mail.recent": "read", "mail.search": "read", "mail.read": "read", "mail.draft": "write",
     "mail.send": "external_communication", "calendar.today": "read", "calendar.upcoming": "read",
@@ -56,7 +56,7 @@ class RegistryTests(ToolCase):
             self.assertIsInstance(tool["inputs"], dict)
             # Only Claude Code with a shell, the browser, spending picture credits and sending email ask first.
             self.assertEqual(tool["requires_approval"],
-                             tool["name"] in ("claude.operate", "claude.browse", "browser.use", "image.generate", "mail.send"))
+                             tool["name"] in ("claude.operate", "claude.browse", "browser.use", "image.generate", "mail.send", "skills.install", "system.install"))
         self.assertEqual(tools["tasks.create"]["inputs"]["title"], {
             "type": "string", "description": "What needs doing.", "required": True})
         self.assertEqual({t["name"] for t in self.app.tools.list("write")},
@@ -350,7 +350,7 @@ class ToolApiTests(ToolCase):
     def test_discover_execute_and_read_history(self):
         status, tools = self.call("GET", "/api/tools")
         self.assertEqual((status, len(tools["items"])), (200, len(EXPECTED_TOOLS)))
-        self.assertEqual(len(self.call("GET", "/api/tools?permission=read")[1]["items"]), 16)   # + mac (find, list, read, status), schedule, mail and calendar reads
+        self.assertEqual(len(self.call("GET", "/api/tools?permission=read")[1]["items"]), 17)   # + skills.list, mac (find, list, read, status), schedule, mail and calendar reads
 
         status, result = self.call("POST", "/api/tools/tasks.create/execute", {"inputs": {"title": "Via API"}})
         self.assertEqual((status, result["ok"]), (200, True))

@@ -2,6 +2,19 @@
 
 Newest entries first. Record what changed, why, and what was verified.
 
+## 2026-11-16 — JARVIS installs skills and software itself; talks like a person
+
+- `jarvis/tools/skills.py`: `skills.search` (GitHub: SKILL.md files and skill repos), `skills.install`
+  (downloads the repo archive, keeps only instruction files; scripts and binaries are left out and listed;
+  the owner approves each install), `skills.list`, and `system.install` (pip / npm / brew, argument lists,
+  checked package names, one approval). Installed skills live in `workspace/.claude/skills`, where Claude
+  Code sees them too.
+- The local brain uses the installed skill that fits a request (`skills.relevant`) as advice in its answer.
+- Routing: "download/install/set up skills" and "pip/npm/brew install X" go to these tools, not Claude.
+- Voice: new speaking rules (match the size of the question, plain talk, no headings or bullets in
+  conversation, no preambles or closing offers). The 50-line ability list goes into the prompt only when
+  the owner asks what JARVIS can do, since it pulled replies toward reciting features.
+
 ## 2026-11-16 — Self-review: learning passes no longer wasted on repeats
 
 - `Learner.pick()` refused repeats of the last 50 queries but only showed the model 25. It now shows them

@@ -24,6 +24,7 @@ from .voice import Voice
 from .stores.runs import RunStore
 from .tools.browser import register_browser
 from .tools.opendata import register_opendata
+from .tools.skills import register_skills
 from .tools import ToolRegistry, register_builtin, register_claude, register_images, register_mac, register_mail_calendar, register_schedule, register_web
 from .stores import (
     AgentStore, ConversationStore, EventLog, ExperienceStore,
@@ -68,6 +69,7 @@ class Jarvis:
         register_claude(self.tools)
         register_browser(self.tools)
         register_opendata(self.tools)
+        register_skills(self.tools)
         register_mac(self.tools)
         register_mail_calendar(self.tools)
         register_images(self.tools)
