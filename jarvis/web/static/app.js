@@ -844,6 +844,38 @@ views.experiences = {
   },
 };
 
+/** Boost: the owner pastes a key for an open-model platform; JARVIS saves it, switches on and tests it. */
+function boostPanel() {
+  const state = h('div', { class: 'muted small' }, 'Checking…');
+  const platform = h('select', { 'aria-label': 'Platform' },
+    ...[['groq', 'Groq (free tier, fastest)'], ['cerebras', 'Cerebras'], ['openrouter', 'OpenRouter'], ['together', 'Together']]
+      .map(([v, t]) => h('option', { value: v }, t)));
+  const key = h('input', { type: 'password', placeholder: 'Paste your API key', autocomplete: 'off', 'aria-label': 'API key', class: 'grow' });
+  const save = h('button', { class: 'btn primary', type: 'submit' }, 'Save and test');
+  const off = h('button', { class: 'btn', type: 'button' }, 'Turn off');
+  const where = h('a', { href: 'https://console.groq.com/keys', target: '_blank', rel: 'noopener noreferrer' }, 'Get a free Groq key');
+  const show = (b) => {
+    state.className = 'review-status ' + (b.active ? 'ok' : b.has_key ? 'bad' : '');
+    state.textContent = b.active ? `Boost on: ${b.model}. Your Mac's model takes over whenever the platform is busy.`
+      : b.has_key ? `Key saved, but the platform did not answer: ${b.detail}` : 'Off. JARVIS uses only your Mac.';
+    if (b.platform) platform.value = b.platform;
+  };
+  const send = async (k) => {
+    save.disabled = off.disabled = true; state.className = 'review-status'; state.textContent = 'Saving and testing…';
+    try { show(await api('POST', '/api/boost', { platform: platform.value, key: k })); key.value = ''; }
+    catch (e) { state.className = 'review-status bad'; state.textContent = e.message; }
+    finally { save.disabled = off.disabled = false; }
+  };
+  const formEl = h('form', { class: 'row' }, platform, key, save, off);
+  formEl.addEventListener('submit', (e) => { e.preventDefault(); if (key.value.trim()) send(key.value.trim()); });
+  off.addEventListener('click', () => send(''));
+  api('GET', '/api/boost').then(show).catch(() => { state.textContent = 'Boost status unavailable.'; });
+  return h('div', { class: 'glass panel' }, h('h2', null, 'Boost'),
+    h('p', { class: 'muted small' }, 'Bigger open-source models on an online platform, for more power than this Mac. ',
+      'While on, conversations are sent to that platform; photos stay on the Mac. ', where, '.'),
+    formEl, state);
+}
+
 /** Weekly self-review: JARVIS's proposed changes to its own code, waiting for the owner. */
 function selfReviewPanel() {
   const body = h('div', { class: 'stack' }, h('div', { class: 'muted small' }, 'Loading…'));
@@ -970,6 +1002,7 @@ views.system = {
               h('button', { class: 'btn sm danger', onclick: act(async () => { await api('POST', `/api/approvals/${item.id}/approve`); toast('Approved. The requester may now proceed once.'); rerender(); }) }, 'Approve'))))
           )
           : h('div', { class: 'empty' }, 'Nothing is waiting for approval.')),
+      boostPanel(),
       selfReviewPanel(),
       h('div', { class: 'glass panel' }, h('h2', null, 'Agents'),
         h('div', { class: 'list' }, agents.items.map((agent) => h('div', { class: 'item' },

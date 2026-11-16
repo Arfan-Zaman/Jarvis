@@ -47,3 +47,13 @@ class BoostTests(JarvisTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class BoostRouteTests(JarvisTestCase):
+    def test_bad_keys_and_platforms_are_refused_before_anything_is_saved(self):
+        from jarvis.web import server
+        app = self.make_app()
+        for body in ({"platform": "groq", "key": "short"}, {"platform": "evil.example", "key": "x" * 30},
+                     {"platform": "groq", "key": "a" * 25 + "\nJARVIS_HOST=0.0.0.0"}):
+            with self.assertRaises(Exception):
+                server._boost_set(app, server.Request((), {}, body, b"", "application/json"))

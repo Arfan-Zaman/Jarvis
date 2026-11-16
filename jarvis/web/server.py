@@ -198,6 +198,50 @@ def _briefing(app: Jarvis, req: Request):
     return app.briefing.get(refresh=refresh)
 
 
+# --- boost: more power from an open-model platform (the owner pastes their own key) ----
+BOOST_KEY_RE = __import__("re").compile(r"^[A-Za-z0-9_\-.:]{20,200}$")
+
+
+def _boost_view(app: Jarvis) -> dict:
+    import os
+    status = app.provider.status()
+    return {"platform": os.environ.get("JARVIS_BOOST", ""), "has_key": bool(os.environ.get("JARVIS_BOOST_KEY")),
+            "active": status.name == "boost" and status.available, "model": status.model, "detail": status.detail}
+
+
+@route("GET", "/api/boost")
+def _boost(app: Jarvis, req: Request):
+    return _boost_view(app)
+
+
+@route("POST", "/api/boost")
+def _boost_set(app: Jarvis, req: Request):
+    """Save the owner's platform key in .env (never logged or returned), switch boost on and test it."""
+    import os
+    import re as _re
+    from ..config import PROJECT_ROOT
+    from ..providers import build_provider
+    from ..providers.boost import PLATFORMS
+    platform = str(req.body.get("platform") or "groq").strip().lower()
+    key = str(req.body.get("key") or "").strip()
+    if platform not in PLATFORMS:
+        raise ValidationError(f"platform must be one of {', '.join(PLATFORMS)}")
+    if key and not BOOST_KEY_RE.match(key):
+        raise ValidationError("that does not look like an API key (letters, numbers, - and _ only)")
+    env = PROJECT_ROOT / ".env"
+    text = env.read_text(encoding="utf-8") if env.exists() else ""
+    for name, value in (("JARVIS_ALLOW_EXTERNAL_AI", "true"), ("JARVIS_BOOST", platform), ("JARVIS_BOOST_KEY", key)):
+        line = f"{name}={value}"
+        text = _re.sub(rf"(?m)^{name}=.*$", line, text) if _re.search(rf"(?m)^{name}=", text) else text.rstrip("\n") + f"\n{line}\n"
+        os.environ[name] = value
+    env.write_text(text, encoding="utf-8")
+    env.chmod(0o600)
+    app.config = __import__("dataclasses").replace(app.config, allow_external_ai=True)
+    app.provider = build_provider(app.config)
+    app.events.record("ai", "boost.set", f"Boost {'on with ' + platform if key else 'off'} (key not logged)", actor="user")
+    return _boost_view(app)
+
+
 @route("GET", "/api/self-review")
 def _selfreview_status(app: Jarvis, req: Request):
     """Weekly self-review: on or off, the last pass, and proposal branches waiting for the owner."""
