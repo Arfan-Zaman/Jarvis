@@ -62,6 +62,44 @@ Newest entries first. Record what changed, why, and what was verified.
   completed as `jarvis:schedule`, the JARVIS page spoke it, the conversation
   got "Reminder: …". 296 tests pass (14 new, fake clock).
 
+## 2026-11-16 — Email and calendar through Mail and Calendar
+
+- Owner uses Apple Mail and Calendar (asked first). New tools in
+  `jarvis/tools/mail_calendar.py`, AppleScript through `osascript` with every
+  value passed as an argument (never spliced into a script), no installs:
+  - read, automatic: `mail.recent` (last N days, unread only, start of each
+    message), `mail.search` (sender/subject, inbox or every mailbox except
+    Trash/Junk, Gmail Inbox/All Mail twins removed), `mail.read` (one whole
+    message), `calendar.today`, `calendar.upcoming`.
+  - write: `mail.draft` (opens the message, or a reply to the sender with the
+    original quoted, in Mail for the owner to check; never sends) and
+    `calendar.add_event` (timed or all-day, named calendar or the first
+    writable one; refuses unknown calendars and times in the past).
+  - `mail.send` is external communication: the safety layer asks the owner on
+    the System page every time, for exactly those recipients and words, once.
+    A spoken or typed "yes" does not approve it (tested).
+- Calendar's `whose` cannot test `recurrence` and does not expand repeats, so
+  each calendar is read in one bulk request and repeating events (RRULE:
+  daily/weekly/monthly/yearly, INTERVAL, BYDAY incl. 2MO/-1FR, BYMONTH,
+  BYMONTHDAY, COUNT, UNTIL) are expanded in Python; cancelled occurrences are
+  fetched only for repeats that land in the window. All-day events end at
+  23:59:59 in Calendar and are detected from that.
+- Calendar is slow (~3 s per bulk property on the owner's 114-event holiday
+  calendar): first read ~17-23 s (was 110 s before bulk reads), then cached for
+  two minutes covering today and the next 15 days; adding an event clears it.
+- macOS asks once to allow automation of Mail and Calendar; if refused, the
+  tools say where to turn it on (System Settings > Privacy & Security >
+  Automation). A Mail/Calendar that was quitting (-600) is retried once.
+- Routing: mail/calendar words added to `OWN_DATA` (not "events", "schedule"
+  or "send", so web questions still go to Claude); the router and the
+  abilities sentence now say JARVIS does email and calendar.
+- Verified on the owner's Mac (counts only, no content read out): recent mail
+  4 s (2 found, bodies read), search everywhere 5 s, calendar 60 days: 8
+  all-day holiday events with yearly repeats expanded. All scripts compile.
+  Draft, send and add-event were not run against the real apps (mocked tests
+  only) so nothing was created in the owner's accounts.
+- 309 tests pass (27 new in `tests/test_mail_calendar.py`).
+
 ## 2026-11-16 — Mac access, sandboxed
 
 - `claude.operate` is now Mac access, on by default (`JARVIS_OPERATE=0` turns
