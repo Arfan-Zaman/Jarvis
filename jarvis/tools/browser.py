@@ -343,7 +343,7 @@ def _browser_use(app, inputs):
                     return {"done": False, "steps": steps, "needs_owner": True,
                             "result": f"I stopped before clicking “{element or target.strip()[:80]}”: that would commit "
                                       "you to something, so it needs your own click."}
-                page, note = _look(app, Browser.call(app, "browser_click", {"element": element or ref, "ref": ref})), f"clicked {element or ref}"
+                page, note = _look(app, Browser.call(app, "browser_click", {"element": element or ref, "target": ref})), f"clicked {element or ref}"
             elif action == "type":
                 if not target:
                     steps.append(f"type into {ref}: no such element on this page"); continue
@@ -352,7 +352,7 @@ def _browser_use(app, inputs):
                             "result": f"This needs private details typed into “{element or 'a field'}”. Please type them "
                                       "yourself in JARVIS's Chrome window, then ask me to carry on."}
                 text = str(step.get("text", ""))[:500]
-                page = _look(app, Browser.call(app, "browser_type", {"element": element or ref, "ref": ref, "text": text,
+                page = _look(app, Browser.call(app, "browser_type", {"element": element or ref, "target": ref, "text": text,
                                                                     "submit": bool(step.get("submit"))}))
                 note = f"typed “{text[:60]}” into {element or ref}"
             elif action == "press":

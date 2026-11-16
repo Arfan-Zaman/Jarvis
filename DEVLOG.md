@@ -2,6 +2,26 @@
 
 Newest entries first. Record what changed, why, and what was verified.
 
+## 2026-11-16 — Fixes from the owner's real chats ("worse than a school project")
+
+Read the last 70 messages. What was broken, and what changed:
+- Trapped in an old question: after "Where is the file?", every later message ("Can you build
+  agents?", "new capabilities?") was taken as the answer. Now only an answer resumes it; a new request
+  drops the old question (`NEW_REQUEST`).
+- Approving in words looped ("I approve" x4 -> the same "approve on the System page"). Chat now has
+  Approve and Deny buttons on the message; saying "approved" points at them (`SAYS_APPROVE`).
+- File search needed exact names: "Aureus Dailing" in Documents was never found. Now typo-tolerant,
+  skips JARVIS's own code, returns found folders with their contents; new `mac.list_folder` and
+  `mac.read_file` (Word, PDF, Markdown, CSV...; private paths refused). File requests always use them.
+- The planner asked "did you mean" on an obvious match; now it carries on. It no longer calls Claude to
+  phrase answers. JARVIS describes its agent-building ability truthfully.
+- `browser.use` typing and clicking failed: Playwright MCP 0.0.85 calls the element `target`, not `ref`.
+  Live: the .au WHOIS check of aureusdetailing.com.au now works (3 steps, 31 s; confirmed with whois).
+- `web.search` (the planner's search) now searches the whole web through JARVIS's Chrome.
+- Approve on self-reviews: retests if main moves mid-merge; plain errors; a second click is harmless.
+- Boost (`jarvis/providers/boost.py`): Groq / Cerebras / OpenRouter / Together, open models, Mac model as
+  fallback. Off until the owner sets JARVIS_BOOST, JARVIS_BOOST_KEY and JARVIS_ALLOW_EXTERNAL_AI=true.
+
 ## 2026-11-16 — Speed: streaming replies, a two-call path for open data, a lean router
 
 - Measured, not guessed: the 9b writes ~11 tokens/s; routing took 5.8 s; weather took 45 s (planner).

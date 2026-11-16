@@ -193,6 +193,14 @@ def web_search(app, inputs, actor):
     results, used, errors, seen = [], [], [], set()
     key = app.config.brave_api_key or os.environ.get("JARVIS_BRAVE_API_KEY", "").strip()
     searxng = getattr(app.config, "searxng_url", "") or os.environ.get("JARVIS_SEARXNG_URL", "").strip().rstrip("/")
+    if os.environ.get("JARVIS_BROWSER", "local") not in ("off", "0") and "browser.search" in app.tools.names():
+        try:                                  # the whole web, through JARVIS's own Chrome (free)
+            from .browser import browser_search
+            found = browser_search(app, {"query": query, "limit": limit}, actor)
+            return {"query": query, "results": found["results"], "searched": [f"browser ({found['engine']})"],
+                    "errors": [], "note": None}
+        except JarvisError as exc:
+            errors.append(f"browser: {exc}")
     for name, search in providers(key, searxng):
         try:
             found = search(query, limit)

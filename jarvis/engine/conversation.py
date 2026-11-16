@@ -61,7 +61,8 @@ FILE_WORK = re.compile(r"\b(monitor|check|read|review|look (at|in|through)|open|
 # A message that starts a new request rather than answering JARVIS's question.
 NEW_REQUEST = re.compile(r"^\W*(jarvis\W+)?(can|could|would|will|what|what's|whats|how|who|why|when|which|do|does|did|is|are|"
                          r"should|tell me|show me|give me|make|build|create|write|open|remind|i want|i need|let's|lets)\b", re.I)
-SAYS_APPROVE = re.compile(r"^\W*(yes\W+)?(i\s+)?(approve[ds]?|approving|i'?m approving|go ahead|confirmed?)\b[\w\s,.!']{0,60}$", re.I)
+SAYS_APPROVE = re.compile(r"^\W*(yes\W+|ok\W+|okay\W+)?(i\s+|i'?ve\s+|i\s+have\s+|i'?m\s+)?(already\s+)?"
+                          r"(approve[ds]?|approving|go ahead|confirmed?)\b[\w\s,.!']{0,60}$", re.I)
 ATTACHED = re.compile(r"\[Attached: (uploads/[A-Za-z0-9][A-Za-z0-9._-]*)\]")
 # Requests that need real skill: sent to Claude Code even if the small router says "answer".
 # The local model handles talk, writing, maths, plans and web look-ups itself. Claude is called only for
