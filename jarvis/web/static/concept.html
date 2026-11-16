@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>JARVIS · Concept</title>
+  <link rel="stylesheet" href="/static/identity.css">
+  <link rel="stylesheet" href="/static/concept.css">
+</head>
+<body>
+  <div class="room" aria-hidden="true"></div>
+  <div class="concept-banner">Concept preview: live data, separate from your current interface. <a href="/">Back to JARVIS</a></div>
+
+  <div class="app">
+    <nav class="rail" aria-label="Sections">
+      <a class="rail-mark" href="/#presence" title="JARVIS"><span></span></a>
+      <a href="/#dashboard" title="Dashboard">▦</a>
+      <a href="/#chat" title="Chat">◫</a>
+      <a href="/#tasks" title="Tasks">☰</a>
+      <a href="/#memory" title="Memory">◌</a>
+      <a href="/#system" title="System">⚙</a>
+    </nav>
+
+    <aside class="col-left">
+      <header class="intro">
+        <h1>JARVIS</h1>
+        <p class="lede">Your private executive intelligence.</p>
+        <p class="muted">Leads with the answer, challenges weak ideas, never claims what it did not do.</p>
+      </header>
+
+      <section class="card" id="vitals">
+        <h2>System</h2>
+        <div class="big"><span id="v-abilities">–</span><small>of <span id="v-total">–</span> abilities on</small></div>
+        <dl class="kv" id="v-kv"></dl>
+      </section>
+
+      <section class="card" id="activity">
+        <h2>Activity <span class="hint">last 24 hours</span></h2>
+        <div class="big"><span id="a-runs">–</span><small>actions</small> <span class="delta" id="a-ok"></span></div>
+        <canvas id="a-chart" height="90" aria-label="Actions per hour, last 24 hours"></canvas>
+        <div class="legend"><span class="dot pink"></span>actions <span class="dot red"></span>failed</div>
+      </section>
+
+      <section class="card" id="mac">
+        <h2>This Mac</h2>
+        <dl class="kv" id="m-kv"><dt>Checking…</dt><dd></dd></dl>
+      </section>
+    </aside>
+
+    <main class="stage-col">
+      <div class="stage-head">
+        <div><div class="eyebrowless">System state</div><div class="state-name" id="s-label">—</div></div>
+        <div class="clock" id="clock"></div>
+      </div>
+      <div class="stage" id="stage"></div>
+      <div class="state-line" id="s-line" aria-live="polite"></div>
+      <form class="command" id="command">
+        <input id="cmd" placeholder="Type to JARVIS… (voice lives on the main page)" aria-label="Message JARVIS" autocomplete="off">
+        <button type="submit" aria-label="Send">➤</button>
+      </form>
+      <div class="reply" id="reply"></div>
+    </main>
+
+    <aside class="col-right">
+      <section class="card bracket" id="task">
+        <h2>Current task <span class="pill" id="t-pill">idle</span></h2>
+        <ol class="steps" id="t-steps"><li class="muted">No task running. Standing by.</li></ol>
+      </section>
+      <section class="card bracket" id="result">
+        <h2>Last result <span class="pill ok" id="r-pill"></span></h2>
+        <p class="result-text" id="r-text">—</p>
+        <a class="btn" href="/#goals">All results</a>
+      </section>
+      <section class="card" id="next">
+        <h2>Coming up</h2>
+        <ul class="list" id="n-list"><li class="muted">Nothing scheduled.</li></ul>
+      </section>
+      <section class="card" id="decide">
+        <h2>Needs you</h2>
+        <ul class="list" id="d-list"><li class="muted">Nothing waiting.</li></ul>
+      </section>
+    </aside>
+
+    <section class="states" aria-label="How JARVIS looks in each state">
+      <div class="states-head"><h2>States</h2><span class="muted">Motion only with a cause. Live renders of the real face.</span></div>
+      <div class="state-grid" id="gallery"></div>
+    </section>
+
+    <section class="features" aria-label="What JARVIS can do">
+      <div class="states-head"><h2>Abilities</h2><span class="muted">Worked out live from what JARVIS can do right now.</span></div>
+      <div class="feature-grid" id="features"></div>
+    </section>
+  </div>
+
+  <script src="/static/identity.js" defer></script>
+  <script src="/static/concept.js" defer></script>
+</body>
+</html>
