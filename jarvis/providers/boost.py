@@ -159,8 +159,10 @@ class Boosted(AIProvider):
         if time.time() >= self._down_until:
             try:
                 return self.remote.generate(messages, json_output=json_output, on_token=on_token)
-            except ProviderError:
+            except ProviderError as exc:
                 self._down_until = time.time() + 120      # rate-limited or offline: use the Mac for 2 minutes
+                from ..logging_setup import get_logger
+                get_logger("boost").warning("Boost failed, using the Mac's model for 2 minutes: %s", str(exc)[:300])
         if getattr(self.local, "streams", False):
             return self.local.generate(messages, json_output=json_output, on_token=on_token)
         return self.local.generate(messages, json_output=json_output)

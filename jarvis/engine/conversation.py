@@ -91,7 +91,7 @@ SAVE_CLAIM = re.compile(r"\b(noted|note of|logged|saved|recorded|stored|flagged|
                         r"remember(ed)?|memori[sz]ed|"
                         r"keep (that|this|it) in mind|bear (that|this|it) in mind|in (my )?memory|"
                         r"i'?ll (ensure|make sure|keep)|from now on|going forward)\b", re.I)
-MEMORY_MARK = re.compile(r"\s*\[memory:\s*([0-9,\s]*)\]\s*$", re.I)
+MEMORY_MARK = re.compile(r"\s*\[memory:\s*([0-9,\s]*|none|n/?a|-)\s*\]\s*$", re.I)
 # "make me a picture of ...": sent to image.generate (it spends credits, so the owner says yes first).
 PICTURE = re.compile(r"\b(make|create|generate|draw|paint|design|render|give me|show me)\b.{0,40}\b"
                      r"(picture|image|photo|drawing|illustration|artwork|painting|wallpaper|logo|poster)s?\b"
