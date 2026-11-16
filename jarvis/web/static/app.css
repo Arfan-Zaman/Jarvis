@@ -294,3 +294,11 @@ dl.kv dd { margin: 0; overflow-wrap: anywhere; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+
+/* Installed on a phone: keep clear of the notch and home bar, stop iOS zooming into inputs. */
+@media (max-width: 860px) {
+  input, textarea, select { font-size: 16px; }
+  .shell { padding-top: max(16px, env(safe-area-inset-top)); padding-bottom: max(16px, env(safe-area-inset-bottom)); }
+  .shell { padding-left: max(16px, env(safe-area-inset-left)); padding-right: max(16px, env(safe-area-inset-right)); }
+  .chat .conversation { height: 60dvh; }
+}

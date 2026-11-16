@@ -78,6 +78,24 @@ python3 -m jarvis goal "Add a task to call the supplier"   # plan and run a goal
 python3 -m jarvis tool tasks.create '{"title": "Example"}'   # execute one tool
 ```
 
+## Use JARVIS from your iPhone
+
+JARVIS never listens on the network itself. Phone access goes over
+[Tailscale](https://tailscale.com), a private network that only your own
+devices join, and still asks for an access code.
+
+1. Install Tailscale on the Mac and the iPhone and sign in to the same account.
+   At login.tailscale.com/admin/dns turn on **MagicDNS** and **HTTPS Certificates**.
+2. On the Mac: `python3 -m jarvis remote`. It prints your address and access code.
+3. Restart JARVIS: `python3 -m jarvis stop && python3 -m jarvis`.
+4. On the iPhone, with Tailscale connected, open the address in Safari, enter
+   the code, then **Share > Add to Home Screen**. JARVIS opens full screen like an app.
+
+The Mac must be awake and running JARVIS. The microphone works because the
+link is HTTPS. `python3 -m jarvis remote --new-code` signs every device out;
+`--off` turns phone access off. Anyone with the code and your tailnet can
+approve actions on your Mac, so treat the code like a password.
+
 ## Talking to JARVIS
 
 Just chat. For each message JARVIS decides:
@@ -329,6 +347,8 @@ Copy `.env.example` to `.env` and edit. Every setting has a safe default, so
 |---|---|---|
 | `JARVIS_HOST` | `127.0.0.1` | Loopback addresses only; anything else is rejected |
 | `JARVIS_PORT` | `8765` | Port for the web interface |
+| `JARVIS_REMOTE_HOST` | empty | Your Tailscale hostname for phone access; set by `python3 -m jarvis remote` |
+| `JARVIS_ACCESS_TOKEN` | empty | The phone's access code (20+ characters); set by the same command |
 | `JARVIS_DATA_DIR` | `data` | Where the database, logs and backups live |
 | `JARVIS_LOG_LEVEL` | `INFO` | `DEBUG`, `INFO`, `WARNING` or `ERROR` |
 | `JARVIS_AI_PROVIDER` | `none` | `none`, `ollama`, or `mlx` (not implemented) |

@@ -7,9 +7,13 @@ other websites from driving the API through the browser.
 
 from __future__ import annotations
 
+import hashlib
+import hmac
 import json
 import mimetypes
 import re
+import threading
+import time
 from dataclasses import dataclass, field
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -24,6 +28,16 @@ log = get_logger("web")
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 MAX_BODY_BYTES = 1_000_000
 LOCAL_NAMES = ("127.0.0.1", "localhost", "[::1]")
+SESSION_COOKIE = "jarvis_session"
+SESSION_SECONDS = 365 * 24 * 3600
+# What an outside device may fetch before logging in: the login page itself and what an iPhone needs
+# to install the app. Nothing here reveals any data.
+PUBLIC_PATHS = ("/login", "/api/login", "/manifest.webmanifest", "/static/login.js", "/static/login.css")
+PUBLIC_PREFIXES = ("/static/icons/",)
+# A request that came through a proxy such as `tailscale serve` is outside, whatever its Host header claims.
+PROXY_HEADERS = ("X-Forwarded-For", "X-Forwarded-Host", "X-Real-Ip", "Forwarded", "Tailscale-User-Login")
+MAX_LOGIN_FAILURES = 5
+LOGIN_WINDOW_SECONDS = 300
 KINDS = "memories|experiences|tasks|projects|conversations"
 INT_FILTERS = ("project_id", "task_id")
 SECURITY_HEADERS = {
@@ -32,6 +46,32 @@ SECURITY_HEADERS = {
     "Content-Security-Policy": ("default-src 'self'; media-src 'self' blob:; frame-ancestors 'self'; "
                                 "base-uri 'none'; form-action 'self'"),
 }
+
+
+def session_value(token: str) -> str:
+    """The cookie proving a device knows the access code. Changing the code signs every device out."""
+    return hmac.new(token.encode(), b"jarvis-session-v1", hashlib.sha256).hexdigest()
+
+
+class LoginLimiter:
+    """Slows down guessing the access code: too many wrong tries locks the door for a while."""
+
+    def __init__(self, clock=time.monotonic):
+        self._clock, self._lock, self._failures = clock, threading.Lock(), []
+
+    def locked(self) -> bool:
+        with self._lock:
+            now = self._clock()
+            self._failures = [t for t in self._failures if now - t < LOGIN_WINDOW_SECONDS]
+            return len(self._failures) >= MAX_LOGIN_FAILURES
+
+    def failed(self):
+        with self._lock:
+            self._failures.append(self._clock())
+
+    def succeeded(self):
+        with self._lock:
+            self._failures.clear()
 
 
 @dataclass
@@ -390,6 +430,18 @@ def _backup_create(app: Jarvis, req: Request):
     return 201, app.create_backup(req.body.get("label", "manual"))
 
 
+MANIFEST = {
+    "name": "JARVIS", "short_name": "JARVIS", "description": "Your personal AI, running on your Mac.",
+    "start_url": "/", "scope": "/", "display": "standalone", "orientation": "portrait",
+    "background_color": "#07060f", "theme_color": "#07060f",
+    "icons": [
+        {"src": "/static/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
+        {"src": "/static/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any"},
+        {"src": "/static/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"},
+    ],
+}
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = "JARVIS"
 
@@ -397,8 +449,10 @@ class Handler(BaseHTTPRequestHandler):
         log.debug("%s %s", self.address_string(), format % args)
 
     # --- responses ---------------------------------------------------------
-    def _send(self, status: int, body: bytes, content_type: str, cache: str = "no-store"):
+    def _send(self, status: int, body: bytes, content_type: str, cache: str = "no-store", extra=()):
         self.send_response(status)
+        for name, value in extra:
+            self.send_header(name, value)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", cache)
@@ -408,20 +462,71 @@ class Handler(BaseHTTPRequestHandler):
         if self.command != "HEAD":
             self.wfile.write(body)
 
-    def _json(self, status: int, payload):
-        self._send(status, json.dumps(payload, default=str).encode("utf-8"), "application/json; charset=utf-8")
+    def _json(self, status: int, payload, extra=()):
+        self._send(status, json.dumps(payload, default=str).encode("utf-8"), "application/json; charset=utf-8",
+                   extra=extra)
 
     def _error(self, status: int, message: str):
         self._json(status, {"error": message})
 
     # --- request checks ----------------------------------------------------
-    def _is_local_request(self) -> bool:
+    def _remote_host(self) -> str:
+        return self.server.app.config.remote_host if self.server.app.config.remote_enabled else ""
+
+    def _is_outside_request(self) -> bool:
+        """True for a request from another device (the phone), as opposed to this Mac's own browser."""
         host = self.headers.get("Host", "")
         name = host.rsplit(":", 1)[0] if not host.endswith("]") else host
-        if name not in LOCAL_NAMES:
+        return name not in LOCAL_NAMES or any(self.headers.get(h) for h in PROXY_HEADERS)
+
+    def _is_local_request(self) -> bool:
+        """Only this machine, or the one configured private hostname, may talk to JARVIS."""
+        host = self.headers.get("Host", "")
+        name = host.rsplit(":", 1)[0] if not host.endswith("]") else host
+        remote = self._remote_host()
+        if name in LOCAL_NAMES:
+            allowed = (f"http://{host}",)
+        elif remote and name.lower() == remote:
+            allowed = (f"https://{host}", f"http://{host}")
+        else:
             return False
         origin = self.headers.get("Origin")
-        return origin is None or origin in (f"http://{host}",)
+        return origin is None or origin in allowed
+
+    def _cookie(self, name: str) -> str:
+        for part in self.headers.get("Cookie", "").split(";"):
+            key, _, value = part.strip().partition("=")
+            if key == name:
+                return value
+        return ""
+
+    def _logged_in(self) -> bool:
+        token = self.server.app.config.access_token
+        return bool(token) and hmac.compare_digest(self._cookie(SESSION_COOKIE), session_value(token))
+
+    def _set_session(self, value: str, max_age: int) -> list[tuple[str, str]]:
+        return [("Set-Cookie", f"{SESSION_COOKIE}={value}; Max-Age={max_age}; Path=/; HttpOnly; Secure; SameSite=Strict")]
+
+    def _redirect(self, location: str):
+        self.send_response(302)
+        self.send_header("Location", location)
+        self.send_header("Content-Length", "0")
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+
+    def _login(self):
+        config = self.server.app.config
+        limiter = self.server.limiter
+        if limiter.locked():
+            return self._error(429, "Too many wrong codes. Wait a few minutes and try again.")
+        code = str(self._read_body().get("code", "")).strip()
+        if not hmac.compare_digest(code.encode(), config.access_token.encode()):
+            limiter.failed()
+            log.warning("Wrong access code from %s", self.address_string())
+            return self._error(401, "That access code is not right.")
+        limiter.succeeded()
+        self.server.app.events.record("system", "remote_login", "A device signed in to JARVIS")
+        self._json(200, {"ok": True}, self._set_session(session_value(config.access_token), SESSION_SECONDS))
 
     def _read_raw(self) -> bytes:
         from ..uploads import MAX_UPLOAD_BYTES
@@ -453,6 +558,27 @@ class Handler(BaseHTTPRequestHandler):
         if not self._is_local_request():
             return self._error(403, "JARVIS only accepts requests from this machine")
         url = urlparse(self.path)
+        outside = self._is_outside_request()
+        public = url.path in PUBLIC_PATHS or url.path.startswith(PUBLIC_PREFIXES)
+        if outside and not public and not self._logged_in():
+            if url.path.startswith("/api/") or self.command not in ("GET", "HEAD"):
+                return self._error(401, "sign in required")
+            return self._redirect("/login")
+        if outside and url.path == "/api/logout" and self.command == "POST":
+            return self._json(200, {"ok": True}, self._set_session("", 0))
+        if outside and url.path == "/api/login":
+            if self.command != "POST":
+                return self._error(405, "method not allowed")
+            try:
+                return self._login()
+            except ValidationError as exc:
+                return self._error(400, str(exc))
+        if url.path == "/manifest.webmanifest":
+            return self._send(200, json.dumps(MANIFEST).encode(), "application/manifest+json", cache="no-cache")
+        if url.path == "/login":
+            if self.command not in ("GET", "HEAD"):
+                return self._error(405, "method not allowed")
+            return self._redirect("/") if (not outside or self._logged_in()) else self._static("/static/login.html")
         if not url.path.startswith("/api/"):
             if self.command not in ("GET", "HEAD"):
                 return self._error(405, "method not allowed")
@@ -510,6 +636,7 @@ class JarvisServer(ThreadingHTTPServer):
 
     def __init__(self, app: Jarvis, host: str, port: int):
         self.app = app
+        self.limiter = LoginLimiter()
         super().__init__((host, port), Handler)
 
 

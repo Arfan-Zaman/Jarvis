@@ -13,6 +13,7 @@ Runtime preferences that the user changes while JARVIS is running live in the
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass, asdict
 from pathlib import Path
 
@@ -27,6 +28,8 @@ DEFAULTS = {
     "JARVIS_DATA_DIR": "data",
     "JARVIS_HOST": "127.0.0.1",
     "JARVIS_PORT": "8765",
+    "JARVIS_REMOTE_HOST": "",
+    "JARVIS_ACCESS_TOKEN": "",
     "JARVIS_LOG_LEVEL": "INFO",
     "JARVIS_AI_PROVIDER": "none",
     "JARVIS_AI_MODEL": "",
@@ -77,6 +80,12 @@ class Config:
     whisper_model: Path = Path("data/models/ggml-small.en.bin")
     voice_name: str = "Daniel"
     voice_rate: int = 185
+    remote_host: str = ""        # e.g. my-mac.tail1234.ts.net: the one outside name JARVIS answers to
+    access_token: str = ""       # the access code the phone must present
+
+    @property
+    def remote_enabled(self) -> bool:
+        return bool(self.remote_host and self.access_token)
 
     @property
     def db_path(self) -> Path:
@@ -104,6 +113,7 @@ class Config:
         data = {key: str(value) if isinstance(value, Path) else value for key, value in asdict(self).items()}
         data["db_path"] = str(self.db_path)
         data["brave_api_key"] = "set" if self.brave_api_key else ""     # never reveal secrets
+        data["access_token"] = "set" if self.access_token else ""
         return data
 
 
@@ -154,6 +164,26 @@ def _path(root: Path, value: str) -> Path:
     return (path if path.is_absolute() else root / path).resolve()
 
 
+_HOSTNAME = re.compile(r"^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$")
+MIN_TOKEN_LENGTH = 20
+
+
+def _remote(host: str, token: str) -> tuple[str, str]:
+    """Phone access is opt-in: it needs both a private hostname and a long access code."""
+    host, token = host.strip().lower().rstrip("."), token.strip()
+    if not host and not token:
+        return "", ""
+    if not host or not token:
+        raise ConfigError("JARVIS_REMOTE_HOST and JARVIS_ACCESS_TOKEN must be set together (or both left empty)")
+    if not _HOSTNAME.match(host):
+        raise ConfigError("JARVIS_REMOTE_HOST must be a hostname such as my-mac.tailnet-name.ts.net, "
+                          "with no scheme, port or path")
+    if len(token) < MIN_TOKEN_LENGTH:
+        raise ConfigError(f"JARVIS_ACCESS_TOKEN must be at least {MIN_TOKEN_LENGTH} characters; "
+                          "run `python3 -m jarvis remote` to make one")
+    return host, token
+
+
 def _voice(value: str) -> str:
     value = value.strip()
     if not value or not all(ch.isalnum() or ch in " ()-_" for ch in value):
@@ -182,7 +212,8 @@ def load_config(
     if host not in LOOPBACK_HOSTS:
         raise ConfigError(
             f"JARVIS_HOST must be a loopback address ({', '.join(LOOPBACK_HOSTS)}); "
-            "JARVIS has no login and must not be exposed to a network"
+            "it never listens on the network itself. For the phone, keep it on loopback and use "
+            "`python3 -m jarvis remote`, which puts a private Tailscale link and a login in front of it"
         )
 
     log_level = get("JARVIS_LOG_LEVEL").upper()
@@ -192,6 +223,8 @@ def load_config(
     data_dir = Path(get("JARVIS_DATA_DIR")).expanduser()
     if not data_dir.is_absolute():
         data_dir = root / data_dir
+
+    remote_host, access_token = _remote(get("JARVIS_REMOTE_HOST"), get("JARVIS_ACCESS_TOKEN"))
 
     return Config(
         root=root,
@@ -217,4 +250,6 @@ def load_config(
         whisper_model=_path(root, get("JARVIS_WHISPER_MODEL")),
         voice_name=_voice(get("JARVIS_VOICE")),
         voice_rate=_integer("JARVIS_VOICE_RATE", get("JARVIS_VOICE_RATE"), 90, 360),
+        remote_host=remote_host,
+        access_token=access_token,
     )

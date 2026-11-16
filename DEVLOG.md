@@ -2,6 +2,26 @@
 
 Newest entries first. Record what changed, why, and what was verified.
 
+## 2026-11-16 — JARVIS on the iPhone
+
+- JARVIS still listens only on loopback. Phone access is opt-in: Tailscale
+  (`tailscale serve`) publishes it as HTTPS on the owner's private tailnet, and
+  JARVIS itself adds a login in front.
+- `JARVIS_REMOTE_HOST` + `JARVIS_ACCESS_TOKEN` (20+ chars, both or neither).
+  That one hostname is added to the Host/Origin allow-list. Requests from it,
+  or anything arriving through a proxy (even claiming `Host: 127.0.0.1`), need
+  the signed session cookie (HttpOnly, Secure, SameSite=Strict, one year;
+  changing the code signs every device out). This Mac's own browser is
+  unchanged and needs no login. Five wrong codes in five minutes lock the door.
+- Login page, web app manifest, home-screen icons, iOS standalone meta tags and
+  safe-area padding, so it installs from Safari as a full-screen app.
+- `python3 -m jarvis remote` finds the Tailscale name, makes the code, writes
+  `.env`, runs `tailscale serve`, prints the address and iPhone steps;
+  `--new-code`, `--off`.
+- Tests: 14 new (config, login, lock-out, forged cookie, proxy spoof, throttle,
+  logout). 344 pass. Not run: a real Tailscale link or an actual iPhone; this
+  was built in a cloud container with neither.
+
 ## 2026-11-16 — JARVIS AI Operating System; stress test and lessons
 
 - `os.html` / `os.css` / `os.js`: a desktop shell. Top bar (live state,

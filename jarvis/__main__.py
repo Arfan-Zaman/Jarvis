@@ -189,6 +189,85 @@ def cmd_restore(config, args) -> int:
     return 0
 
 
+MAC_TAILSCALE = "/Applications/Tailscale.app/Contents/MacOS/Tailscale"
+
+
+def _tailscale() -> str:
+    import shutil
+    return shutil.which("tailscale") or (MAC_TAILSCALE if os.path.exists(MAC_TAILSCALE) else "tailscale")
+
+
+def _tailscale_name() -> str | None:
+    """This Mac's private Tailscale hostname, or None when Tailscale is missing or signed out."""
+    try:
+        out = subprocess.run([_tailscale(), "status", "--json"], capture_output=True, text=True, timeout=15)
+        name = json.loads(out.stdout)["Self"]["DNSName"]
+    except (OSError, subprocess.SubprocessError, ValueError, KeyError):
+        return None
+    return name.rstrip(".").lower() or None
+
+
+def _write_env_values(path, values: dict[str, str]) -> None:
+    """Set KEY=VALUE lines in .env, keeping everything else as it was."""
+    lines = path.read_text().splitlines() if path.exists() else []
+    for key, value in values.items():
+        entry = f"{key}={value}"
+        for i, line in enumerate(lines):
+            if line.split("=", 1)[0].strip().removeprefix("export ").strip() == key:
+                lines[i] = entry
+                break
+        else:
+            lines.append(entry)
+    path.write_text("\n".join(lines) + "\n")
+    path.chmod(0o600)
+
+
+def cmd_remote(config, args) -> int:
+    """Set up private phone access: Tailscale link + access code. Run again with --new-code to change the code."""
+    import secrets
+    env_path = config.root / ".env"
+    if args.off:
+        try:
+            subprocess.run([_tailscale(), "serve", "reset"], check=False)
+        except OSError:
+            pass
+        _write_env_values(env_path, {"JARVIS_REMOTE_HOST": "", "JARVIS_ACCESS_TOKEN": ""})
+        print("Phone access is off. Restart JARVIS for it to take effect: python3 -m jarvis stop && python3 -m jarvis")
+        return 0
+    name = _tailscale_name()
+    if not name:
+        print("Tailscale is not running on this Mac.\n"
+              "  1. Install it from the Mac App Store or https://tailscale.com/download and sign in.\n"
+              "  2. In the Tailscale admin page (login.tailscale.com/admin/dns) turn on MagicDNS and HTTPS Certificates.\n"
+              "  3. Install Tailscale on your iPhone and sign in with the same account.\n"
+              "Then run this command again.")
+        return 1
+    token = config.access_token
+    if not token or args.new_code:
+        token = secrets.token_urlsafe(24)
+    _write_env_values(env_path, {"JARVIS_REMOTE_HOST": name, "JARVIS_ACCESS_TOKEN": token})
+    served = subprocess.run([_tailscale(), "serve", "--bg", "--https=443", f"http://127.0.0.1:{config.port}"],
+                            capture_output=True, text=True)
+    if served.returncode != 0:
+        print("Tailscale could not publish JARVIS:\n" + (served.stderr or served.stdout).strip())
+        print("Turn on HTTPS Certificates at login.tailscale.com/admin/dns and run this again.")
+        return 1
+    print(f"""Phone access is ready.
+
+  Address:      https://{name}
+  Access code:  {token}
+
+On your iPhone:
+  1. Open the Tailscale app and make sure it is connected.
+  2. Open Safari and go to  https://{name}
+  3. Enter the access code, then tap Share > Add to Home Screen.
+
+Restart JARVIS so it picks this up:  python3 -m jarvis stop && python3 -m jarvis
+Only devices signed in to your Tailscale account can reach the address, and they still need the code.
+Turn it off any time with:  python3 -m jarvis remote --off""")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python3 -m jarvis", description="JARVIS core")
     parser.add_argument("--version", action="version", version=f"JARVIS {__version__}")
@@ -209,6 +288,10 @@ def main(argv: list[str] | None = None) -> int:
     goal = commands.add_parser("goal", help="plan and carry out a goal (needs an AI model)")
     goal.add_argument("goal", help="what you want done, in plain language")
     goal.set_defaults(run=cmd_goal)
+    remote_cmd = commands.add_parser("remote", help="use JARVIS from your iPhone (private Tailscale link + access code)")
+    remote_cmd.add_argument("--new-code", action="store_true", help="make a new access code (signs out every device)")
+    remote_cmd.add_argument("--off", action="store_true", help="turn phone access off")
+    remote_cmd.set_defaults(run=cmd_remote)
     desktop_cmd = commands.add_parser("desktop", help="the floating desktop orb (double clap, then say Jarvis)")
     desktop_cmd.add_argument("action", choices=["build", "install", "uninstall", "status"])
     desktop_cmd.set_defaults(run=cmd_desktop)

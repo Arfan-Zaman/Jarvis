@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#07060f">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="JARVIS">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="apple-touch-icon" href="/static/icons/apple-touch-icon.png">
+  <title>JARVIS</title>
+  <link rel="stylesheet" href="/static/login.css">
+</head>
+<body>
+  <main>
+    <img src="/static/icons/icon-192.png" width="96" height="96" alt="">
+    <h1>JARVIS</h1>
+    <p>Enter your access code to connect to your Mac.</p>
+    <form id="form" autocomplete="on">
+      <input type="text" name="username" value="jarvis" autocomplete="username" hidden>
+      <input id="code" name="code" type="password" autocomplete="current-password" placeholder="Access code" required autofocus>
+      <button type="submit">Connect</button>
+      <p id="error" role="alert"></p>
+    </form>
+  </main>
+  <script src="/static/login.js" defer></script>
+</body>
+</html>
