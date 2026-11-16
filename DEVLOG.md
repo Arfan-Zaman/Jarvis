@@ -2,6 +2,13 @@
 
 Newest entries first. Record what changed, why, and what was verified.
 
+## 2026-11-16 — Self-review: learning passes no longer wasted on repeats
+
+- `Learner.pick()` refused repeats of the last 50 queries but only showed the model 25. It now shows them
+  all and retries once when the model repeats; the skip message says whether the reply was unreadable or a
+  repeat (log 21:37:19 "no new query chosen").
+- Tests: 356 OK.
+
 ## 2026-11-16 — Self-review: domain lookups (gap from run #237)
 
 - `open.domain` (RDAP via IANA's registry list, free, read-only): registered or available, registrar,

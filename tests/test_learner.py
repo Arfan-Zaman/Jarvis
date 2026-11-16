@@ -53,3 +53,21 @@ class LearnerTests(JarvisTestCase):
         out = self.app.learner.once()
         self.assertFalse(out["ok"])
         self.assertEqual(self.app.memory.list(), [])
+
+    def test_a_repeat_gets_one_retry_and_every_refused_query_is_shown(self):
+        older = [f"old topic {i}" for i in range(40)]            # more than the 25 the prompt used to show
+        self.app.settings.set("learn.recent_queries", older)
+        self.model.replies.insert(0, {"query": "old topic 0", "why": "repeat of an early one"})
+        choice = self.app.learner.pick()
+        self.assertEqual(choice["query"], "used car warranty rules Australia")
+        first_prompt = self.model.prompts[0][1].content
+        self.assertIn("- old topic 0\n", first_prompt)          # the oldest refused query was listed
+        retry = self.model.prompts[1][-1].content
+        self.assertIn("“old topic 0” was already read", retry)
+
+    def test_two_repeats_in_a_row_skip_the_pass_and_say_why(self):
+        self.app.settings.set("learn.recent_queries", ["used car warranty rules Australia"])
+        self.model.replies.insert(0, {"query": "used car warranty rules Australia", "why": "again"})
+        out = self.app.learner.once()
+        self.assertFalse(out["ok"])
+        self.assertIn("was already read", out["error"])
