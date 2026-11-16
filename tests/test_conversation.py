@@ -39,7 +39,7 @@ class ConversationCase(JarvisTestCase):
 class AnswerTests(ConversationCase):
     def test_plain_conversation_just_answers(self):
         self.scripted([ANSWER, "Good evening. How can I help?"])
-        reply, _ = self.say("Good evening, JARVIS")
+        reply, _ = self.say("Good evening, JARVIS. Got a minute to chat?")
         self.assertEqual((reply["role"], reply["content"], reply["run_id"]),
                          ("assistant", "Good evening. How can I help?", None))
         self.assertEqual(self.app.runs.list(), [])
@@ -178,7 +178,7 @@ class FollowUpTests(ConversationCase):
     def test_after_an_answered_question_routing_resumes_normally(self):
         self.scripted([act("Add a task"), {"blocked": "What should it say?"},
                        plan(("Create", "tasks.create")), inputs(title="Buy filters"), ACHIEVED,
-                       ANSWER, "You're welcome."])
+                       "You're welcome."])                # "Thanks" is small talk: no routing step
         _, conversation = self.say("Add a task")
         self.say("Buy filters", conversation)
         reply, _ = self.say("Thanks", conversation)

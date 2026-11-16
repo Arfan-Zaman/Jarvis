@@ -2,6 +2,32 @@
 
 Newest entries first. Record what changed, why, and what was verified.
 
+## 2026-11-17 — JARVIS answers at once, and talks like a person
+
+- Owner: "jarvis is not responding; it should respond quick and like a human".
+  Measured on the owner's Mac: after this morning's restart JARVIS started
+  before Ollama, the 9B model and its prompts were cold, and Groq (boost) was
+  rate-limited (HTTP 429) - "hi jarvis" took 12.6 s. Warm, a reply takes 2-4 s,
+  mostly the local model writing; hearing (whisper) ~1 s, speaking ~0.8 s.
+- Warm-up at start (`Conversation.warm_up`, background thread in `serve`):
+  waits up to 3 minutes for Ollama, then loads the model and primes the router
+  and answer prompts. Cold start measured: warm-up 8.6 s in the background,
+  then "hey jarvis" 1.7 s.
+- The model stays loaded 8 hours (`JARVIS_KEEP_ALIVE`, was 30 minutes), so a
+  quiet spell no longer costs a reload.
+- Small talk (greetings, thanks, "how are you", "you there?") skips the
+  routing step and gets a friend-like one-liner without memories: 0.5-2.4 s
+  locally ("You're welcome. How's your day shaping up?"). Anything with a
+  request in it is routed as before.
+- Persona: use the owner's name rarely, don't steer replies back to the
+  businesses, never describe JARVIS's own state ("systems are green",
+  "operating at peak efficiency") - seen in real replies.
+- Boost: after a rate limit JARVIS waits only as long as the platform asks
+  (Retry-After or "try again in 1m2.5s", 5 s to 2 min; was always 2 min), and
+  continuous learning runs on the Mac's model so it no longer uses up the Groq
+  free-tier quota the conversation needs.
+- 369 tests pass (10 new in `tests/test_quick_replies.py`).
+
 ## 2026-11-16 — JARVIS installs skills and software itself; talks like a person
 
 - `jarvis/tools/skills.py`: `skills.search` (GitHub: SKILL.md files and skill repos), `skills.install`

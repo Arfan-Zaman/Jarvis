@@ -28,6 +28,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import time
 
 from ..common import JarvisError, now_local
 from ..logging_setup import get_logger
@@ -48,6 +49,16 @@ MEMORY_CATEGORIES = ("preference", "personal", "general")
 # opinion is not enough: without one of these, it can only OFFER to remember.
 # Requests to rewrite JARVIS itself: only the self-review may propose that, and the owner approves.
 SELF_CHANGE = re.compile(r"\b(code|improve|upgrade|rewrite|reprogram|modify|change|update|optimi[sz]e)\s+(yourself|your\s+own\s+(code|program|software|system)|your\s+code)\b", re.I)
+# Greetings, thanks and "how are you": answered at once, without the routing step, like a person would.
+SMALL_TALK = re.compile(
+    r"^\W*(?:(?:hey|hi|hello|hiya|yo|g'?day|morning|afternoon|evening|good (?:morning|afternoon|evening|night|day)|"
+    r"thanks?|thank you|cheers|ta|so much|very much|nice(?: one)?|great|awesome|perfect|cool|lovely|"
+    r"ok(?:ay)?|alright|all right|got it|bye|goodbye|see (?:you|ya)(?: later)?|good ?night|"
+    r"how are (?:you|things)|how'?s it going|how(?:'?s| is) your day|how was your (?:day|night)|what'?s up|sup|"
+    r"you there|are you there|jarvis|mate|buddy|man|sir|doing|going|today|again|then)[\s,.!?']*)+$", re.I)
+SMALL_TALK_STYLE = ("\nThis is small talk. Reply the way a friend would: one short, warm, relaxed sentence (two at "
+                    "most). Don't use the owner's name unless it fits, don't bring up their businesses, goals or "
+                    "plans, and never talk about your systems (no 'systems are green', no 'peak efficiency').")
 MAC_STATUS = re.compile(r"\b(battery|charge|charging|disk space|storage|free space|how much space|wi-?fi|"
                         r"ip address|uptime)\b", re.I)
 RUN_THINGS = re.compile(r"\b(run|execute|launch|start)\b[^.?!]{0,60}\b(test|tests|test suite|script|code|program|"
@@ -272,6 +283,7 @@ class Conversation:
         or a scheduled job ("jarvis:schedule"), whose approvals still wait for the owner.
         """
         self._voice = voice
+        self._small_talk = False
         self._actor = actor
         pending = self._pending_question(conversation_id)
         if pending:
@@ -298,6 +310,9 @@ class Conversation:
 
         if SELF_CHANGE.search(text):
             return self._say(conversation_id, persona.SELF_CHANGE, None)
+        if SMALL_TALK.match(text) and len(text.split()) <= 10:
+            self._small_talk = True                  # no routing step: just talk
+            return self._converse(conversation_id) or self._answer(conversation_id)
         from .. import gaps
         wanted = gaps.TEACH_REQUEST.match(text)
         if wanted and actor == "user:chat":           # "learn to ...": the gap loop builds it into JARVIS
@@ -399,10 +414,37 @@ class Conversation:
             cached = self._router = OllamaProvider(main.base_url, name, timeout=60)
         return cached
 
-    def _route(self, conversation_id: int) -> dict:
+    def _router_tools(self) -> str:
         # first sentence of each tool only: the router decides the MODE, the planner reads the full details
-        tools = "\n".join(f"- {t['name']}: {re.split(r'(?<=[.:])\s', t['description'], maxsplit=1)[0][:110]}"
-                          for t in self.app.tools.list())
+        return "\n".join(f"- {t['name']}: {re.split(r'(?<=[.:])\s', t['description'], maxsplit=1)[0][:110]}"
+                         for t in self.app.tools.list())
+
+    def warm_up(self, wait_seconds: float = 180, pause: float = 5) -> bool:
+        """Load the Mac's model and prime its prompts when JARVIS starts, waiting for Ollama if it is still
+        starting (after a restart it often comes up after JARVIS), so the first "Jarvis" is answered at full speed."""
+        local = getattr(self.app.provider, "local", self.app.provider)
+        if getattr(local, "name", "") != "ollama":
+            return False
+        deadline = time.monotonic() + wait_seconds
+        while not local.status().available:
+            if time.monotonic() >= deadline:
+                log.info("Warm-up skipped: Ollama did not come up in %d s", wait_seconds)
+                return False
+            time.sleep(pause)
+        hello = "CONVERSATION (latest message last):\nUSER: hello"
+        try:
+            local.generate([ChatMessage("system", ROUTER + self._router_tools()), ChatMessage("user", hello)],
+                           json_output=True)
+            local.generate([ChatMessage("system", system_prompt(self.app.tools.list(), [], about_me=False)),
+                            ChatMessage("user", "hello")])
+        except ProviderError as exc:
+            log.info("Warm-up failed: %s", exc)
+            return False
+        log.info("Warm-up done: %s is loaded and ready", getattr(local, "model", "the model"))
+        return True
+
+    def _route(self, conversation_id: int) -> dict:
+        tools = self._router_tools()
         transcript = "\n".join(f"{m['role'].upper()}: {m['content'][:1000]}" for m in self._history(conversation_id))
         try:
             try:
@@ -654,8 +696,11 @@ It is now {today}. Tools:
     def _answer(self, conversation_id: int, offer: dict | None = None, note: str = "") -> dict:
         history = self._history(conversation_id)
         latest = next((m["content"] for m in reversed(history) if m["role"] == "user"), "")
-        memories = ContextBuilder(self.app).build(latest)["memories"]
+        small_talk = getattr(self, "_small_talk", False)
+        memories = [] if small_talk else ContextBuilder(self.app).build(latest)["memories"]
         instructions = system_prompt(self.app.tools.list(), memories, about_me=bool(ABOUT_ME.search(latest)))
+        if small_talk:
+            instructions += SMALL_TALK_STYLE
         from ..tools.skills import relevant
         skill = relevant(self.app, latest)
         if skill:            # an installed skill for this kind of work: follow its advice (never over the owner or safety)

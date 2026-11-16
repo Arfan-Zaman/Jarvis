@@ -111,7 +111,7 @@ class Learner:
         seen = {q.lower() for q in recent}
         messages = [ChatMessage("system", PICK), ChatMessage("user", prompt)]
         for attempt in range(2):                      # one retry when the model repeats itself
-            reply = self.app.provider.generate(messages, json_output=True).text
+            reply = self._model().generate(messages, json_output=True).text
             choice = _json(reply)
             query = str(choice.get("query", "")).strip()[:120]
             if not query:
@@ -155,7 +155,7 @@ class Learner:
                 if len(text) < 300:
                     continue
                 read.append(url)
-                reply = self.app.provider.generate([
+                reply = self._model().generate([
                     ChatMessage("system", EXTRACT),
                     ChatMessage("user", f"Searched because: {choice['why']}\nQuery: {choice['query']}\n"
                                         f"Page: {url}\n\n{text[:6000]}")], json_output=True).text
@@ -213,6 +213,11 @@ class Learner:
             return self.app.engine.live().get("state") == "calm"
         except Exception:  # noqa: BLE001
             return False
+
+    def _model(self):
+        """Background learning runs on the Mac's own model, so it never uses up the boost platform's
+        rate limit that the owner's conversation needs."""
+        return getattr(self.app.provider, "local", self.app.provider)
 
     def start(self) -> "Learner":
         if not enabled() or self._thread:

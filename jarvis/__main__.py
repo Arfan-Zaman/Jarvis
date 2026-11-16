@@ -8,6 +8,7 @@ import os
 import signal
 import subprocess
 import sys
+import threading
 import time
 
 from . import __version__
@@ -61,6 +62,7 @@ def cmd_serve(config, args) -> int:
     app.selfreview.start()                    # weekly self-review; proposals wait for the owner
     app.scheduler.start()                     # reminders and recurring jobs
     app.briefing.start()                      # the day's headlines ready before the first "Jarvis"
+    threading.Thread(target=app.conversation.warm_up, name="jarvis-warm-up", daemon=True).start()
     try:
         server.serve_forever()
     except KeyboardInterrupt:
