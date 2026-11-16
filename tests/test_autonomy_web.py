@@ -146,6 +146,16 @@ class FetchTests(WebCase):
         self.assertEqual(output["text"], "Mount Kosciuszko is 2,228 metres high.")
         self.assertEqual(output["focused_on"], "tallest mountain Kosciuszko height")
 
+    def test_focus_drops_repeated_lines_and_skips_lines_too_long(self):
+        long_page = "<p>" + "mountain " * 200 + "</p>" + "<p>Share this mountain page</p>" * 30 \
+                    + "<p>Puncak Jaya is 4,884 metres high, the tallest mountain on the continent.</p>" \
+                    + "<p>" + "filler " * 500 + "</p>"
+        with mock.patch.object(web, "_get", return_value=(long_page.encode(), "text/html", self.base + "/x")):
+            output = self.fetch(self.base + "/x", max_chars=600, focus="tallest mountain height")["output"]
+        self.assertEqual(output["text"].splitlines(),
+                         ["Share this mountain page",
+                          "Puncak Jaya is 4,884 metres high, the tallest mountain on the continent."])
+
     def test_unknown_and_quoted_charsets_are_read(self):
         page = "<p>Café prices</p>"
         for content_type, body in (("text/html; charset=utf8mb4", page.encode("utf-8")),

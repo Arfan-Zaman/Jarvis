@@ -95,6 +95,8 @@ class BuiltinToolTests(ToolCase):
         info = self.ok("jarvis.info")
         self.assertEqual(info["name"], "JARVIS")
         self.assertFalse(info["ai_connected"])
+        self.assertIn("commit", info)                   # None outside a git checkout, else the short hash
+        self.assertTrue(info["commit"] is None or info["commit"].isalnum())
         self.assertEqual(set(info["tools"]), set(EXPECTED_TOOLS))
         health = self.ok("system.health")
         self.assertFalse(health["healthy"])
