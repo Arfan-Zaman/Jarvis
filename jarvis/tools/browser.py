@@ -202,8 +202,9 @@ def _evaluate(app, function: str, timeout: float = 60):
 def browser_read(app, inputs, actor):
     url = check_url(inputs["url"])
     limit = max(500, min(int(inputs.get("max_chars", 8000)), 20000))
-    Browser.call(app, "browser_navigate", {"url": url})
-    page = _evaluate(app, PAGE_TEXT)
+    with Browser._lock:
+        Browser.call(app, "browser_navigate", {"url": url})
+        page = _evaluate(app, PAGE_TEXT)
     text = re.sub(r"\n\s*\n+", "\n", page.get("text", "")).strip()
     return {"url": page.get("url", url), "title": page.get("title", ""), "text": text[:limit], "truncated": len(text) > limit}
 
@@ -218,11 +219,20 @@ def browser_search(app, inputs, actor):
     notes = []
     for name, url in engines:
         try:
-            Browser.call(app, "browser_navigate", {"url": url})
-            time.sleep(1.2)                          # let the results render
-            found = _evaluate(app, SEARCH_RESULTS)
+            with Browser._lock:                      # one search at a time: no other task may move the page
+                Browser.call(app, "browser_navigate", {"url": url})
+                found = {}
+                for _ in range(8):                   # wait until THIS search's results have rendered
+                    time.sleep(0.6)
+                    found = _evaluate(app, SEARCH_RESULTS.replace("return {blocked", "return {at: location.href, blocked"))
+                    if found.get("results") and query.split()[0].lower() in urllib.parse.unquote_plus(found.get("at", "")).lower():
+                        break
+                    found = dict(found, results=[]) if found.get("blocked") else found
         except JarvisError as exc:
             notes.append(f"{name}: {exc}")
+            continue
+        if found.get("at") and query.split()[0].lower() not in urllib.parse.unquote_plus(found["at"]).lower():
+            notes.append(f"{name}: the page did not show this search")
             continue
         if found.get("results"):
             return {"query": query, "engine": name, "results": found["results"][:limit]}
@@ -292,6 +302,11 @@ def _ref_line(page: str, ref: str) -> str:
 
 
 def browser_use(app, inputs, actor):
+    with Browser._lock:                              # the agent owns the browser for the whole task
+        return _browser_use(app, inputs)
+
+
+def _browser_use(app, inputs):
     task = str(inputs.get("task", "")).strip()
     if not task:
         raise ValidationError("browser.use: 'task' is empty")

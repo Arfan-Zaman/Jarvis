@@ -48,7 +48,7 @@ def _place(name: str) -> dict:
 
 def open_weather(app, inputs, actor):
     place = _place(_text(inputs, "place"))
-    days = max(1, min(int(inputs.get("days") or 3), 7))
+    days = max(3, min(int(inputs.get("days") or 7), 16))     # always today, tomorrow and on: "tomorrow" never misses
     data = _json("https://api.open-meteo.com/v1/forecast?" + urllib.parse.urlencode({
         "latitude": place["latitude"], "longitude": place["longitude"], "timezone": "auto", "forecast_days": days,
         "current": "temperature_2m,apparent_temperature,relative_humidity_2m,wind_speed_10m,weather_code,precipitation",
@@ -144,9 +144,10 @@ def open_news(app, inputs, actor):
 def register_opendata(registry: ToolRegistry) -> None:
     def add(name, description, handler, inputs):
         registry.register(Tool(name, description, ActionCategory.WEB_READ, handler, inputs))
-    add("open.weather", "Weather now and the forecast for the next days anywhere (Open-Meteo, free).", open_weather,
+    add("open.weather", "Weather now and the daily forecast for today, tomorrow and the next week, anywhere (Open-Meteo, free). "
+        "Each day is listed with its date.", open_weather,
         {"place": {"type": "string", "description": "Town or city, e.g. 'Perth, Australia'.", "required": True},
-         "days": {"type": "integer", "description": "Days of forecast, 1 to 7."}})
+         "days": {"type": "integer", "description": "Days of forecast counted from today (default 7)."}})
     add("open.currency", "Convert money between currencies at today's reference rates (Frankfurter, free).", open_currency,
         {"from": {"type": "string", "description": "Currency code to convert from, e.g. AUD.", "required": True},
          "to": {"type": "string", "description": "Code or comma-separated codes, e.g. USD or USD,JPY.", "required": True},
