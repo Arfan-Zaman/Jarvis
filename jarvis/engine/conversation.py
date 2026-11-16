@@ -53,6 +53,11 @@ MAC_STATUS = re.compile(r"\b(battery|charge|charging|disk space|storage|free spa
 RUN_THINGS = re.compile(r"\b(run|execute|launch|start)\b[^.?!]{0,60}\b(test|tests|test suite|script|code|program|"
                         r"app|server|agent|benchmark|build|notebook)\b|\b(pip|npm|brew)\s+install\b|\binstall\s+(the\s+)?"
                         r"(package|library|dependency|dependencies|requirements)\b|\brun\s+(it|them|that)\b", re.I)
+# Requests about the owner's own files and folders: always looked at with the tools, never answered from memory.
+FILE_WORK = re.compile(r"\b(monitor|check|read|review|look (at|in|through)|open|go through|summari[sz]e|analy[sz]e|"
+                       r"what'?s in|scan)\b.{0,80}\b(file|files|folder|document|documents|docs?|pdf|spreadsheet|readme)\b"
+                       r"|\b(file|folder|document)s?\b.{0,60}\b(next|what should i|to do|action)\b", re.I | re.S)
+
 # A message that starts a new request rather than answering JARVIS's question.
 NEW_REQUEST = re.compile(r"^\W*(jarvis\W+)?(can|could|would|will|what|what's|whats|how|who|why|when|which|do|does|did|is|are|"
                          r"should|tell me|show me|give me|make|build|create|write|open|remind|i want|i need|let's|lets)\b", re.I)
@@ -401,6 +406,10 @@ class Conversation:
                 and os.environ.get("JARVIS_OPERATE", "1") != "0":
             return {"mode": "act", "goal": f"Use the claude.operate tool to do this on the Mac: {latest_text.strip()[:2000]}"}
         task = decision.get("task")
+        if FILE_WORK.search(latest_text) and decision.get("mode") in ("answer", None, "delegate") \
+                and "mac.read_file" in self.app.tools.names():
+            return {"mode": "act", "goal": "Find, open and read the owner's files to do this (mac.find_files, then "
+                    f"mac.list_folder and mac.read_file), then answer from what they say: {latest_text.strip()[:1500]}"}
         if decision.get("mode") == "schedule" and isinstance(decision.get("when"), str) and decision["when"].strip() \
                 and "schedule.add" in self.app.tools.names():
             kind = decision.get("kind") if decision.get("kind") in ("reminder", "job") else "reminder"
