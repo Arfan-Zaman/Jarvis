@@ -64,6 +64,9 @@ def find_files(app, inputs, actor):
         clauses.append(f'(kMDItemFSName == "*{safe}*"cd || kMDItemTextContent == "*{safe}*"cd)')
     found = _run(["mdfind", "-onlyin", str(folder), " && ".join(clauses)], timeout=20).splitlines()
     found = [f for f in found if not HIDDEN.search(f[len(str(home)):])]
+    own = str(Path(getattr(getattr(app, "config", None), "root", "") or Path(__file__).resolve().parents[2]))
+    if not str(folder).startswith(own):          # JARVIS's own code is not the owner's files
+        found = [f for f in found if not (f + "/").startswith(own + "/")]
     fuzzy = False
     if query and not found:              # typos and half-remembered names: "Aureus Dailing" -> "Aureus Detailing"
         found, fuzzy = _closest(folder, query, kind, limit), True
@@ -85,6 +88,12 @@ def find_files(app, inputs, actor):
             return {"path": path.replace(str(home), "~", 1)}
     out = {"query": query, "kind": kind or None, "folder": str(folder).replace(str(home), "~", 1),
            "files": [info(f) for f in found[:limit]], "total": len(found)}
+    for item, path in zip(out["files"][:3], found[:3]):       # a found folder comes with what is inside it
+        if Path(path).is_dir():
+            try:
+                item["contents"] = [i["name"] for i in list_folder(app, {"folder": path, "limit": 30}, actor)["items"]]
+            except ValidationError:
+                pass
     if fuzzy:
         out["note"] = ("No exact name match; these are the closest names (folders end with /)." if found
                        else "Nothing with that name or a similar one here.")

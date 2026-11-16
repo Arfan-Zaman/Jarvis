@@ -321,7 +321,8 @@ def register_claude(registry: ToolRegistry) -> None:
         "Hand a hard job to Claude Code, a far stronger mind: writing or fixing code, deep research "
         "across the web, analysis, long or careful writing, plans and explanations that need real "
         "reasoning. Returns the finished result. Set write_files to let it create files in JARVIS's "
-        "workspace folder. It writes; to run or test what it built, JARVIS uses claude.operate (one approval).",
+        "workspace folder. It writes; to run or test what it built, JARVIS uses claude.operate (one approval). "
+        "It cannot see the owner's own files: read those first with mac.list_folder and mac.read_file.",
         ActionCategory.WORKSPACE, claude_work,
         {"task": {"type": "string", "description": "The complete, self-contained task.", "required": True},
          "write_files": {"type": "boolean", "description": "Allow creating files in the workspace folder."}}))
