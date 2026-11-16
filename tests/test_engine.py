@@ -159,6 +159,20 @@ class FailureTests(EngineCase):
         self.assertIn("unusable action twice", report["error"])
         self.assertEqual(report["executions"], [])
 
+    def test_inputs_placed_beside_inputs_are_lifted(self):
+        for action in ({"title": "Call the supplier"}, {"inputs": {}, "title": "Call the supplier"}):
+            with self.subTest(action=action):
+                app = self.scripted([plan(("Create the task", "tasks.create")), action, SUMMARY])
+                report = app.engine.start("Add a task to call the supplier")
+                self.assertEqual(report["status"], "completed")
+                self.assertEqual(app.list("tasks")[0]["title"], "Call the supplier")
+
+    def test_stray_keys_are_not_mistaken_for_inputs(self):
+        app = self.scripted([plan(("Create", "tasks.create")), {"bogus": 1}, {"thought": "hmm"}])
+        report = app.engine.start("Add a task")
+        self.assertIn("unusable action twice", report["error"])
+        self.assertEqual(report["executions"], [])
+
     def test_model_error_fails_the_run(self):
         app = self.scripted([plan(("Create", "tasks.create")), ProviderError("model went away")])
         report = app.engine.start("Add a task")

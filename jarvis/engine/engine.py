@@ -424,9 +424,15 @@ class Engine:
             def check(reply: dict) -> dict:
                 if _question(reply):
                     return reply
-                if not isinstance(reply.get("inputs"), dict):
+                given = reply.get("inputs", {})
+                if not isinstance(given, dict):
                     raise ValueError('expected {"inputs": {...}}')
-                return {"inputs": ToolRegistry.validate(tool, reply["inputs"])}
+                # Small models often put an input beside "inputs" instead of in it: {"query": "..."}.
+                # Lift only the tool's own input names; everything is still validated below.
+                lifted = {k: v for k, v in reply.items() if k in tool.inputs and given.get(k) is None}
+                if "inputs" not in reply and not lifted:
+                    raise ValueError('expected {"inputs": {...}}')
+                return {"inputs": ToolRegistry.validate(tool, {**given, **lifted})}
 
             state = self._state(runs.get(run_id))
             reply = self._ask("ACTION", {**state, "step": {"position": step["position"],
