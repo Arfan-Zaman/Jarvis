@@ -1405,25 +1405,24 @@ views.presence = {
 
     hero.append(
       h('div', { class: 'presence-head' },
-        h('div', { class: 'presence-mark' }, h('div', null, h('div', { class: 'name' }, 'JARVIS'), h('div', { class: 'motto' }, 'Reason first. Resolve always.'))),
+        h('div', { class: 'presence-mark' }, h('div', null, h('div', { class: 'name' }, 'JARVIS'), h('div', { class: 'motto' }, 'Your private executive intelligence'))),
         h('div', { class: 'presence-clock' }, time, date)),
-      h('div', { class: 'hud' },
-        callout('tl', 'System health', `${health}%`, `${checks.filter(Boolean).length} of ${checks.length} checks passing`),
-        callout('tr', 'Open tasks', status.counts.tasks_open, `${status.counts.tasks_completed} completed`),
-        stage,
-        callout('bl', 'Memories', status.counts.memories, `${status.counts.experiences} lessons recorded`),
-        callout('br', 'Tools', status.counts.tools, okRate == null ? 'No tool runs yet' : `${okRate}% of the last ${runs} runs worked`)),
+      stage,
       h('div', { class: 'presence-state' }, label, line),
       form,
       attachRow,
       h('div', { class: 'presence-exchange' }, you, reply, decision, memoryLine),
       h('div', { class: 'row end presence-tools' }, convoBtn, simBadge, previewBtn));
 
-    const side = h('aside', { class: 'presence-side' },
-      h('div', { class: 'log-head' }, 'Activity'), stream,
-      h('div', { class: 'log-model' }, status.ai.available ? `Thinking locally with ${status.ai.model}` : status.ai.detail));
-
-    root.append(h('div', { class: 'presence' }, hero, side));
+    // the concept's panels around the face: system, activity, Mac, task, result, schedule, decisions
+    let previewTimer = null;
+    const deck = JarvisDeck.build({ preview: (name, meaning) => {
+      clearTimeout(previewTimer);
+      identity.setState(name, `Preview: ${meaning.toLowerCase()}`);
+      previewTimer = setTimeout(() => identity.setState('calm'), 4000);
+    } });
+    state.cleanup.push(() => { deck.stop(); clearTimeout(previewTimer); });
+    root.append(h('div', { class: 'presence deck' }, deck.left, hero, deck.right, deck.states, deck.abilities));
     identity.setState(connected ? 'calm' : 'offline', connected ? 'Standing by.' : status.ai.detail);
     if (connected) input.focus();
   },

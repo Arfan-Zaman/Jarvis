@@ -2,6 +2,20 @@
 
 Newest entries first. Record what changed, why, and what was verified.
 
+## 2026-11-16 — The concept is now the JARVIS page
+
+- Owner approved the concept. `deck.js` builds its panels (System, Activity,
+  This Mac, Current task, Last result, Coming up, Needs you, the live States
+  gallery and Abilities) around the existing JARVIS page centre, so voice,
+  wake word, interrupt, files, the Approve card and the shared conversation
+  are unchanged. `deck.css` lays it out (three columns, then states and
+  abilities; folds to two and one column) and carries the quiet style to every
+  page: neutral graphite panels and hairlines, off-white primary buttons,
+  magenta kept for the face, live state and selection.
+- Checked in Chrome: JARVIS page, Dashboard and Chat render with no console
+  errors; the test tab was closed so only one hands-free listener runs.
+  concept.html stays as a standalone preview.
+
 ## 2026-11-16 — Vetted GitHub skills installed and used on the concept
 
 - Installed for Claude Code (~/.claude/skills) and JARVIS
