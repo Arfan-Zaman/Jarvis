@@ -2,6 +2,16 @@
 
 Newest entries first. Record what changed, why, and what was verified.
 
+## 2026-11-16 — Owner's skills available to JARVIS; first self-review started
+
+- The owner's 20 Claude Code skills (ceo-operator, finance-analyst,
+  shopify-store-builder, meta/google ads, compliance-au, ...; written for the
+  OwnWay store) are copied into `workspace/.claude/skills/` (git-ignored), so
+  JARVIS's Claude Code loads them; confirmed with a real run. Refresh with
+  `rsync -a ~/.claude/skills/ ~/JARVIS/workspace/.claude/skills/`.
+- Status: all 16 abilities on; "not built yet" is empty. First self-review
+  pass started from the API; proposals appear on the System page.
+
 ## 2026-11-16 — Merged reminders, email and calendar, morning briefing; model tiers
 
 - Merged `claude/unruffled-heisenberg-1318a6` (reminders and recurring jobs),
