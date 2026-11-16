@@ -306,8 +306,12 @@ class Engine:
             return {"memories": [], "lessons": []}
         return ContextBuilder(self.app).build(goal)
 
+    # The conversational brain is the chat's choice, not a step: the planner answers from results itself.
+    NOT_STEPS = ("claude.converse",)
+
     def _tools(self, allowed) -> list[dict]:
-        return [tool for tool in self.app.tools.list() if allowed is None or tool["name"] in allowed]
+        return [tool for tool in self.app.tools.list()
+                if (allowed is None or tool["name"] in allowed) and tool["name"] not in self.NOT_STEPS]
 
     def _ask(self, kind: str, payload: dict, check, budget: dict, allowed) -> dict:
         """One question to the model, with one retry if the reply is unusable."""
