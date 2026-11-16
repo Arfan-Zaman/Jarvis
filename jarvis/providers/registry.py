@@ -36,7 +36,12 @@ def _ollama(config: Config) -> AIProvider:
             f"JARVIS_OLLAMA_URL ({config.ollama_url}) is not on this machine, which would send your "
             "data elsewhere. Use a local address or set JARVIS_ALLOW_EXTERNAL_AI=true."
         )
-    return OllamaProvider(config.ollama_url, config.ai_model, config.ai_timeout_seconds)
+    local = OllamaProvider(config.ollama_url, config.ai_model, config.ai_timeout_seconds)
+    from .boost import Boosted, OpenAICompatible, boost_settings
+    boost = boost_settings() if config.allow_external_ai else None
+    if boost:                     # more power from an open-model platform; the Mac's model is the fallback
+        return Boosted(local, OpenAICompatible(*boost))
+    return local
 
 
 def _mlx(config: Config) -> AIProvider:

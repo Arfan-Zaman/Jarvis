@@ -347,7 +347,8 @@ class Conversation:
         qwen3.5:4b) when installed, so the big model is free for the thinking. Falls back to the main model."""
         name = os.environ.get("JARVIS_ROUTER_MODEL", "").strip()
         main = self.app.provider
-        if not name or getattr(main, "name", "") != "ollama" or name == getattr(main, "model", ""):
+        if not name or getattr(main, "name", "") != "ollama" or name == getattr(main, "model", "") \
+                or hasattr(main, "remote"):          # boosted: the platform is already fast
             return main
         cached = getattr(self, "_router", None)
         if cached is None or cached.model != name:

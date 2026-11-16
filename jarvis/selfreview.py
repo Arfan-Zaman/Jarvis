@@ -305,6 +305,10 @@ class SelfReview:
 
     def approve(self, branch: str) -> dict:
         """Merge a proposal into main with --no-ff once the merged result passes the tests. Never pushes."""
+        known = branch in (self.app.settings.get(PROPOSALS_KEY, {}) or {})
+        if known and is_proposal(branch) and branch not in self.branches():      # a second click after the merge
+            self._forget(branch)
+            return {"ok": True, "branch": branch, "message": f"{branch} is already merged or removed."}
         self._check(branch)
         with self._git_lock:
             current = self.git("rev-parse", "--abbrev-ref", "HEAD")
@@ -316,22 +320,28 @@ class SelfReview:
             if clash:       # unsaved work elsewhere is fine; only the same files would be overwritten
                 return {"ok": False, "error": "Not merged yet: work in progress has unsaved changes to the same "
                         f"files ({', '.join(clash[:4])}). Save that work first, then press Approve again."}
-            trial = self.root / f"_approve-{int(time.time())}"
-            self.root.mkdir(parents=True, exist_ok=True)
-            self.git("worktree", "add", "--detach", str(trial), BASE)
-            try:
-                merged = subprocess.run(["git", "merge", "--no-ff", "-m", f"Merge self-review {branch}", branch],
-                                        cwd=str(trial), capture_output=True, text=True, timeout=300)
-                if merged.returncode:
-                    return {"ok": False, "error": f"{branch} does not merge cleanly into {BASE}; reject it "
-                            "or resolve it by hand."}
-                tests_ok, output = self.tests(trial)
-                if not tests_ok:
-                    return {"ok": False, "error": "Tests fail on the merged result; not merging.",
-                            "tests_output": output[-1500:]}
-                sha = self.git("rev-parse", "HEAD", cwd=trial)
-            finally:
-                self._remove_worktree(trial)
+            for attempt in range(3):     # main may move while the tests run (another commit): test again on it
+                base_sha = self.git("rev-parse", BASE)
+                trial = self.root / f"_approve-{int(time.time())}-{attempt}"
+                self.root.mkdir(parents=True, exist_ok=True)
+                self.git("worktree", "add", "--detach", str(trial), base_sha)
+                try:
+                    merged = subprocess.run(["git", "merge", "--no-ff", "-m", f"Merge self-review {branch}", branch],
+                                            cwd=str(trial), capture_output=True, text=True, timeout=300)
+                    if merged.returncode:
+                        return {"ok": False, "error": f"{branch} does not merge cleanly into {BASE}; reject it "
+                                "or resolve it by hand."}
+                    tests_ok, output = self.tests(trial)
+                    if not tests_ok:
+                        return {"ok": False, "error": "Tests fail on the merged result; not merging.",
+                                "tests_output": output[-1500:]}
+                    sha = self.git("rev-parse", "HEAD", cwd=trial)
+                finally:
+                    self._remove_worktree(trial)
+                if self.git("rev-parse", BASE) == base_sha:
+                    break
+            else:
+                return {"ok": False, "error": f"{BASE} kept changing while the tests ran; press Approve again."}
             self.git("merge", "--ff-only", sha)                       # main becomes the tested --no-ff merge
             self._remove_worktree(self.worktree_of(branch))
             self.git("branch", "-D", branch, check=False)

@@ -221,6 +221,8 @@ def _selfreview_decide(app: Jarvis, req: Request):
         result = app.selfreview.approve(branch) if req.params[1] == "approve" else app.selfreview.reject(branch)
     except ValueError as exc:
         raise ValidationError(str(exc)) from None
+    except RuntimeError as exc:          # a git step failed: say so plainly instead of a server error
+        result = {"ok": False, "error": f"Not merged: {str(exc).splitlines()[0][:300]}"}
     return (200 if result.get("ok") else 409), result
 
 
