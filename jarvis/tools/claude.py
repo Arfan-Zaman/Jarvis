@@ -18,6 +18,7 @@ validated and checked by the safety layer.
 from __future__ import annotations
 
 import json
+import re
 import os
 import shutil
 import subprocess
@@ -82,6 +83,18 @@ def sandboxed(app, cmd: list[str]) -> list[str]:
     return [tool, "-p", profile, *cmd]
 
 
+# The hardest jobs get the strongest model automatically; everyday work stays fast on Sonnet.
+DEEP = re.compile(r"\b(strateg\w*|in[- ]depth|thorough\w*|carefully|deep(ly)?|comprehensive|business plan|"
+                  r"architect\w*|complex|hardest|best possible|analy[sz]e (all|every|the whole)|full (plan|audit|review))\b", re.I)
+
+
+def work_model(task: str) -> str:
+    chosen = os.environ.get("JARVIS_WORK_MODEL")
+    if chosen:
+        return chosen
+    return "opus" if DEEP.search(task) or len(task) > 1500 else "sonnet"
+
+
 def command(binary: str, task: str, write_files: bool, shell: bool = False) -> list[str]:
     if shell:      # the whole Mac, minus secrets, admin rights and messaging
         allowed = ["Read", "Grep", "Glob", "Edit", "Write", "MultiEdit", "Bash", "WebSearch", "WebFetch"]
@@ -100,7 +113,7 @@ def command(binary: str, task: str, write_files: bool, shell: bool = False) -> l
                  if write_files else "Do not create or change any files.")
     return [binary, "-p", "--output-format", "json",
             "--permission-mode", "acceptEdits" if write_files or shell else "default",
-            "--model", os.environ.get("JARVIS_WORK_MODEL", "sonnet"),            # fast and strong; set opus for hardest work
+            "--model", work_model(task),                                        # sonnet, or opus for the hardest jobs
             "--allowedTools", ",".join(allowed),
             "--disallowedTools", ",".join(denied),
             "--strict-mcp-config", "--mcp-config", '{"mcpServers":{}}', "--setting-sources", "project",

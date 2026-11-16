@@ -2,6 +2,20 @@
 
 Newest entries first. Record what changed, why, and what was verified.
 
+## 2026-11-16 — Merged reminders, email and calendar, morning briefing; model tiers
+
+- Merged `claude/unruffled-heisenberg-1318a6` (reminders and recurring jobs),
+  `claude/dreamy-saha-6144e9` (Apple Mail and Calendar, mail.send asks every
+  time) and `claude/nervous-poincare-d3842d` (morning briefing). Conflicts were
+  only registrations and the change log: both sides kept. Checked: AppleScript
+  values passed as argv, scheduled jobs go through the same approvals.
+- Local model: on this 16 GB M5 the current qwen3.5:9b (7.6 GB) stays; the MLX
+  9B build is 8.9 GB and 27B does not fit, so nothing was downloaded.
+- Model tiers: local Qwen routes and handles JARVIS's own data; Claude Haiku
+  converses and researches; Sonnet does everyday work; Opus is chosen
+  automatically for strategy, in-depth or very long jobs (`work_model()`,
+  `JARVIS_WORK_MODEL` overrides). 330 tests pass.
+
 ## 2026-11-16 — Semantic memory search is on
 
 - Owner approved pulling `nomic-embed-text` (274 MB, Ollama). Memories are

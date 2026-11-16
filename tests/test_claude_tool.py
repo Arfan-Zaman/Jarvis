@@ -108,6 +108,13 @@ class ClaudeToolTests(unittest.TestCase):
         self.assertIn("Bash", cmd[cmd.index("--disallowedTools") + 1])
         self.assertEqual(out["facts"], [{"fact": "Dealers hold about half of used-car sales.", "url": "https://a.example/x"}])
 
+    def test_hardest_jobs_get_the_strongest_model(self):
+        with mock.patch.dict("os.environ", {"JARVIS_WORK_MODEL": ""}):
+            self.assertEqual(claude.work_model("fix the typo in index.html"), "sonnet")
+            self.assertEqual(claude.work_model("write an in-depth growth strategy for my dealership"), "opus")
+        with mock.patch.dict("os.environ", {"JARVIS_WORK_MODEL": "haiku"}):
+            self.assertEqual(claude.work_model("anything"), "haiku")
+
     def test_errors_are_reported(self):
         with self.assertRaises(JarvisError):
             self.run_tool({"task": "x"}, "not json", code=1)
