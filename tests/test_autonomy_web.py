@@ -146,6 +146,16 @@ class FetchTests(WebCase):
         self.assertEqual(output["text"], "Mount Kosciuszko is 2,228 metres high.")
         self.assertEqual(output["focused_on"], "tallest mountain Kosciuszko height")
 
+    def test_unknown_and_quoted_charsets_are_read(self):
+        page = "<p>Café prices</p>"
+        for content_type, body in (("text/html; charset=utf8mb4", page.encode("utf-8")),
+                                   ('text/html; charset="iso-8859-1"', page.encode("latin-1"))):
+            with self.subTest(content_type=content_type), \
+                    mock.patch.object(web, "_get", return_value=(body, content_type, self.base + "/x")):
+                result = self.fetch(self.base + "/x")
+                self.assertTrue(result["ok"], result["error"])
+                self.assertEqual(result["output"]["text"], "Café prices")
+
     def test_plain_text_is_read_and_binaries_refused(self):
         self.assertEqual(self.fetch(self.base + "/plain")["output"]["text"], "just text")
         result = self.fetch(self.base + "/image")
