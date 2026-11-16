@@ -952,6 +952,7 @@ views.system = {
 
     root.append(h('div', { class: 'stack' },
       aiBanner(status.ai),
+      boostPanel(),
       h('div', { class: 'grid two' },
         h('div', { class: 'glass panel' }, h('h2', null, 'Core'), kv([
           ['Version', status.version],
@@ -1002,7 +1003,6 @@ views.system = {
               h('button', { class: 'btn sm danger', onclick: act(async () => { await api('POST', `/api/approvals/${item.id}/approve`); toast('Approved. The requester may now proceed once.'); rerender(); }) }, 'Approve'))))
           )
           : h('div', { class: 'empty' }, 'Nothing is waiting for approval.')),
-      boostPanel(),
       selfReviewPanel(),
       h('div', { class: 'glass panel' }, h('h2', null, 'Agents'),
         h('div', { class: 'list' }, agents.items.map((agent) => h('div', { class: 'item' },
