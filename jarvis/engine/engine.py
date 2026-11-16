@@ -84,6 +84,11 @@ Rules:
 - For other questions about the outside world, use web.search, then web.fetch on the most
   relevant result if the snippets are not enough. When fetching, set "focus" to the key words
   of the question. Only give facts the results support.
+- Files on the Mac: find them with mac.find_files (it tolerates typos and returns the closest names),
+  look inside folders with mac.list_folder, and read documents with mac.read_file. When a search returns
+  one clear match for what the owner described (even with a different spelling), USE IT and carry on:
+  do not ask "did you mean". To understand a folder, list it, then read its README or main documents.
+- Prefer doing over asking. Reading and looking things up never needs the owner's permission.
 - Keep plans short. Never state that something was done unless a result shown to you says so."""
 
 

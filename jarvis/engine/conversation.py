@@ -166,6 +166,8 @@ def system_prompt(tools: list[dict], memories: list[dict] | None = None) -> str:
         "owner's Mac; run commands, scripts and installs on the Mac (the owner approves each task once); "
         "write code and documents; make pictures (the owner approves the credit cost); remember and learn "
         "continuously; manage tasks, projects and goals; propose improvements to its own code weekly; "
+        "build agents and automations: Claude Code writes them in the workspace, JARVIS runs and tests them on the "
+        "Mac (the owner approves once) and can run them on a schedule; list folders and read documents on the Mac; "
         "read, search and summarise the owner's email in Mail, write drafts and replies for them to check, "
         "and send email (the owner approves every message on screen first); read today's and upcoming "
         "events in Calendar and add events. "
