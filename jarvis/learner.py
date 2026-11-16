@@ -104,16 +104,23 @@ class Learner:
             focus = (f"\n\nThis time, focus on: {projects[turn % len(projects)]}. Pick a topic that helps it grow "
                      "(customers, sales, pricing, marketing, operations), different from recent ones.")
         from datetime import date
+        # Show the model every query the repeat check below refuses, not just some of them.
         prompt = (f"{self.context()}{focus}\n\nToday is {date.today():%d %B %Y}: prefer current information and "
                   f"never put an old year in the query.\n\nRecently read (do not repeat):\n"
-                  + "\n".join(f"- {q}" for q in recent[-25:]))
-        reply = self.app.provider.generate([ChatMessage("system", PICK), ChatMessage("user", prompt)],
-                                           json_output=True).text
-        choice = _json(reply)
-        query = str(choice.get("query", "")).strip()[:120]
-        if not query or query.lower() in (q.lower() for q in recent):
-            raise ValueError(f"no new query chosen ({reply[:120]!r})")
-        return {"query": query, "why": str(choice.get("why", ""))[:200]}
+                  + "\n".join(f"- {q}" for q in recent))
+        seen = {q.lower() for q in recent}
+        messages = [ChatMessage("system", PICK), ChatMessage("user", prompt)]
+        for attempt in range(2):                      # one retry when the model repeats itself
+            reply = self.app.provider.generate(messages, json_output=True).text
+            choice = _json(reply)
+            query = str(choice.get("query", "")).strip()[:120]
+            if not query:
+                raise ValueError(f"no query in the reply ({reply[:120]!r})")
+            if query.lower() not in seen:
+                return {"query": query, "why": str(choice.get("why", ""))[:200]}
+            messages = messages + [ChatMessage("assistant", reply),
+                                   ChatMessage("user", f"“{query}” was already read. Choose a different topic.")]
+        raise ValueError(f"no new query chosen: “{query}” was already read")
 
     # --- one learning pass -------------------------------------------------
     def once(self) -> dict:
