@@ -37,11 +37,73 @@ class OpenDataTests(JarvisTestCase):
     def test_vin_must_look_like_a_vin(self):
         self.assertFalse(self.make_app().tools.execute("open.vin", {"vin": "abc"})["ok"])
 
+    BOOTSTRAP = {"services": [[["com", "net"], ["https://rdap.verisign.com/com/v1/"]],
+                              [["au"], ["https://rdap.cctld.au/rdap/"]]]}
+
+    def test_domain_lookup_reads_the_registry_record(self):
+        record = {"ldhName": "MONSOORMOTORS.COM.AU", "status": ["server renew prohibited"],
+                  "events": [{"eventAction": "registration", "eventDate": "2021-03-04T01:02:03Z"},
+                             {"eventAction": "expiration", "eventDate": "2027-03-04T01:02:03Z"}],
+                  "entities": [{"roles": ["registrar"], "vcardArray": ["vcard", [["version", {}, "text", "4.0"],
+                                                                                 ["fn", {}, "text", "Example Registrar Pty Ltd"]]]}],
+                  "nameservers": [{"ldhName": "NS1.EXAMPLE.NET"}]}
+        with mock.patch.object(opendata, "_json", side_effect=[self.BOOTSTRAP, record]) as fetch:
+            out = opendata.open_domain(None, {"domain": "https://www.MonsoorMotors.com.au/cars"}, "t")
+        self.assertEqual(fetch.call_args_list[1].args[0], "https://rdap.cctld.au/rdap/domain/monsoormotors.com.au")
+        self.assertEqual((out["domain"], out["registered"], out["registrar"]),
+                         ("monsoormotors.com.au", True, "Example Registrar Pty Ltd"))
+        self.assertEqual((out["registered_on"], out["expires_on"], out["nameservers"]),
+                         ("2021-03-04", "2027-03-04", ["ns1.example.net"]))
+
+    def test_domain_unknown_to_the_registry_looks_available(self):
+        import urllib.error
+        missing = opendata.WebError("rdap.cctld.au answered HTTP 404")
+        missing.__cause__ = urllib.error.HTTPError("u", 404, "Not Found", {}, None)
+        with mock.patch.object(opendata, "_json", side_effect=[self.BOOTSTRAP, missing]):
+            out = opendata.open_domain(None, {"domain": "aureusdetailing.com.au"}, "t")
+        self.assertFalse(out["registered"])
+        self.assertIn("available", out["note"])
+        self.assertIn("auDA", out["note"])
+
+    def test_domain_must_look_like_a_domain(self):
+        self.assertFalse(self.make_app().tools.execute("open.domain", {"domain": "not a domain"})["ok"])
+
+    def test_domain_questions_skip_the_browser(self):
+        self.assertTrue(conversation.DOMAIN_CHECK.search(
+            "Search for the domain 'aureusdetailing.com.au' to check its availability and ownership details."))
+        self.assertTrue(conversation.DOMAIN_CHECK.search("who owns monsoormotors.com.au?"))
+        self.assertTrue(conversation.DOMAIN_CHECK.search("whois example.net"))
+        self.assertFalse(conversation.DOMAIN_CHECK.search("Is report.pdf available in Downloads?"))
+        self.assertFalse(conversation.DOMAIN_CHECK.search("What's the weather in Perth tomorrow?"))
+
     def test_open_tools_are_read_only_and_automatic(self):
         app = self.make_app()
         for tool in app.tools.list():
             if tool["name"].startswith("open."):
                 self.assertEqual((tool["permission"], tool["requires_approval"]), ("web_read", False))
+
+
+class BrowserAgentTests(unittest.TestCase):
+    def test_refs_are_read_however_the_model_writes_them(self):
+        from jarvis.tools.browser import _ref
+        for step in ({"ref": "e5"}, {"ref": "[ref=e5]"}, {"ref": "ref=e5"}, {"target": "e5"}, {"target": "[ref=e5]"}):
+            self.assertEqual(_ref(step), "e5", step)
+        self.assertEqual(_ref({}), "")
+
+    def test_type_step_sends_playwright_its_target(self):
+        from jarvis.tools import browser
+        page = "```yaml\n- textbox \"Domain\" [ref=e5]\n```"
+        replies = iter(['{"action": "type", "target": "[ref=e5]", "element": "Domain box", "text": "x.com.au"}',
+                        '{"action": "done", "answer": "ok"}'])
+        app = mock.Mock()
+        app.provider.generate.side_effect = lambda *a, **k: mock.Mock(text=next(replies))
+        calls = []
+        with mock.patch.object(browser.Browser, "call", side_effect=lambda _app, name, args: calls.append((name, args)) or page):
+            out = browser._browser_use(app, {"task": "check a domain"})
+        self.assertTrue(out["done"])
+        typed = [args for name, args in calls if name == "browser_type"]
+        self.assertEqual(typed[0]["target"], "e5")
+        self.assertEqual(typed[0]["text"], "x.com.au")
 
 
 class GapLoopTests(JarvisTestCase):

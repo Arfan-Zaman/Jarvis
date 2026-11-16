@@ -6,6 +6,8 @@
 - open.vin        NHTSA vPIC (US government, public): decode a vehicle VIN (make, model, year, engine...).
 - open.define     Free Dictionary API (open-source): meanings, examples and pronunciation of a word.
 - open.news       Google News RSS: latest headlines on any topic, with their links.
+- open.domain     RDAP (the official successor of WHOIS, via IANA's list of registries): is a domain
+                  name registered, with which registrar, since and until when, and its status.
 
 All are read-only (permission `web_read`) and talk only to these fixed addresses.
 """
@@ -141,6 +143,70 @@ def open_news(app, inputs, actor):
     return {"topic": topic, "headlines": items[:limit], "source": "Google News"}
 
 
+RDAP_BOOTSTRAP = "https://data.iana.org/rdap/dns.json"
+DOMAIN = re.compile(r"^(?=.{4,253}$)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+(xn--[a-z0-9-]{1,59}|[a-z]{2,63})$")
+
+
+def _domain(value) -> str:
+    """'https://www.Example.com.au/page' -> 'example.com.au' (international names in their xn-- form)."""
+    name = re.sub(r"^[a-z]+://", "", str(value or "").strip().lower()).split("/")[0].split(":")[0].strip(".")
+    name = name[4:] if name.startswith("www.") else name
+    try:
+        name = name.encode("idna").decode("ascii")
+    except UnicodeError:
+        pass
+    if not DOMAIN.match(name):
+        raise ValidationError("give a domain name like example.com.au")
+    return name
+
+
+def _vcard_name(entity: dict) -> str | None:
+    card = entity.get("vcardArray") or [None, []]
+    for field in card[1] if len(card) > 1 and isinstance(card[1], list) else []:
+        if isinstance(field, list) and len(field) > 3 and field[0] in ("fn", "org") and str(field[3]).strip():
+            return str(field[3]).strip()
+    return None
+
+
+def _entities(items, found: dict) -> dict:
+    """Role -> name for the registrar, registrant, ... (RDAP nests entities inside entities)."""
+    for entity in items or []:
+        name = _vcard_name(entity) or ((entity.get("publicIds") or [{}])[0] or {}).get("identifier")
+        for role in entity.get("roles") or []:
+            if name:
+                found.setdefault(role, name)
+        _entities(entity.get("entities"), found)
+    return found
+
+
+def open_domain(app, inputs, actor):
+    name = _domain(inputs.get("domain"))
+    labels = name.split(".")
+    services = _json(RDAP_BOOTSTRAP).get("services") or []
+    server = next((urls[0] for n in range(1, len(labels)) for tlds, urls in services
+                   if ".".join(labels[n:]) in tlds and urls), None)
+    if not server:
+        raise WebError(f"the .{labels[-1]} registry has no public RDAP service; a WHOIS site in browser.use may help")
+    source = f"RDAP ({urllib.parse.urlsplit(server).hostname})"
+    try:
+        data = _json(server.rstrip("/") + "/domain/" + urllib.parse.quote(name))
+    except WebError as exc:
+        if getattr(exc.__cause__, "code", None) != 404:
+            raise
+        rule = " .au names also need an Australian presence (an ABN or ACN) under auDA rules." if name.endswith(".au") else ""
+        return {"domain": name, "registered": False, "source": source,
+                "note": "The registry has no record of this name, so it looks available to register." + rule}
+    events = {e.get("eventAction"): (e.get("eventDate") or "")[:10] for e in data.get("events") or []}
+    people = _entities(data.get("entities"), {})
+    return {"domain": str(data.get("ldhName") or name).lower(), "registered": True, "status": data.get("status") or [],
+            "registrar": people.get("registrar"), "registrant": people.get("registrant"),
+            "registered_on": events.get("registration"), "expires_on": events.get("expiration"),
+            "last_changed": events.get("last changed"),
+            "nameservers": [n["ldhName"].lower() for n in data.get("nameservers") or [] if n.get("ldhName")],
+            "source": source,
+            "note": "Registries often hide the holder's personal details; the registrar can pass on a message."}
+
+
 def register_opendata(registry: ToolRegistry) -> None:
     def add(name, description, handler, inputs):
         registry.register(Tool(name, description, ActionCategory.WEB_READ, handler, inputs))
@@ -163,3 +229,6 @@ def register_opendata(registry: ToolRegistry) -> None:
     add("open.news", "Latest news headlines on any topic, with links (Google News, free).", open_news,
         {"topic": {"type": "string", "description": "What the news should be about.", "required": True},
          "limit": {"type": "integer", "description": "How many headlines (1 to 15)."}})
+    add("open.domain", "Domain name lookup (RDAP, the official WHOIS): whether a domain like example.com.au is taken "
+        "or available, its registrar, holder if public, registration and expiry dates (free).", open_domain,
+        {"domain": {"type": "string", "description": "The domain name, e.g. example.com.au.", "required": True}})
