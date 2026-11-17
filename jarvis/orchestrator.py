@@ -25,6 +25,7 @@ from .stores.runs import RunStore
 from .tools.browser import register_browser
 from .tools.opendata import register_opendata
 from .tools.skills import register_skills
+from .coder import Coder, Terminal, register_code
 from .tools import ToolRegistry, register_builtin, register_claude, register_images, register_mac, register_mail_calendar, register_schedule, register_web
 from .stores import (
     AgentStore, ConversationStore, EventLog, ExperienceStore,
@@ -70,11 +71,14 @@ class Jarvis:
         register_browser(self.tools)
         register_opendata(self.tools)
         register_skills(self.tools)
+        register_code(self.tools)
         register_mac(self.tools)
         register_mail_calendar(self.tools)
         register_images(self.tools)
         register_schedule(self.tools)
         self.engine = Engine(self)
+        self.coder = Coder(self)              # agent mode: works on files step by step
+        self.terminal = Terminal(self)        # the owner's own terminal
         from .learner import Learner
         self.learner = Learner(self)
         from .semantic import Semantic
@@ -373,6 +377,9 @@ class Jarvis:
             row("Build", has("claude.work") if claude else "needs Claude Code", "makes scripts, pages, documents and apps as files"),
             row("Commands", ("off" if os.environ.get("JARVIS_OPERATE", "1") == "0" else has("claude.operate", "asks first"))
                 if claude else "needs Claude Code", "runs commands, scripts and installs on your Mac, one approval per task, sandboxed"),
+            row("Agent mode", has("code.edit"), "works on files step by step on its own brain: reads, writes, edits, "
+                "runs commands (you approve each), previews websites, keeps a to-do list"),
+            row("Terminal", "on" if self.config.allow_writes else "read-only", "your own terminal inside JARVIS"),
             row("Mac", has("mac.status"), "finds files, opens apps and sites, battery, disk, notifications"),
             row("Browser", has("browser.use", "asks first"), "its local model works in its own Chrome like a person "
                 "(keeps your sign-ins; never buys, sends or types passwords)"),

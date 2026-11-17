@@ -13,7 +13,8 @@ way a tool runs. It always, in this order:
 6. writes the outcome to the run log,
 7. returns a structured result. It never raises for a failed tool.
 
-There is deliberately no shell or "run arbitrary code" tool.
+The only tools that run commands are agent mode's: shell.look (read-only commands only)
+and shell.run (any command, after the owner approves that exact command, sandboxed).
 
 To add a tool, write a handler `fn(app, inputs, actor)` that returns
 JSON-serialisable data and call `registry.register(Tool(...))`.
@@ -63,6 +64,10 @@ def approval_summary(name: str, inputs: dict) -> str:
         "claude.operate": lambda i: f"Mac access for: {i.get('task')}",
         "claude.browse": lambda i: f"Browser task: {i.get('task')}",
         "mail.send": lambda i: f"Send an email to {i.get('to')}: {i.get('subject')}",
+        "shell.run": lambda i: f"Run in {i.get('folder') or 'the workspace'}: {i.get('command')}"
+                               + (" (keeps running)" if i.get("background") else ""),
+        "code.write_home": lambda i: f"Write the file {i.get('path')} in {i.get('folder')}",
+        "code.edit_home": lambda i: f"Edit the file {i.get('path')} in {i.get('folder')}",
     }
     try:
         text = plain[name](inputs) if name in plain else f"Run tool {name}"

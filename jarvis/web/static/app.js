@@ -1557,6 +1557,14 @@ views.desktop = {
   },
 };
 
+// --- agent mode, terminal, website preview (code.js) ---------------------------------
+const codePage = (title, subtitle, name) => ({ title, subtitle, async render(root) {
+  const stop = await JarvisCode[name](root); if (typeof stop === 'function') state.cleanup.push(stop);
+} });
+views.code = codePage('Code', 'Agent mode: JARVIS works on files step by step, and asks before commands', 'agent');
+views.terminal = codePage('Terminal', 'Your own terminal inside JARVIS', 'terminal');
+views.preview = codePage('Preview', 'Websites JARVIS built, live', 'preview');
+
 // --- shell -----------------------------------------------------------------
 async function refreshChrome() {
   try {

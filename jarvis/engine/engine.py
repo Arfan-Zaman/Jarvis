@@ -308,10 +308,12 @@ class Engine:
 
     # The conversational brain is the chat's choice, not a step: the planner answers from results itself.
     NOT_STEPS = ("claude.converse",)
+    NOT_STEP_GROUPS = ("code.", "shell.", "site.")      # agent mode's own tools: goals hand file work to agent mode
 
     def _tools(self, allowed) -> list[dict]:
         return [tool for tool in self.app.tools.list()
-                if (allowed is None or tool["name"] in allowed) and tool["name"] not in self.NOT_STEPS]
+                if (allowed is None or tool["name"] in allowed) and tool["name"] not in self.NOT_STEPS
+                and not tool["name"].startswith(self.NOT_STEP_GROUPS)]
 
     def _ask(self, kind: str, payload: dict, check, budget: dict, allowed) -> dict:
         """One question to the model, with one retry if the reply is unusable."""

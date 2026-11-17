@@ -30,7 +30,8 @@ SECURITY_HEADERS = {
     "X-Content-Type-Options": "nosniff",
     "Referrer-Policy": "no-referrer",
     "Content-Security-Policy": ("default-src 'self'; media-src 'self' blob:; frame-ancestors 'self'; "
-                                "base-uri 'none'; form-action 'self'"),
+                                "base-uri 'none'; form-action 'self'; "
+                                "frame-src 'self' http://127.0.0.1:8766"),     # 8766: website previews (their own origin)
 }
 
 
@@ -438,6 +439,76 @@ def _backups(app: Jarvis, req: Request):
 @route("POST", "/api/backups")
 def _backup_create(app: Jarvis, req: Request):
     return 201, app.create_backup(req.body.get("label", "manual"))
+
+
+# --- agent mode, terminal, website preview ---------------------------------------
+@route("GET", "/api/agent")
+def _agent_list(app: Jarvis, req: Request):
+    from ..coder import workspace
+    return {"items": app.coder.list(), "workspace": str(workspace(app)), "home": str(Path.home())}
+
+
+@route("POST", "/api/agent")
+def _agent_start(app: Jarvis, req: Request):
+    return 201, app.coder.start(req.body.get("task", ""), req.body.get("folder"))
+
+
+@route("GET", r"/api/agent/([0-9a-f]{6,16})")
+def _agent_get(app: Jarvis, req: Request):
+    return app.coder.get(req.params[0])
+
+
+@route("POST", r"/api/agent/([0-9a-f]{6,16})/message")
+def _agent_message(app: Jarvis, req: Request):
+    return app.coder.send(req.params[0], req.body.get("text", ""))
+
+
+@route("POST", r"/api/agent/([0-9a-f]{6,16})/stop")
+def _agent_stop(app: Jarvis, req: Request):
+    return app.coder.stop(req.params[0])
+
+
+@route("GET", "/api/terminal")
+def _terminal(app: Jarvis, req: Request):
+    return app.terminal.state()
+
+
+@route("POST", "/api/terminal")
+def _terminal_run(app: Jarvis, req: Request):
+    """The owner's own command, typed in JARVIS's terminal (audited)."""
+    return 201, app.terminal.run(req.body.get("command", ""))
+
+
+@route("GET", r"/api/terminal/([0-9a-f]{8})")
+def _terminal_view(app: Jarvis, req: Request):
+    return app.terminal.view(req.params[0], since=_int(req.query.get("since", 0), "since"))
+
+
+@route("POST", r"/api/terminal/([0-9a-f]{8})/(stop|input)")
+def _terminal_control(app: Jarvis, req: Request):
+    if req.params[1] == "stop":
+        return app.terminal.stop(req.params[0])
+    return app.terminal.write(req.params[0], req.body.get("text", ""))
+
+
+@route("GET", "/api/preview")
+def _preview_sites(app: Jarvis, req: Request):
+    return {"sites": app.coder.preview.sites(), "last": app.coder.preview.last}
+
+
+@route("POST", "/api/preview")
+def _preview_open(app: Jarvis, req: Request):
+    return app.coder.preview.open(req.body.get("path", ""))
+
+
+@route("GET", "/api/folders")
+def _folders(app: Jarvis, req: Request):
+    """Folders to work in (for the agent's folder picker): the sub-folders of one folder."""
+    from ..coder import folder_of
+    folder = folder_of(app, req.query.get("path"))
+    subs = sorted(p.name for p in folder.iterdir() if p.is_dir() and not p.name.startswith(".")
+                  and p.name not in ("Library", "node_modules", "__pycache__"))[:200]
+    return {"path": str(folder), "parent": str(folder.parent), "folders": subs}
 
 
 class Handler(BaseHTTPRequestHandler):

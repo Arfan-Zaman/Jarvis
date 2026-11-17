@@ -128,8 +128,15 @@ class OpenAICompatible(AIProvider):
                             pass
             content = text
         else:
-            with self._call("/chat/completions", payload) as response:
-                data = json.loads(response.read())
+            try:
+                with self._call("/chat/completions", payload) as response:
+                    data = json.loads(response.read())
+            except ProviderError as exc:
+                if not (json_output and "json_validate_failed" in str(exc)):
+                    raise
+                payload.pop("response_format", None)      # the platform's strict JSON mode refused: ask in plain text;
+                with self._call("/chat/completions", payload) as response:      # JARVIS pulls the JSON out itself
+                    data = json.loads(response.read())
             content = ((data.get("choices") or [{}])[0].get("message") or {}).get("content") or ""
         content = __import__("re").sub(r"\s*【[^】]{0,40}】", "", content)      # gpt-oss citation marks
         if not content.strip():

@@ -2,6 +2,35 @@
 
 Newest entries first. Record what changed, why, and what was verified.
 
+## 2026-11-18 — Agent mode: Code, Terminal and Preview, on JARVIS's own brain
+
+- `jarvis/coder.py`: agent sessions like Claude Code. JARVIS works step by step in a folder (its workspace
+  by default, or any folder in the owner's home): list, read, glob, search, write, edit, read-only commands,
+  commands, web search and reading, website preview, a to-do list, a read-only sub-agent, questions to the
+  owner, and a closing summary. Sessions run in their own threads and are saved in `data/agent/sessions`.
+  Follow-up messages continue a session. A folder's JARVIS.md, CLAUDE.md or AGENTS.md is read as its
+  instructions, and an installed skill that fits the task is used.
+- New tools: `code.list/read/glob/search` and `shell.look` (read-only commands only, no pipes or redirects)
+  run at once. `code.write/edit` run at once, but only inside the workspace. `code.write_home/edit_home`
+  (owner folders) and `shell.run` (any other command, sandboxed, no API keys in its environment) wait for
+  the owner's Approve every time, with the diff or command shown on the card. `site.preview` serves only
+  the asked-for site folder on port 8766, a separate origin that cannot call JARVIS's API.
+- Terminal: the owner's own terminal in a login shell. It follows `cd`, lets you type input to a running
+  command, and has Ctrl+C. Every command goes in the audit log, and API keys are stripped from the
+  environment. JARVIS never uses it for its own commands.
+- UI: Code, Terminal and Preview pages (`static/code.js`) and dock apps. The Code page shows a live session
+  log: thoughts, calls, collapsible results, coloured diffs, inline Approve/Deny, to-dos and Stop.
+  "Open in Preview" opens the Preview window.
+- Chat: "agent: …", "/code …" or "build me a website / landing page / web app / game …" starts agent mode.
+- Boost: when Groq's strict JSON mode refuses a reply (`json_validate_failed`), JARVIS asks again in plain
+  text instead of dropping to the Mac's model for 2 minutes.
+- Tests: the old "no shell tool exists" test became "commands run only after approval"; the expected tool
+  lists were updated. New: `tests/test_agent_mode.py` (12 tests) and a boost JSON retry test. 372 pass.
+- Live check in Chrome: a session built `workspace/sites/aureus-demo` from one sentence in 6 steps and
+  ~70 s. Its one command (`mkdir`) waited for, and ran after, the owner's own Approve click; the prompt now
+  says write makes folders itself. Preview showed the site, the terminal ran commands and followed cd,
+  and the console showed no errors.
+
 ## 2026-11-16 — JARVIS installs skills and software itself; talks like a person
 
 - `jarvis/tools/skills.py`: `skills.search` (GitHub: SKILL.md files and skill repos), `skills.install`

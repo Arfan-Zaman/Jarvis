@@ -128,7 +128,7 @@ class FailureTests(EngineCase):
             {"plan": []},                                           # empty
             {"plan": "create a task"},                              # wrong shape
             {"steps": []},                                          # wrong key
-            plan(("Wipe the disk", "shell.run")),                   # unknown tool
+            plan(("Wipe the disk", "disk.wipe")),                   # unknown tool
             {"plan": [{"tool": "tasks.create"}]},                   # no description
             plan(*[("Step", "tasks.list")] * 13),                   # over the step limit
             [1, 2, 3],
@@ -258,7 +258,7 @@ class HonestyTests(EngineCase):
         self.assertIn("Still missing", report["error"])
 
     def test_review_cannot_add_unknown_tools(self):
-        bad = {"achieved": False, "missing": "x", "next_steps": [{"description": "Wipe", "tool": "shell.run"}]}
+        bad = {"achieved": False, "missing": "x", "next_steps": [{"description": "Wipe", "tool": "disk.wipe"}]}
         app = self.scripted([plan(("Look", "projects.list")), inputs(), bad, bad])
         report = app.engine.start("Add a task")
         self.assertEqual(report["status"], "failed")

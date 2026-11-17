@@ -48,6 +48,11 @@ MEMORY_CATEGORIES = ("preference", "personal", "general")
 # opinion is not enough: without one of these, it can only OFFER to remember.
 # Requests to rewrite JARVIS itself: only the self-review may propose that, and the owner approves.
 SELF_CHANGE = re.compile(r"\b(code|improve|upgrade|rewrite|reprogram|modify|change|update|optimi[sz]e)\s+(yourself|your\s+own\s+(code|program|software|system)|your\s+code)\b", re.I)
+# Agent mode: "agent: ...", "/code ...", or building a website or app -> JARVIS works on files step by step itself.
+AGENT_REQUEST = re.compile(r"^\W*(?:agent(?: mode)?|code mode|/agent|/code)\b[\s:,-]*(.{6,})", re.I | re.S)
+BUILD_THING = re.compile(r"\b(build|make|create|code|develop)\s+(me\s+|us\s+)?(a|an|the|my|our)?\s*([\w'-]+\s+){0,4}"
+                         r"(website|web ?site|landing page|web ?app|webpage|web page|html page|python script|"
+                         r"chrome extension|game|calculator|dashboard page)\b", re.I)
 MAC_STATUS = re.compile(r"\b(battery|charge|charging|disk space|storage|free space|how much space|wi-?fi|"
                         r"ip address|uptime)\b", re.I)
 RUN_THINGS = re.compile(r"\b(run|execute|launch|start)\b[^.?!]{0,60}\b(test|tests|test suite|script|code|program|"
@@ -311,6 +316,12 @@ class Conversation:
             scheduled = self._schedule(conversation_id, text)      # reminders: understood here, no model needed
             if scheduled:
                 return scheduled
+        agent = AGENT_REQUEST.match(text)
+        if actor == "user:chat" and getattr(self.app, "coder", None) and "code.edit" in self.app.tools.names() \
+                and not ATTACHED.search(text) and (agent or (BUILD_THING.search(text) and len(text.split()) >= 4
+                                                             and not getattr(self, "_voice", False))):
+            session = self.app.coder.start((agent.group(1) if agent else text).strip())
+            return self._say(conversation_id, persona.AGENT_STARTED.format(id=session["id"]), None)
         files = ATTACHED.findall(text)
         if files and all(IMAGE_FILE.search(f) for f in files) and not MAKE_FILES.search(ATTACHED.sub("", text)):
             seen = self._look(conversation_id, files, ATTACHED.sub("", text).strip())   # photos: the local model sees them

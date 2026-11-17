@@ -13,6 +13,9 @@
   const APPS = [
     { id: 'presence', name: 'JARVIS', core: true, w: 1180, h: 800, hint: 'talk, voice, the live face' },
     { id: 'chat', name: 'Chat', icon: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>', w: 980, h: 680, hint: 'conversations and files' },
+    { id: 'code', name: 'Code', icon: '<path d="m8 8-4 4 4 4M16 8l4 4-4 4M13.5 5l-3 14"/>', w: 1100, h: 760, hint: 'agent mode: build, code, fix' },
+    { id: 'terminal', name: 'Terminal', icon: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="m7 9 3 3-3 3M12 15h5"/>', w: 900, h: 560, hint: 'your own terminal' },
+    { id: 'preview', name: 'Preview', icon: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.6 3.8 5.6 3.8 9s-1.3 6.4-3.8 9c-2.5-2.6-3.8-5.6-3.8-9s1.3-6.4 3.8-9z"/>', w: 1100, h: 760, hint: 'websites JARVIS built' },
     { id: 'dashboard', name: 'Dashboard', icon: '<rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/>', w: 1000, h: 720, hint: 'overview and activity' },
     { id: 'tasks', name: 'Tasks', icon: '<path d="M9 6h11M9 12h11M9 18h11"/><path d="m3 6 1 1 2-2M3 12l1 1 2-2M3 18l1 1 2-2"/>', w: 860, h: 640, hint: 'tasks and reminders' },
     { id: 'goals', name: 'Goals', icon: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/>', w: 900, h: 660, hint: 'give JARVIS a goal' },
@@ -103,6 +106,12 @@
     else focus(id);
     save();
   }
+
+  // pages inside windows can ask the desktop to open another app (e.g. the Code page opens Preview)
+  window.addEventListener('message', (e) => {
+    if (e.origin !== location.origin || !e.data || e.data.jarvis !== 'open') return;
+    if (APPS.some((a) => a.id === e.data.app)) open(e.data.app);
+  });
 
   // --- top bar ------------------------------------------------------------------------------
   const tickClock = () => { $('os-clock').textContent = new Date().toLocaleString([], { weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' }); };

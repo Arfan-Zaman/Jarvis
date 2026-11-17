@@ -44,6 +44,21 @@ class BoostTests(JarvisTestCase):
         with mock.patch.object(remote, "generate", return_value=ProviderResponse("fast", "boost", "m")):
             self.assertEqual(boosted.generate([ChatMessage("user", "hi")]).text, "local answer")   # still cooling down
 
+    def test_strict_json_refusal_retries_in_plain_text(self):
+        remote = OpenAICompatible("https://x.example/v1", "k", "m")
+        answer = mock.MagicMock()
+        answer.__enter__.return_value.read.return_value = b'{"choices":[{"message":{"content":"{\\"action\\": \\"done\\"}"}}]}'
+        sent = []
+        def call(path, payload=None, timeout=None):
+            sent.append(dict(payload))
+            if len(sent) == 1:
+                raise ProviderError('boost platform answered HTTP 400: {"error":{"code":"json_validate_failed"}}')
+            return answer
+        with mock.patch.object(remote, "_call", side_effect=call):
+            self.assertEqual(remote.generate([ChatMessage("user", "reply in JSON")], json_output=True).text, '{"action": "done"}')
+        self.assertIn("response_format", sent[0])
+        self.assertNotIn("response_format", sent[1])
+
 
 if __name__ == "__main__":
     unittest.main()

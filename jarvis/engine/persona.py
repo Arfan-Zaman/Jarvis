@@ -64,3 +64,6 @@ TEACH_NOTED = ("Noted as something to learn. When Claude Code is available, it w
 
 APPROVE_BY_CLICK = ("For your safety I can't take a spoken or typed approval. Press Approve right below this "
                     "message and I'll carry on straight away.")
+
+AGENT_STARTED = ("On it. I'm working on that in agent mode: open the Code window to watch each step. "
+                 "Anything that runs a command or touches your own folders waits for your Approve. (session {id})")
