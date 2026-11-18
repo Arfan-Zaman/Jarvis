@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import time
 import urllib.error
 import urllib.request
@@ -70,8 +71,10 @@ class OpenAICompatible(AIProvider):
         try:
             return urllib.request.urlopen(request, timeout=timeout or self.timeout)
         except urllib.error.HTTPError as exc:
-            detail = exc.read().decode("utf-8", "replace")[:200]
-            raise ProviderError(f"boost platform answered HTTP {exc.code}: {detail}") from exc
+            detail = exc.read().decode("utf-8", "replace")[:300]
+            wait = (exc.headers.get("retry-after") or "").strip() if exc.headers else ""
+            after = f" (retry after {wait}s)" if re.fullmatch(r"\d+(\.\d+)?", wait) else ""
+            raise ProviderError(f"boost platform answered HTTP {exc.code}{after}: {detail}") from exc
         except (urllib.error.URLError, TimeoutError, OSError) as exc:
             raise ProviderError(f"cannot reach the boost platform: {exc}") from exc
 
@@ -144,6 +147,22 @@ class OpenAICompatible(AIProvider):
         return ProviderResponse(text=content.strip(), provider=self.name, model=self.model)
 
 
+def back_off(error: str) -> float:
+    """Seconds to stay on the Mac's model after a boost failure: what a rate limit asks for (its Retry-After,
+    or "try again in 1m2.5s"), 5 s to 2 minutes; 2 minutes when the platform is unreachable or broken."""
+    found = re.search(r"retry after (\d+(?:\.\d+)?)s", error) or None
+    if found:
+        seconds = float(found.group(1))
+    else:
+        spoken = re.search(r"try again in (?:(\d+)m)?(\d+(?:\.\d+)?)(ms|s)", error)
+        if not spoken:
+            return 120.0
+        if spoken.group(3) == "ms":
+            return 5.0
+        seconds = int(spoken.group(1) or 0) * 60 + float(spoken.group(2))
+    return max(5.0, min(seconds + 1, 120.0))
+
+
 class Boosted(AIProvider):
     """The boost platform first, the Mac's own model whenever it fails. Vision always stays local."""
     is_local = False
@@ -168,9 +187,10 @@ class Boosted(AIProvider):
             try:
                 return self.remote.generate(messages, json_output=json_output, on_token=on_token)
             except ProviderError as exc:
-                self._down_until = time.time() + 120      # rate-limited or offline: use the Mac for 2 minutes
+                pause = back_off(str(exc))                # rate-limited: only as long as the platform asks
+                self._down_until = time.time() + pause
                 from ..logging_setup import get_logger
-                get_logger("boost").warning("Boost failed, using the Mac's model for 2 minutes: %s", str(exc)[:300])
+                get_logger("boost").warning("Boost failed, using the Mac's model for %d s: %s", pause, str(exc)[:300])
         if getattr(self.local, "streams", False):
             return self.local.generate(messages, json_output=json_output, on_token=on_token)
         return self.local.generate(messages, json_output=json_output)

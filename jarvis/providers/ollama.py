@@ -9,11 +9,19 @@ from __future__ import annotations
 import base64
 import json
 import os
+import re
 import time
 import urllib.error
 import urllib.request
 
 from .base import AIProvider, ChatMessage, ProviderError, ProviderResponse, ProviderStatus
+
+
+def keep_alive() -> str:
+    """How long Ollama keeps the model loaded after an answer (JARVIS_KEEP_ALIVE, default 8h): reloading
+    a 9B model after a quiet spell costs seconds, which is the "JARVIS isn't answering" pause."""
+    value = os.environ.get("JARVIS_KEEP_ALIVE", "8h").strip()
+    return value if re.fullmatch(r"-1|\d+(\.\d+)?[smh]?", value) else "8h"
 
 
 class OllamaProvider(AIProvider):
@@ -70,7 +78,7 @@ class OllamaProvider(AIProvider):
             "think": False,
             "messages": [{"role": message.role, "content": message.content} for message in messages],
             "options": {"temperature": 0.2 if json_output else 0.6, "num_ctx": self.context()},
-            "keep_alive": "30m",       # stay loaded: the next answer starts at once
+            "keep_alive": keep_alive(),       # stay loaded: the next answer starts at once
         }
         if json_output:
             payload["format"] = "json"   # Ollama constrains the reply to valid JSON
@@ -130,7 +138,7 @@ class OllamaProvider(AIProvider):
         for path in image_paths[:4]:
             with open(path, "rb") as handle:
                 images.append(base64.b64encode(handle.read()).decode("ascii"))
-        payload = {"model": self.model, "stream": False, "think": False, "keep_alive": "30m",
+        payload = {"model": self.model, "stream": False, "think": False, "keep_alive": keep_alive(),
                    "messages": [{"role": "system", "content": system},
                                 {"role": "user", "content": request, "images": images}],
                    "options": {"temperature": 0.4, "num_ctx": self.context()}}
